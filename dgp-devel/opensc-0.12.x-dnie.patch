@@ -1,0 +1,70 @@
+Index: src/libopensc/cards.h
+===================================================================
+--- src/libopensc/cards.h	(revisión: 4816)
++++ src/libopensc/cards.h	(copia de trabajo)
+@@ -175,6 +175,11 @@
+ 	SC_CARD_TYPE_JAVACARD_BASE = 24000,
+ 	SC_CARD_TYPE_JAVACARD,
+ 
++        /* Spanish DNIe card */
++        SC_CARD_TYPE_DNIE_BASE = 25000,
++        SC_CARD_TYPE_DNIE_ADMIN,
++        SC_CARD_TYPE_DNIE_USER,
++        SC_CARD_TYPE_DNIE_TERMINATED,
+ };
+ 
+ extern sc_card_driver_t *sc_get_default_driver(void);
+@@ -207,6 +212,7 @@
+ extern sc_card_driver_t *sc_get_ias_driver(void);
+ extern sc_card_driver_t *sc_get_javacard_driver(void);
+ extern sc_card_driver_t *sc_get_itacns_driver(void);
++extern sc_card_driver_t *sc_get_dnie_driver(void);
+ 
+ #ifdef __cplusplus
+ }
+Index: src/libopensc/ctx.c
+===================================================================
+--- src/libopensc/ctx.c	(revisión: 4816)
++++ src/libopensc/ctx.c	(copia de trabajo)
+@@ -79,6 +79,7 @@
+ 	{ "rutoken_ecp",(void *(*)(void)) sc_get_rtecp_driver },
+ 	{ "westcos",	(void *(*)(void)) sc_get_westcos_driver },
+ 	{ "myeid",      (void *(*)(void)) sc_get_myeid_driver },
++	{ "dnie",       (void *(*)(void)) sc_get_dnie_driver },
+ 
+ /* Here should be placed drivers that need some APDU transactions to
+  * recognise its cards. */
+Index: src/libopensc/Makefile.am
+===================================================================
+--- src/libopensc/Makefile.am	(revisión: 4816)
++++ src/libopensc/Makefile.am	(copia de trabajo)
+@@ -3,6 +3,7 @@
+ MAINTAINERCLEANFILES = $(srcdir)/Makefile.in
+ 
+ EXTRA_DIST = Makefile.mak 
++SUBDIRS = dnie
+ 
+ lib_LTLIBRARIES = libopensc.la
+ noinst_HEADERS = cards.h ctbcs.h internal.h esteid.h muscle.h muscle-filesystem.h \
+@@ -53,7 +54,8 @@
+ 	$(OPTIONAL_ZLIB_LIBS) $(OPTIONAL_ICONV_LIBS) $(LTLIB_LIBS) \
+ 	$(top_builddir)/src/pkcs15init/libpkcs15init.la \
+ 	$(top_builddir)/src/scconf/libscconf.la \
+-	$(top_builddir)/src/common/libcompat.la
++	$(top_builddir)/src/common/libcompat.la \
++	$(top_builddir)/src/libopensc/dnie/libdniecard.la
+ if WIN32
+ libopensc_la_LIBADD += -lws2_32
+ endif
+Index: configure.ac
+===================================================================
+--- configure.ac	(revisión: 4816)
++++ configure.ac	(copia de trabajo)
+@@ -661,6 +661,7 @@
+ 	src/Makefile
+ 	src/common/Makefile
+ 	src/libopensc/Makefile
++	src/libopensc/dnie/Makefile
+ 	src/libopensc/libopensc.pc
+ 	src/pkcs11/Makefile
+ 	src/pkcs15init/Makefile

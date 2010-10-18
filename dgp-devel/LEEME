@@ -1,0 +1,60 @@
+Adaptación de los drivers originales del DNIe publicados por la DGP
+realizada por:
+
+Martin Paljak: martin @ paljak . pri . ee 
+Juan Antonio Martínez jonsito @ terra . es
+
+NOTAS sobre el driver DNIe para la versión 0.12.x de OpenSC:
+----------------------------------------------------------------
+
+Debido a los cambios en la versión 0.12.x de OpenSC los diversos drivers
+de tarjetas ya no pueden ser compilados de manera independiente, sino
+que se deben compilar de manera conjunta con la aplicación OpenSC
+
+Para ello es preciso integrar el fuente del driver dentro de la
+aplicación y compilar según las instrucciones que se adjuntan
+
+El directorio dgp-devel contiene una versión corregida y adaptada del 
+driver para el DNI electrónico derivada de la original publicada por 
+la Dirección General de la Policía; preparada para su integración
+con OpenSC 0.12. No se incluyen funcionalidades extras
+
+INSTRUCCIONES DE INTALACION Y COMPILACION
+---------------------------------------------------
+
+1 - Crear un directorio de trabajo
+
+bash$ mkdir workspace
+bash$ cd workspace
+
+2- Descargar la última versión de OpenSC del repositorio oficial:
+
+bash$ svn co http://www.opensc-project.org/svn/opensc/trunk opensc
+
+3- Descargar el código del repositorio de Cenatic
+
+bash$ svn checkout --username developername https://svn.forge.morfeo-project.org/opendnie/dgp-devel
+
+4- Incluir el directorio dnie en el arbol OpenSC
+
+bash$ cp -r dgp-devel/src/libopensc/dnie opensc/src/libopensc
+
+5- Parchear el código original con el fichero patch que se adjunta
+
+bash$ cd opensc
+bash$ patch < ../dgp-devel/opensc-0.12.x-dnie.patch
+
+6- Compilar e instalar
+
+bash$ ./bootstrap
+bash$ ./configure
+bash$ ./make
+bash$ sudo make install
+
+7- Esta versión no genera un fichero /usr/lib/libopensc-dnie.so, sino que
+el driver DNIe está integrado dentro de /usr/lib/libopensc.so
+
+8- Una vez instalada, será necesario instalar los certificados de la DGP,
+módulo pkcs#11 en Firefox/Mozilla, etc siguiendo los procedimientos
+habituales descritos en la Web http://www.dnielectronico.es
+

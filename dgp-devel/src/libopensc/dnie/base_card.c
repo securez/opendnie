@@ -493,7 +493,11 @@ static int card_compute_signature(struct sc_card *card,
 
   /* Check if we are using FIRMA private key */
   if (DRVDATA(card)->rsa_key_ref == 0x02) {
-	/* FIXME: verify user consent */	    
+    r = ask_user_consent(card->ctx);
+    if (r != SC_SUCCESS) {
+      sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,"ask_user_auth returned %d\n", r);
+      goto end;
+    }
   }
 
   /* check if serial channel has been created and create it if not */

@@ -4,12 +4,8 @@ includedir = @includedir@/opensc
 
 MAINTAINERCLEANFILES = Makefile.in
 
-#INCLUDES = $(CPPFLAGS) $(PCSC_CFLAGS) $(OPENSC_CFLAGS) -I$(top_srcdir)/src
-
-AM_CFLAGS = $(OPTIONAL_OPENSSL_CFLAGS) $(LTLIB_CFLAGS)
+AM_CFLAGS = $(OPTIONAL_OPENSSL_CFLAGS) $(LIBASSUAN_CFLAGS) $(LTLIB_CFLAGS)
 INCLUDES = -I$(top_srcdir)/src
-
-
 
 c_sources = \
         util.c \
@@ -23,7 +19,8 @@ c_sources = \
         card_sync.c \
         card_helper.c \
         file_compression.c \
-	trusted_channel_card.c
+	trusted_channel_card.c \
+        dialog.c
 
 h_sources = \
         card_structures.h \
@@ -45,4 +42,4 @@ libdniecard_la_SOURCES = \
         $(h_sources) \
         $(c_sources)
 
-#libdniecard_la_LIBADD = $(PCSC_LIBS) $(OPENSC_LIBS) $(LTLIBLTDL)
+libdniecard_la_LIBADD = $(OPENSSL_LIBS) $(LIBASSUAN_LIBS)

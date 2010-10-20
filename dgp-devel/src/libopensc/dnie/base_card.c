@@ -463,16 +463,6 @@ static int card_set_security_env(struct sc_card *card,
     DRVDATA(card)->rsa_key_ref = env->key_ref[0];		
   }
   
-  if (env->flags & SC_SEC_ENV_KEY_REF_PRESENT) {
-    if(env->key_ref_len>1)
-      {
-	sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "Identificador de clave erróneo.\n");
-	return SC_ERROR_NOT_SUPPORTED;
-      }
-    
-    DRVDATA(card)->rsa_key_ref = env->key_ref[0];
-  }
-  
   sc_debug(card->ctx, SC_LOG_DEBUG_VERBOSE, "Key_ref= 0x%X", env->key_ref[0]);
 
   SC_FUNC_RETURN(card->ctx, 1, SC_SUCCESS);

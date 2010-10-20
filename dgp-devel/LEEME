@@ -33,7 +33,7 @@ bash$ svn co http://www.opensc-project.org/svn/opensc/trunk opensc
 
 3- Descargar el código del repositorio de Cenatic
 
-bash$ svn checkout --username developername https://svn.forge.morfeo-project.org/opendnie/dgp-devel
+bash$ svn checkout https://svn.forge.morfeo-project.org/opendnie/dgp-devel
 
 4- Incluir el directorio dnie en el arbol OpenSC
 
@@ -42,7 +42,7 @@ bash$ cp -r dgp-devel/src/libopensc/dnie opensc/src/libopensc
 5- Parchear el código original con el fichero patch que se adjunta
 
 bash$ cd opensc
-bash$ patch < ../dgp-devel/opensc-0.12.x-dnie.patch
+bash$ patch -d . -p0 < ../dgp-devel/opensc-0.12.x-dnie.patch
 
 6- Compilar e instalar
 

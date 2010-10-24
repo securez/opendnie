@@ -48,7 +48,7 @@ bash$ patch -d . -p0 < ../dgp-devel/opensc-0.12.x-dnie.patch
 
 bash$ ./bootstrap
 bash$ ./configure
-bash$ ./make
+bash$ make
 bash$ sudo make install
 
 7- Esta versión no genera un fichero /usr/lib/libopensc-dnie.so, sino que

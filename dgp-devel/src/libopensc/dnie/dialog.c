@@ -38,6 +38,16 @@
 static char *user_consent_app=PIN_ENTRY;
 static int  user_consent_enabled=1; /* default true */
 
+/* check for libassuan version */
+#ifndef ASSUAN_No_Error
+#define HAVE_ASSUAN_2
+#define _gpg_error(t) gpg_error((t))
+#else
+#define HAVE_ASSUAN_1
+#define _gpg_error(t) assuan_strerror( (AssuanError) (t) )
+#endif
+
+
 /**
  * Parse configuration file to extract user consent flags
  */
@@ -59,41 +69,51 @@ static int get_user_consent_env(sc_context_t *ctx) {
 int ask_user_consent(sc_card_t *card) {
     int res;
     const char *argv[3];
-    ASSUAN_CONTEXT ctx; 
+    assuan_context_t ctx; 
     if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     get_user_consent_env(card->ctx);
     argv[0]=user_consent_app;
     argv[1]=NULL;
     argv[2]=NULL;
-
+#ifdef HAVE_ASSUAN_2
+    res = assuan_new(&ctx);
+    if (res!=0) {
+      sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Can't create the User Consent environment: %s\n",_gpg_error(res));
+      SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+    }
+#endif
     res = assuan_pipe_connect(&ctx,user_consent_app,argv,0);
     if (res!=0) {
-        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Can't connect to the User Consent module: %s\n",assuan_strerror((AssuanError) res));
+        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Can't connect to the User Consent module: %s\n",_gpg_error(res));
         res=SC_ERROR_INVALID_ARGUMENTS; /* invalid or not available pinentry */
         goto exit;
     }
     res = assuan_transact(
-         ctx, 
-         "SETDESC Está a punto de realizar una firma electrónica\n con su clave de FIRMA del DNI electrónico.\n\n¿Desea permitir esta operación?", 
-         NULL, NULL, NULL, NULL, NULL, NULL);
+       ctx, 
+       "SETDESC Está a punto de realizar una firma electrónica\n con su clave de FIRMA del DNI electrónico.\n\n¿Desea permitir esta operación?", 
+       NULL, NULL, NULL, NULL, NULL, NULL);
     if (res!=0) {
-        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETDESC: %s\n", assuan_strerror((AssuanError) res));
-        res=SC_ERROR_CARD_CMD_FAILED; /* perhaps should use a better errcode */
-        goto exit;
+       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETDESC: %s\n", _gpg_error(res));
+       res=SC_ERROR_CARD_CMD_FAILED; /* perhaps should use a better errcode */
+       goto exit;
     }
     res = assuan_transact(ctx,"CONFIRM",NULL,NULL,NULL,NULL,NULL,NULL);
     if (res == ASSUAN_Canceled) {
-        sc_debug(card->ctx,SC_LOG_DEBUG_VERBOSE,"Sign cancelled by user");
-        res= SC_ERROR_NOT_ALLOWED;
-        goto exit;
+       sc_debug(card->ctx,SC_LOG_DEBUG_VERBOSE,"Sign cancelled by user");
+       res= SC_ERROR_NOT_ALLOWED;
+       goto exit;
     }
     if (res) {
-        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETERROR: %s\n", assuan_strerror((AssuanError) res));
-        res=SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
+       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETERROR: %s\n", _gpg_error(res));
+       res=SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
      } else {
-        res=SC_SUCCESS;
+       res=SC_SUCCESS;
      }
 exit:
+#ifdef HAVE_ASSUAN_2
+    assuan_release(ctx);
+#else
     assuan_disconnect(ctx);
-    return res;
+#endif
+    SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,res);
 }

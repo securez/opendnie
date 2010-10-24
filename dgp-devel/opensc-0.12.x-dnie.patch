@@ -165,7 +165,7 @@ Index: m4/libassuan.m4
 +
 Index: src/libopensc/cards.h
 ===================================================================
---- src/libopensc/cards.h	(revisión: 4822)
+--- src/libopensc/cards.h	(revisión: 4827)
 +++ src/libopensc/cards.h	(copia de trabajo)
 @@ -175,6 +175,11 @@
  	SC_CARD_TYPE_JAVACARD_BASE = 24000,
@@ -189,7 +189,7 @@ Index: src/libopensc/cards.h
  }
 Index: src/libopensc/ctx.c
 ===================================================================
---- src/libopensc/ctx.c	(revisión: 4822)
+--- src/libopensc/ctx.c	(revisión: 4827)
 +++ src/libopensc/ctx.c	(copia de trabajo)
 @@ -79,6 +79,7 @@
  	{ "rutoken_ecp",(void *(*)(void)) sc_get_rtecp_driver },
@@ -201,7 +201,7 @@ Index: src/libopensc/ctx.c
   * recognise its cards. */
 Index: src/libopensc/Makefile.am
 ===================================================================
---- src/libopensc/Makefile.am	(revisión: 4822)
+--- src/libopensc/Makefile.am	(revisión: 4827)
 +++ src/libopensc/Makefile.am	(copia de trabajo)
 @@ -3,6 +3,7 @@
  MAINTAINERCLEANFILES = $(srcdir)/Makefile.in
@@ -223,9 +223,9 @@ Index: src/libopensc/Makefile.am
  endif
 Index: configure.ac
 ===================================================================
---- configure.ac	(revisión: 4822)
+--- configure.ac	(revisión: 4827)
 +++ configure.ac	(copia de trabajo)
-@@ -480,6 +480,15 @@
+@@ -481,6 +481,15 @@
  	AC_DEFINE([ENABLE_PCSC], [1], [Define if PC/SC is to be enabled])
  fi
  
@@ -234,14 +234,14 @@ Index: configure.ac
 +dnl Test for libassuan and define LIBASSUAN_CFLAGS and LIBASSUAN_LIBS
 +AM_PATH_LIBASSUAN(
 +        ,
-+        [have_assuan="yes"], 
++        [have_assuan="yes"],
 +        [have_assuan="no"]
 +)
 +
  if test "${enable_man}" = "detect"; then
  	if test "${WIN32}" = "yes"; then
  		enable_man="no"
-@@ -587,6 +596,7 @@
+@@ -588,6 +597,7 @@
  	src/Makefile
  	src/common/Makefile
  	src/libopensc/Makefile
@@ -249,7 +249,7 @@ Index: configure.ac
  	src/libopensc/libopensc.pc
  	src/pkcs11/Makefile
  	src/pkcs15init/Makefile
-@@ -642,6 +652,8 @@
+@@ -643,6 +653,8 @@
  OPENCT_CFLAGS:           ${OPENCT_CFLAGS}
  OPENCT_LIBS:             ${OPENCT_LIBS}
  PCSC_CFLAGS:             ${PCSC_CFLAGS}

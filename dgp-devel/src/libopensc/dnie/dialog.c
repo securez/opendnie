@@ -23,6 +23,7 @@
  *
  */
 
+#include <stdio.h>
 #include <assuan.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -69,20 +70,25 @@ static int get_user_consent_env(sc_context_t *ctx) {
 int ask_user_consent(sc_card_t *card) {
     int res;
     const char *argv[3];
+    assuan_fd_t noclosefds[2];
     assuan_context_t ctx; 
     if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     get_user_consent_env(card->ctx);
     argv[0]=user_consent_app;
     argv[1]=NULL;
     argv[2]=NULL;
+    noclosefds[0]= fileno(stderr);
+    noclosefds[1]= ASSUAN_INVALID_FD;
 #ifdef HAVE_ASSUAN_2
     res = assuan_new(&ctx);
     if (res!=0) {
       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Can't create the User Consent environment: %s\n",_gpg_error(res));
       SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
     }
-#endif
+    res = assuan_pipe_connect(ctx,user_consent_app,argv,noclosefds,NULL,NULL,0);
+#else 
     res = assuan_pipe_connect(&ctx,user_consent_app,argv,0);
+#endif
     if (res!=0) {
         sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Can't connect to the User Consent module: %s\n",_gpg_error(res));
         res=SC_ERROR_INVALID_ARGUMENTS; /* invalid or not available pinentry */
@@ -98,13 +104,15 @@ int ask_user_consent(sc_card_t *card) {
        goto exit;
     }
     res = assuan_transact(ctx,"CONFIRM",NULL,NULL,NULL,NULL,NULL,NULL);
+#ifdef HAVE_ASSUAN_1
     if (res == ASSUAN_Canceled) {
        sc_debug(card->ctx,SC_LOG_DEBUG_VERBOSE,"Sign cancelled by user");
        res= SC_ERROR_NOT_ALLOWED;
        goto exit;
     }
+#endif
     if (res) {
-       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETERROR: %s\n", _gpg_error(res));
+       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETERROR: %s\n",_gpg_error(res));
        res=SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
      } else {
        res=SC_SUCCESS;

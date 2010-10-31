@@ -7,3 +7,7 @@ http://www.dnielectronico.es/descargas/codigo_fuente_pkcs11/src.zip
 - dnie-devel
 Adaptación del driver original para que compile y ejecute correctamente con
 OpenSC-0.12.x
+
+- opendnie
+Nuevo driver con licencia LGPL escrito desde cero, para su integración en el
+proyecto OpenSC

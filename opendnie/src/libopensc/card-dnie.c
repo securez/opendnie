@@ -550,7 +550,7 @@ static int dnie_set_security_env(struct sc_card *card,
     switch (env->operation) {
       case SC_SEC_OPERATION_DECIPHER:
         /* TODO: _set_security_env() revise if decipher() is supported
-        * not sure if supported: original driver implements nonstandard
+        * not sure if supported: DGP's driver implements nonstandard
         * decipher() function. Assumed here standard is supported too
         */
         sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,0xC1,0xB8);

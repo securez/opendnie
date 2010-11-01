@@ -87,7 +87,7 @@ bash$ svn checkout https://svn.forge.morfeo-project.org/opendnie/dgp-devel
 4- Parchear el código original con el fichero patch que se adjunta
 
 bash$ cd opensc
-bash$ patch -d . -p0 < ../dgp-devel/opensc-0.12.x-dnie.patch
+bash$ patch -d . -p0 < ../dgp-devel/opensc-opendnie-0.12.x.patch
 
 5- Compilar e instalar
 

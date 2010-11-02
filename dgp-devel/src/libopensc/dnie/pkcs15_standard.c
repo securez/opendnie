@@ -174,6 +174,7 @@ int sc_standard_pkcs15_encode_any_df(sc_context_t *ctx,
     sc_pkcs15_tokeninfo_t tokeninfo;
 
     /* create a temporary tokeninfo structure */
+    memset(&tokeninfo,0,sizeof(tokeninfo));
     tokeninfo.version = p15card->tokeninfo->version;
     tokeninfo.flags = p15card->tokeninfo->flags;
     tokeninfo.label = p15card->tokeninfo->label;

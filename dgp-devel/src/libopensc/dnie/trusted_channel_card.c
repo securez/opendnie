@@ -54,6 +54,7 @@ static int parse_x509_cert(sc_context_t *ctx, const u8 *buf, size_t buflen, stru
 {
         int r;
         struct sc_algorithm_id pk_alg, sig_alg;
+        struct sc_pkcs15_pubkey pubkey;
         sc_pkcs15_der_t pk = { NULL, 0 };
         struct sc_asn1_entry asn1_version[] = {
                 { "version", SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, 0, &cert->version, NULL },
@@ -108,6 +109,15 @@ static int parse_x509_cert(sc_context_t *ctx, const u8 *buf, size_t buflen, stru
         SC_TEST_RET(ctx,  SC_LOG_DEBUG_NORMAL, r, "ASN.1 parsing of certificate failed");
 
         cert->version++;
+        
+        /* JAMC 02-11-2010 patches for opensc-0.12.x */
+        cert->key = malloc(sizeof(struct sc_pkcs15_pubkey));
+        if (cert->key == NULL) return SC_ERROR_OUT_OF_MEMORY;
+        memcpy(cert->key, &pubkey, sizeof(struct sc_pkcs15_pubkey));
+        cert->key->alg_id = malloc(sizeof(struct sc_algorithm_id));
+        if (cert->key->alg_id == NULL) return SC_ERROR_OUT_OF_MEMORY;
+        memcpy(cert->key->alg_id, &pk_alg, sizeof(struct sc_algorithm_id));
+        /* end patch */
 
         cert->key->algorithm = pk_alg.algorithm;
         pk.len >>= 3;   /* convert number of bits to bytes */

@@ -165,7 +165,7 @@ Index: m4/libassuan.m4
 +
 Index: src/libopensc/cards.h
 ===================================================================
---- src/libopensc/cards.h	(revisión: 4851)
+--- src/libopensc/cards.h	(revisión: 4854)
 +++ src/libopensc/cards.h	(copia de trabajo)
 @@ -175,6 +175,11 @@
  	SC_CARD_TYPE_JAVACARD_BASE = 24000,
@@ -189,7 +189,7 @@ Index: src/libopensc/cards.h
  }
 Index: src/libopensc/ctx.c
 ===================================================================
---- src/libopensc/ctx.c	(revisión: 4851)
+--- src/libopensc/ctx.c	(revisión: 4854)
 +++ src/libopensc/ctx.c	(copia de trabajo)
 @@ -79,6 +79,7 @@
  	{ "rutoken_ecp",(void *(*)(void)) sc_get_rtecp_driver },
@@ -201,7 +201,7 @@ Index: src/libopensc/ctx.c
   * recognise its cards. */
 Index: src/libopensc/Makefile.am
 ===================================================================
---- src/libopensc/Makefile.am	(revisión: 4851)
+--- src/libopensc/Makefile.am	(revisión: 4854)
 +++ src/libopensc/Makefile.am	(copia de trabajo)
 @@ -3,6 +3,7 @@
  MAINTAINERCLEANFILES = $(srcdir)/Makefile.in
@@ -223,7 +223,7 @@ Index: src/libopensc/Makefile.am
  endif
 Index: configure.ac
 ===================================================================
---- configure.ac	(revisión: 4851)
+--- configure.ac	(revisión: 4854)
 +++ configure.ac	(copia de trabajo)
 @@ -481,6 +481,15 @@
  	AC_DEFINE([ENABLE_PCSC], [1], [Define if PC/SC is to be enabled])
@@ -233,9 +233,9 @@ Index: configure.ac
 +dnl                   [ACTION-IF-FOUND [, ACTION-IF-NOT-FOUND ]]])
 +dnl Test for libassuan and define LIBASSUAN_CFLAGS and LIBASSUAN_LIBS
 +AM_PATH_LIBASSUAN(
-+        ,
-+        [have_assuan="yes"],
-+        [have_assuan="no"]
++        [1.0.0],
++        [AC_DEFINE([HAVE_LIBASSUAN],[1],[Define if you have ASSUAN libraries and header files])],
++        [AC_MSG_ERROR([assuan is needed for opensc-dgp])]
 +)
 +
  if test "${enable_man}" = "detect"; then

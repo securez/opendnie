@@ -165,7 +165,7 @@ Index: m4/libassuan.m4
 +
 Index: src/libopensc/cards.h
 ===================================================================
---- src/libopensc/cards.h	(revisión: 4851)
+--- src/libopensc/cards.h	(revisión: 4852)
 +++ src/libopensc/cards.h	(copia de trabajo)
 @@ -175,6 +175,11 @@
  	SC_CARD_TYPE_JAVACARD_BASE = 24000,
@@ -189,7 +189,7 @@ Index: src/libopensc/cards.h
  }
 Index: src/libopensc/iso7816.c
 ===================================================================
---- src/libopensc/iso7816.c	(revisión: 4851)
+--- src/libopensc/iso7816.c	(revisión: 4852)
 +++ src/libopensc/iso7816.c	(copia de trabajo)
 @@ -992,6 +992,7 @@
  	no_match,
@@ -201,7 +201,7 @@ Index: src/libopensc/iso7816.c
  	iso7816_update_binary,
 Index: src/libopensc/cardctl.h
 ===================================================================
---- src/libopensc/cardctl.h	(revisión: 4851)
+--- src/libopensc/cardctl.h	(revisión: 4852)
 +++ src/libopensc/cardctl.h	(copia de trabajo)
 @@ -204,6 +204,12 @@
  	SC_CARDCTL_PIV_GENERATE_KEY,
@@ -307,7 +307,7 @@ Index: src/libopensc/dnie.h
 +
 Index: src/libopensc/ctx.c
 ===================================================================
---- src/libopensc/ctx.c	(revisión: 4851)
+--- src/libopensc/ctx.c	(revisión: 4852)
 +++ src/libopensc/ctx.c	(copia de trabajo)
 @@ -79,6 +79,7 @@
  	{ "rutoken_ecp",(void *(*)(void)) sc_get_rtecp_driver },
@@ -593,7 +593,7 @@ Index: src/libopensc/sm-dnie.c
 +#undef __SM_DNIE_C__
 Index: src/libopensc/apdu.c
 ===================================================================
---- src/libopensc/apdu.c	(revisión: 4851)
+--- src/libopensc/apdu.c	(revisión: 4852)
 +++ src/libopensc/apdu.c	(copia de trabajo)
 @@ -367,6 +367,37 @@
  	}
@@ -1391,7 +1391,7 @@ Index: src/libopensc/card-dnie.c
 +    sc_context_t *ctx=card->ctx;
 +    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
 +    /* first of all, let iso do the hard work */
-+    res = iso_ops -> process_fci(card,file,buf,bufflen);
++    res = iso_ops -> process_fci(card,file,buf,buflen);
 +    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"iso7816_process_fci() failed");
 +    /* if tag 0x85 is received, then file->prop_attr_len should be filled
 +     * by sc_file_set_prop_attr() code. So check and set data according manual 
@@ -1402,7 +1402,7 @@ Index: src/libopensc/card-dnie.c
 +    }
 +    /* byte 1 denotes file type */
 +    switch(file->prop_attr[0]) {
-+        case 0x01: :
++        case 0x01:
 +            file->type = SC_FILE_TYPE_WORKING_EF;
 +            file->ef_structure = SC_FILE_EF_TRANSPARENT;
 +            break;
@@ -1580,7 +1580,7 @@ Index: src/libopensc/card-dnie.c
 +#undef __CARD_DNIE_C__
 Index: src/libopensc/Makefile.am
 ===================================================================
---- src/libopensc/Makefile.am	(revisión: 4851)
+--- src/libopensc/Makefile.am	(revisión: 4852)
 +++ src/libopensc/Makefile.am	(copia de trabajo)
 @@ -9,12 +9,12 @@
  	internal-winscard.h p15card-helper.h \
@@ -1617,7 +1617,7 @@ Index: src/libopensc/Makefile.am
  	$(top_builddir)/src/common/libcompat.la
 Index: src/libopensc/opensc.h
 ===================================================================
---- src/libopensc/opensc.h	(revisión: 4851)
+--- src/libopensc/opensc.h	(revisión: 4852)
 +++ src/libopensc/opensc.h	(copia de trabajo)
 @@ -417,6 +417,13 @@
  	/* Called when the card object is being freed.  finish() has to
@@ -1635,7 +1635,7 @@ Index: src/libopensc/opensc.h
  
 Index: configure.ac
 ===================================================================
---- configure.ac	(revisión: 4851)
+--- configure.ac	(revisión: 4852)
 +++ configure.ac	(copia de trabajo)
 @@ -481,6 +481,14 @@
  	AC_DEFINE([ENABLE_PCSC], [1], [Define if PC/SC is to be enabled])
@@ -1663,7 +1663,7 @@ Index: configure.ac
  
 Index: etc/opensc.conf.in
 ===================================================================
---- etc/opensc.conf.in	(revisión: 4851)
+--- etc/opensc.conf.in	(revisión: 4852)
 +++ etc/opensc.conf.in	(copia de trabajo)
 @@ -112,6 +112,14 @@
  		# module = /usr/lib/opensc/drivers/card_customcos.so;

@@ -719,7 +719,7 @@ static int dnie_process_fci(struct sc_card *card,
     sc_context_t *ctx=card->ctx;
     SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
     /* first of all, let iso do the hard work */
-    res = iso_ops -> process_fci(card,file,buf,bufflen);
+    res = iso_ops -> process_fci(card,file,buf,buflen);
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"iso7816_process_fci() failed");
     /* if tag 0x85 is received, then file->prop_attr_len should be filled
      * by sc_file_set_prop_attr() code. So check and set data according manual 
@@ -730,7 +730,7 @@ static int dnie_process_fci(struct sc_card *card,
     }
     /* byte 1 denotes file type */
     switch(file->prop_attr[0]) {
-        case 0x01: :
+        case 0x01:
             file->type = SC_FILE_TYPE_WORKING_EF;
             file->ef_structure = SC_FILE_EF_TRANSPARENT;
             break;

@@ -28,6 +28,8 @@ static const struct sc_asn1_entry c_asn1_toki[] = {
 	{ "serialNumber",   SC_ASN1_OCTET_STRING, SC_ASN1_TAG_OCTET_STRING, 0, NULL, NULL },
 	{ "manufacturerID", SC_ASN1_UTF8STRING,   SC_ASN1_TAG_UTF8STRING, SC_ASN1_OPTIONAL, NULL, NULL },
 	{ "label",	    SC_ASN1_UTF8STRING,   SC_ASN1_CTX | 0, SC_ASN1_OPTIONAL, NULL, NULL },
+        /* XXX the Taiwanese ID card erroneously uses explicit tagging */
+        { "label-tw",       SC_ASN1_STRUCT,       SC_ASN1_CTX | 0 | SC_ASN1_CONS, SC_ASN1_OPTIONAL, NULL, NULL },
 	{ "tokenflags",	    SC_ASN1_BIT_FIELD,   SC_ASN1_TAG_BIT_STRING, 0, NULL, NULL },
 	{ "seInfo",	    SC_ASN1_SEQUENCE,	  SC_ASN1_CONS | SC_ASN1_TAG_SEQUENCE, SC_ASN1_OPTIONAL, NULL, NULL },
 	{ "recordInfo",	    SC_ASN1_STRUCT,       SC_ASN1_CONS | SC_ASN1_CTX | 1, SC_ASN1_OPTIONAL, NULL, NULL },
@@ -45,6 +47,8 @@ const struct sc_asn1_entry c_asn1_toki_dnie[] = {
   { "serialNumber",   SC_ASN1_OCTET_STRING, SC_ASN1_TAG_OCTET_STRING, 0, NULL, NULL },
   { "manufacturerID", SC_ASN1_UTF8STRING,   SC_ASN1_TAG_UTF8STRING, SC_ASN1_OPTIONAL, NULL, NULL },
   { "label",	    SC_ASN1_UTF8STRING,   SC_ASN1_TAG_UTF8STRING, SC_ASN1_OPTIONAL, NULL, NULL },
+  /* XXX the Taiwanese ID card erroneously uses explicit tagging */
+  { "label-tw",       SC_ASN1_STRUCT,       SC_ASN1_CTX | 0 | SC_ASN1_CONS, SC_ASN1_OPTIONAL, NULL, NULL },
   { "tokenflags",	    SC_ASN1_BIT_FIELD,   SC_ASN1_TAG_BIT_STRING, 0, NULL, NULL },
   { "seInfo",	    SC_ASN1_SEQUENCE,	  SC_ASN1_CONS | SC_ASN1_TAG_SEQUENCE, SC_ASN1_OPTIONAL, NULL, NULL },
   { "recordInfo",	    SC_ASN1_STRUCT,       SC_ASN1_CONS | SC_ASN1_CTX | 1, SC_ASN1_OPTIONAL, NULL, NULL },

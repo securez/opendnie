@@ -28,6 +28,8 @@ static const struct sc_asn1_entry c_asn1_toki[] = {
 	{ "serialNumber",   SC_ASN1_OCTET_STRING, SC_ASN1_TAG_OCTET_STRING, 0, NULL, NULL },
 	{ "manufacturerID", SC_ASN1_UTF8STRING,   SC_ASN1_TAG_UTF8STRING, SC_ASN1_OPTIONAL, NULL, NULL },
 	{ "label",	    SC_ASN1_UTF8STRING,   SC_ASN1_CTX | 0, SC_ASN1_OPTIONAL, NULL, NULL },
+        /* XXX the Taiwanese ID card erroneously uses explicit tagging */
+        { "label-tw",       SC_ASN1_STRUCT,       SC_ASN1_CTX | 0 | SC_ASN1_CONS, SC_ASN1_OPTIONAL, NULL, NULL },
 	{ "tokenflags",	    SC_ASN1_BIT_FIELD,   SC_ASN1_TAG_BIT_STRING, 0, NULL, NULL },
 	{ "seInfo",	    SC_ASN1_SEQUENCE,	  SC_ASN1_CONS | SC_ASN1_TAG_SEQUENCE, SC_ASN1_OPTIONAL, NULL, NULL },
 	{ "recordInfo",	    SC_ASN1_STRUCT,       SC_ASN1_CONS | SC_ASN1_CTX | 1, SC_ASN1_OPTIONAL, NULL, NULL },
@@ -45,6 +47,8 @@ const struct sc_asn1_entry c_asn1_toki_dnie[] = {
   { "serialNumber",   SC_ASN1_OCTET_STRING, SC_ASN1_TAG_OCTET_STRING, 0, NULL, NULL },
   { "manufacturerID", SC_ASN1_UTF8STRING,   SC_ASN1_TAG_UTF8STRING, SC_ASN1_OPTIONAL, NULL, NULL },
   { "label",	    SC_ASN1_UTF8STRING,   SC_ASN1_TAG_UTF8STRING, SC_ASN1_OPTIONAL, NULL, NULL },
+  /* XXX the Taiwanese ID card erroneously uses explicit tagging */
+  { "label-tw",       SC_ASN1_STRUCT,       SC_ASN1_CTX | 0 | SC_ASN1_CONS, SC_ASN1_OPTIONAL, NULL, NULL },
   { "tokenflags",	    SC_ASN1_BIT_FIELD,   SC_ASN1_TAG_BIT_STRING, 0, NULL, NULL },
   { "seInfo",	    SC_ASN1_SEQUENCE,	  SC_ASN1_CONS | SC_ASN1_TAG_SEQUENCE, SC_ASN1_OPTIONAL, NULL, NULL },
   { "recordInfo",	    SC_ASN1_STRUCT,       SC_ASN1_CONS | SC_ASN1_CTX | 1, SC_ASN1_OPTIONAL, NULL, NULL },
@@ -87,14 +91,15 @@ int parse_card_tokeninfo(struct sc_pkcs15_card *card, const u8 * buf, size_t buf
   sc_format_asn1_entry(asn1_toki + 1, serial, &serial_len, 0);
   sc_format_asn1_entry(asn1_toki + 2, mnfid, &mnfid_len, 0);
   sc_format_asn1_entry(asn1_toki + 3, label, &label_len, 0);
-  sc_format_asn1_entry(asn1_toki + 4, &card->flags, &flags_len, 0);
-  sc_format_asn1_entry(asn1_toki + 5, NULL, NULL, 0);
+  /* skip "label-tw" */
+  sc_format_asn1_entry(asn1_toki + 5, &card->flags, &flags_len, 0);
   sc_format_asn1_entry(asn1_toki + 6, NULL, NULL, 0);
   sc_format_asn1_entry(asn1_toki + 7, NULL, NULL, 0);
   sc_format_asn1_entry(asn1_toki + 8, NULL, NULL, 0);
   sc_format_asn1_entry(asn1_toki + 9, NULL, NULL, 0);
-  sc_format_asn1_entry(asn1_toki + 10, last_update, &lupdate_len, 0);
-  sc_format_asn1_entry(asn1_toki + 11, preferred_language, &lang_length, 0);
+  sc_format_asn1_entry(asn1_toki + 10, NULL, NULL, 0);
+  sc_format_asn1_entry(asn1_toki + 11, last_update, &lupdate_len, 0);
+  sc_format_asn1_entry(asn1_toki + 12, preferred_language, &lang_length, 0);
   sc_format_asn1_entry(asn1_tokeninfo, asn1_toki, NULL, 0);
 
   if (buf[1] == 0x2B) {    
@@ -117,14 +122,15 @@ int parse_card_tokeninfo(struct sc_pkcs15_card *card, const u8 * buf, size_t buf
     sc_format_asn1_entry(asn1_toki_dnie + 1, serial, &serial_len, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 2, mnfid, &mnfid_len, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 3, label, &label_len, 0);
-    sc_format_asn1_entry(asn1_toki_dnie + 4, &card->flags, &flags_len, 0);
-    sc_format_asn1_entry(asn1_toki_dnie + 5, NULL, NULL, 0);
+    /* skip "label-tw" */
+    sc_format_asn1_entry(asn1_toki_dnie + 5, &card->flags, &flags_len, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 6, NULL, NULL, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 7, NULL, NULL, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 8, NULL, NULL, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 9, NULL, NULL, 0);
-    sc_format_asn1_entry(asn1_toki_dnie + 10, last_update, &lupdate_len, 0);
-    sc_format_asn1_entry(asn1_toki_dnie + 11, preferred_language, &lang_length, 0);
+    sc_format_asn1_entry(asn1_toki_dnie + 10, NULL, NULL, 0);
+    sc_format_asn1_entry(asn1_toki_dnie + 11, last_update, &lupdate_len, 0);
+    sc_format_asn1_entry(asn1_toki_dnie + 12, preferred_language, &lang_length, 0);
     sc_format_asn1_entry(asn1_tokeninfo_dnie, asn1_toki_dnie, NULL, 0);
     
     if (buf[1] == 0x2B)
@@ -180,16 +186,16 @@ int parse_card_tokeninfo(struct sc_pkcs15_card *card, const u8 * buf, size_t buf
     }
   }
   if (!bug) {
-    if (asn1_toki[10].flags & SC_ASN1_PRESENT)
+    if (asn1_toki[11].flags & SC_ASN1_PRESENT)
       card->tokeninfo->last_update = strdup((char *)last_update);
-    if (asn1_toki[11].flags & SC_ASN1_PRESENT) {
+    if (asn1_toki[12].flags & SC_ASN1_PRESENT) {
       preferred_language[2] = 0;
       card->tokeninfo->preferred_language = strdup((char *)preferred_language);
     }
   } else {
-    if (asn1_toki_dnie[10].flags & SC_ASN1_PRESENT)
+    if (asn1_toki_dnie[11].flags & SC_ASN1_PRESENT)
       card->tokeninfo->last_update = strdup((char *)last_update);
-    if (asn1_toki_dnie[11].flags & SC_ASN1_PRESENT) {
+    if (asn1_toki_dnie[12].flags & SC_ASN1_PRESENT) {
       preferred_language[2] = 0;
       card->tokeninfo->preferred_language = strdup((char *)preferred_language);
     }

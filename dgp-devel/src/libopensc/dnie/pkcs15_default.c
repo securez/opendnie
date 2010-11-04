@@ -78,7 +78,7 @@ int parse_card_tokeninfo(struct sc_pkcs15_card *card, const u8 * buf, size_t buf
   size_t label_len = sizeof(label);
   u8 last_update[32];
   size_t lupdate_len = sizeof(last_update) - 1;
-  size_t flags_len = sizeof(card->flags);
+  size_t flags_len = sizeof(card->tokeninfo->flags);
   struct sc_asn1_entry asn1_toki[13], asn1_toki_dnie[13], asn1_tokeninfo[3], asn1_tokeninfo_dnie[3];
   u8 preferred_language[3];
   u8 tmp_buff[300];
@@ -92,7 +92,7 @@ int parse_card_tokeninfo(struct sc_pkcs15_card *card, const u8 * buf, size_t buf
   sc_format_asn1_entry(asn1_toki + 2, mnfid, &mnfid_len, 0);
   sc_format_asn1_entry(asn1_toki + 3, label, &label_len, 0);
   /* skip "label-tw" */
-  sc_format_asn1_entry(asn1_toki + 5, &card->flags, &flags_len, 0);
+  sc_format_asn1_entry(asn1_toki + 5, &card->tokeninfo->flags, &flags_len, 0);
   sc_format_asn1_entry(asn1_toki + 6, NULL, NULL, 0);
   sc_format_asn1_entry(asn1_toki + 7, NULL, NULL, 0);
   sc_format_asn1_entry(asn1_toki + 8, NULL, NULL, 0);
@@ -123,7 +123,7 @@ int parse_card_tokeninfo(struct sc_pkcs15_card *card, const u8 * buf, size_t buf
     sc_format_asn1_entry(asn1_toki_dnie + 2, mnfid, &mnfid_len, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 3, label, &label_len, 0);
     /* skip "label-tw" */
-    sc_format_asn1_entry(asn1_toki_dnie + 5, &card->flags, &flags_len, 0);
+    sc_format_asn1_entry(asn1_toki_dnie + 5, &card->tokeninfo->flags, &flags_len, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 6, NULL, NULL, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 7, NULL, NULL, 0);
     sc_format_asn1_entry(asn1_toki_dnie + 8, NULL, NULL, 0);

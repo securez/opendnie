@@ -421,6 +421,7 @@ int card_sync_card_to_virtual_fs_any_df( sc_card_t *card, struct _virtual_file_t
     goto end;
   }
   sc_format_path("3F00", &temp_pkcs15_card->file_app->path);
+  temp_pkcs15_card->tokeninfo->flags=SC_PKCS15_TOKEN_PRN_GENERATION | SC_PKCS15_TOKEN_EID_COMPLIANT;
 
   /* Convert card df read to a list of same type of pkcs15 objects. 
      This function uses our internal card decoding parser.

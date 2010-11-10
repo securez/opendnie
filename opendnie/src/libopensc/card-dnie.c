@@ -159,7 +159,7 @@ static int ask_user_consent(sc_card_t *card) {
     argv[2]=NULL;
     noclosefds[0]= fileno(stderr);
     noclosefds[1]= ASSUAN_INVALID_FD;
-#ifdef HAVE_ASSUAN_2
+#ifdef HAVE_LIBASSUAN_2
     res = assuan_new(&ctx);
     if (res!=0) {
       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Can't create the User Consent environment: %s\n",_gpg_error(res));
@@ -184,7 +184,7 @@ static int ask_user_consent(sc_card_t *card) {
        goto exit;
     }
     res = assuan_transact(ctx,"CONFIRM",NULL,NULL,NULL,NULL,NULL,NULL);
-#ifdef HAVE_ASSUAN_1
+#ifdef HAVE_LIBASSUAN_1
     if (res == ASSUAN_Canceled) {
        sc_debug(card->ctx,SC_LOG_DEBUG_VERBOSE,"CONFIRM: signature cancelled by user");
        res= SC_ERROR_NOT_ALLOWED;
@@ -198,7 +198,7 @@ static int ask_user_consent(sc_card_t *card) {
        res=SC_SUCCESS;
      }
 exit:
-#ifdef HAVE_ASSUAN_2
+#ifdef HAVE_LIBASSUAN_2
     assuan_release(ctx);
 #else
     assuan_disconnect(ctx);

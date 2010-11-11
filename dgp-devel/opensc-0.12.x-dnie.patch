@@ -258,3 +258,25 @@ Index: configure.ac
  
  EOF
  
+Index: etc/opensc.conf.in
+===================================================================
+--- etc/opensc.conf.in	(revisión: 4874)
++++ etc/opensc.conf.in	(copia de trabajo)
+@@ -57,7 +57,7 @@
+ 		
+ 		# Connect to reader in exclusive mode.
+ 		# Default: false
+-		# connect_exclusive = true;
++		connect_exclusive = true;
+ 		#
+ 		# Reset the card after disconnect.
+ 		# Default: true
+@@ -69,7 +69,7 @@
+ 		#
+ 		# Enable pinpad if detected (PC/SC v2.0.2 Part 10)
+ 		# Default: true
+-		# enable_pinpad = false;
++		enable_pinpad = false;
+ 		#
+ 		# Use specific pcsc provider.
+ 		# Default: @DEFAULT_PCSC_PROVIDER@

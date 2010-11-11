@@ -73,6 +73,16 @@ bash$ ./configure
 bash$ make
 bash$ sudo make install
 
+6a- En el caso de distribuciones linux fedora (y posiblemente otras), 
+las opciones extras para que "configure" instale en los directorios 
+standard son:
+
+./configure --prefix=/usr \
+        --sysconfdir=/etc \
+        --datadir=/usr/share \
+        --infodir=/usr/share/info \
+        --mandir=/usr/share/man
+
 7- Esta versión no genera un fichero /usr/lib/libopensc-dnie.so, sino que
 el driver DNIe está integrado dentro de /usr/lib/libopensc.so
 

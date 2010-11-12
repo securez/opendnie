@@ -27,6 +27,7 @@
 #include <assuan.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #include "../opensc.h"
 #include "../errors.h"
@@ -69,11 +70,18 @@ static int get_user_consent_env(sc_context_t *ctx) {
 
 int ask_user_consent(sc_card_t *card) {
     int res;
+    struct stat buf;
     const char *argv[3];
     assuan_fd_t noclosefds[2];
     assuan_context_t ctx; 
     if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     get_user_consent_env(card->ctx);
+    res=stat(user_consent_app,&buf);
+    if (res!=0) {
+      /* TODO: check that pinentry file is executable */
+      sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Invalid pinentry application: %s\n",user_consent_app);
+      SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+    }
     argv[0]=user_consent_app;
     argv[1]=NULL;
     argv[2]=NULL;

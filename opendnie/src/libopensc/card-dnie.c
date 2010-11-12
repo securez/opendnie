@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <sys/stat.h>
 
 #include "opensc.h"
 #include "cardctl.h"
@@ -145,6 +146,7 @@ static int ask_user_consent(sc_card_t *card) {
  */
 static int ask_user_consent(sc_card_t *card) {
     int res;
+    struct stat buf;
     const char *argv[3];
     assuan_fd_t noclosefds[2];
     assuan_context_t ctx; 
@@ -153,6 +155,12 @@ static int ask_user_consent(sc_card_t *card) {
     if (dnie_priv.user_consent_enabled==0) {
         sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"User Consent is disabled in configuration file");
         return SC_SUCCESS;
+    }
+    res=stat(dnie_priv.user_consent_app,&buf);
+    if (res!=0) {
+      /* TODO: check that pinentry file is executable */
+      sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Invalid pinentry application: %s\n",dnie_priv.user_consent_app);
+       SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
     }
     argv[0]=dnie_priv.user_consent_app;
     argv[1]=NULL;

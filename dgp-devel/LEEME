@@ -90,3 +90,25 @@ el driver DNIe está integrado dentro de /usr/lib/libopensc.so
 módulo pkcs#11 en Firefox/Mozilla, etc siguiendo los procedimientos
 habituales descritos en la Web http://www.dnielectronico.es
 
+9- Nota sobre "pinentry"
+
+En función de la distribución de Linux, es posible que la aplicación
+"/usr/bin/pinentry" no esté instalada o tenga distinto nombre
+Para obviar este problema, será necesario editar el fichero de
+configuración /etc/opensc.conf.
+
+Para ello se busca y edita la entrada:
+....
+        # card_driver dnie {
+        #       # Enable/Disable user consent on signing (default: enable)
+        #       user_consent_enabled = true;
+        #       # Program to be used for ask confirmation (default: pinentry)
+        #       user_consent_app = /usr/bin/pinentry;
+        # }
+....
+Se descomenta dicha entrada, y se ajusta el valor de user_consent_app al
+correspondiente a nuestro sistema
+
+La variable user_consent_enabled es ignorada en esta versión, estando
+fijada al valor "true"
+

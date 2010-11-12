@@ -280,3 +280,18 @@ Index: etc/opensc.conf.in
  		#
  		# Use specific pcsc provider.
  		# Default: @DEFAULT_PCSC_PROVIDER@
+@@ -111,6 +111,14 @@
+ 		# The location of the driver library
+ 		# module = /usr/lib/opensc/drivers/card_customcos.so;
+ 	# }
++	
++        # Special configuration data for dnie card driver
++        # card_driver dnie {
++        #       # Enable/Disable user consent on signing (default: enable)
++        #       user_consent_enabled = true;
++        #       # Program to be used for ask confirmation (default: pinentry)
++        #       user_consent_app = /usr/bin/pinentry;
++        # }
+ 
+ 	# Force using specific card driver
+ 	#

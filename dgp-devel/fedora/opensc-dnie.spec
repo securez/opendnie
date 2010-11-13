@@ -28,7 +28,7 @@ Obsoletes:      mozilla-opensc-signer < 0.12.0
 Obsoletes:      opensc-devel < 0.12.0
 # Notice that DNIe driver is part of this OpenSC (no longer a separate module)
 Conflicts:      opensc
-Requires:       openssl libassuan pinentry
+Requires:       openssl pinentry
 
 %description
 OpenSC is a package for for accessing smart card devices.  Basic

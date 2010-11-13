@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 #ifndef PIN_ENTRY
-#define PIN_ENTRY "/usr/bin/pinentry"
+# define PIN_ENTRY "/usr/bin/pinentry"
 #endif
 
 static char *user_consent_app=PIN_ENTRY;

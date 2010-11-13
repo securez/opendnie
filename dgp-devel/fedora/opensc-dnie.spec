@@ -2,15 +2,15 @@
 
 Name:           opensc-dnie
 Version:        0.12.0
-Release:        1.svn%{svnrev}%{?dist}
+Release:        2.svn%{svnrev}%{?dist}
 Summary:        Smart card library and applications
 
 Group:          System Environment/Libraries
 License:        GPLv3+
 URL:            http://www.opensc-project.org/opensc/
-Source:         opensc-0.12.0-1.svn4874.tar.gz
-Source1:        opensc-0.12.0-1.dnie.tar.gz
-Patch:         opensc-0.12.x-dnie.patch
+Source:         opensc-0.12.0-svn4874.tar.gz
+Source1:        opensc-0.12.0-dnie.tar.gz
+Patch:          opensc-0.12.x-dnie.patch
 
 BuildRequires:  pcsc-lite-devel
 BuildRequires:  readline-devel
@@ -28,7 +28,7 @@ Obsoletes:      mozilla-opensc-signer < 0.12.0
 Obsoletes:      opensc-devel < 0.12.0
 # Notice that DNIe driver is part of this OpenSC (no longer a separate module)
 Conflicts:      opensc
-Requires:       pinentry
+Requires:       openssl libassuan pinentry
 
 %description
 OpenSC is a package for for accessing smart card devices.  Basic
@@ -42,20 +42,21 @@ This package is an special recompilation of OpenSC-0.12 with the
 addition of support for Spanish DNIe ( eID card from Spain Country)
 
 %prep
-%setup -n opensc-0.12.0
-%setup -T -D -a 1 -n opensc-0.12.0
+%setup -n opensc
+%setup -T -D -a 1 -n opensc
 %patch
 
 # promote OpenSC LGPLv2 license to DNIE-DGP GPLv3
 cp src/libopensc/dnie/license COPYING
 # proceed with standard OpenSC setup
-sed -i -e 's|"/lib /usr/lib\b|"/%{_lib} %{_libdir}|' configure # lib64 rpaths
+sed -i -e 's|"/lib /usr/lib\b|"/%{_lib} %{_libdir}|' configure.ac # lib64 rpaths
 cp -p src/pkcs15init/README ./README.pkcs15init
 cp -p src/scconf/README.scconf .
 # No %{_libdir} here to avoid multilib conflicts; it's just an example
 sed -i -e 's|/usr/local/towitoko/lib/|/usr/lib/ctapi/|' etc/opensc.conf.in
 
 %build
+./bootstrap
 %configure  --disable-static \
   --enable-pcsc \
   --enable-doc \
@@ -129,6 +130,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Sat Nov 13 2010 Juan Antonio Martinez <jonsito@terra.es> - 0.12.0-2.svn4874
+- Fixes issues on pinentry command handling
+- Normalize pkg names and rpm generation
+
 * Fri Nov 12 2010 Juan Antonio Martinez <jonsito@terra.es> - 0.12.0-1.svn4874
 - Merge of code from Direccion General de la Policía y la Guardia civil
 - Patches to make DGP's code to compile and run with OpenSC mainstream

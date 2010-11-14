@@ -255,8 +255,17 @@ int dnie_sm_wrap_apdu(struct sc_card *card,/* card data */
          SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
       case DNIE_SM_INTERNAL:
       case DNIE_SM_EXTERNAL:
-         if (flag==0) result = handler->encode(card,from,to);
-         else         result = handler->encode(card,from,to);
+         if (flag==0) { /* outgoing apdu */
+            /* according iso7816-4 sec 5.1.1 
+               check CLA byte to see if apdu is encoded */
+            if ( (from->cla & 0x0C)==0) { /* not encoded */
+                *to=*from; /* implicit memcpy() */
+                SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+            }
+            result = handler->encode(card,from,to);
+         } else { /* ingoing response */
+            result = handler->encode(card,from,to);
+         }
          SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU wrap failed");
          break;
       default:

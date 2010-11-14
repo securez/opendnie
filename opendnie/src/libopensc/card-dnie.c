@@ -152,7 +152,7 @@ static int ask_user_consent(sc_card_t *card) {
     assuan_context_t ctx; 
     if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    get_user_consent_env(card->ctx);
+    dnie_get_environment(card->ctx,&dnie_priv);
     if (dnie_priv.user_consent_enabled==0) {
         sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"User Consent is disabled in configuration file");
         return SC_SUCCESS;

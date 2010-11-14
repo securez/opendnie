@@ -40,7 +40,7 @@
 /* check for libassuan version */
 # ifndef ASSUAN_No_Error
 #  define HAVE_LIBASSUAN_2
-#  define _gpg_error(t) gpg_error((t))
+#  define _gpg_error(t) gpg_strerror((t))
 # else
 #  define HAVE_LIBASSUAN_1
 #  define _gpg_error(t) assuan_strerror( (AssuanError) (t) )
@@ -152,6 +152,7 @@ static int ask_user_consent(sc_card_t *card) {
     assuan_context_t ctx; 
     if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    get_user_consent_env(card->ctx);
     if (dnie_priv.user_consent_enabled==0) {
         sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"User Consent is disabled in configuration file");
         return SC_SUCCESS;
@@ -184,7 +185,7 @@ static int ask_user_consent(sc_card_t *card) {
     }
     res = assuan_transact(
        ctx, 
-       "SETDESC Está a punto de realizar una firma electrónica\n con su clave de FIRMA del DNI electrónico.\n\n¿Desea permitir esta operación?", 
+       "SETDESC Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?", 
        NULL, NULL, NULL, NULL, NULL, NULL);
     if (res!=0) {
        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETDESC: %s\n", _gpg_error(res));

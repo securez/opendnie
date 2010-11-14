@@ -669,7 +669,7 @@ Index: src/libopensc/card-dnie.c
 ===================================================================
 --- src/libopensc/card-dnie.c	(revisión: 0)
 +++ src/libopensc/card-dnie.c	(revisión: 0)
-@@ -0,0 +1,908 @@
+@@ -0,0 +1,917 @@
 +/*
 + * card-dnie.c: Support for Spanish DNI electronico (DNIe card)
 + *
@@ -699,6 +699,7 @@ Index: src/libopensc/card-dnie.c
 +#include <stdlib.h>
 +#include <string.h>
 +#include <stdarg.h>
++#include <sys/stat.h>
 +
 +#include "opensc.h"
 +#include "cardctl.h"
@@ -711,7 +712,7 @@ Index: src/libopensc/card-dnie.c
 +/* check for libassuan version */
 +# ifndef ASSUAN_No_Error
 +#  define HAVE_LIBASSUAN_2
-+#  define _gpg_error(t) gpg_error((t))
++#  define _gpg_error(t) gpg_strerror((t))
 +# else
 +#  define HAVE_LIBASSUAN_1
 +#  define _gpg_error(t) assuan_strerror( (AssuanError) (t) )
@@ -817,14 +818,22 @@ Index: src/libopensc/card-dnie.c
 + */
 +static int ask_user_consent(sc_card_t *card) {
 +    int res;
++    struct stat buf;
 +    const char *argv[3];
 +    assuan_fd_t noclosefds[2];
 +    assuan_context_t ctx; 
 +    if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
 +    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
++    get_user_consent_env(card->ctx);
 +    if (dnie_priv.user_consent_enabled==0) {
 +        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"User Consent is disabled in configuration file");
 +        return SC_SUCCESS;
++    }
++    res=stat(dnie_priv.user_consent_app,&buf);
++    if (res!=0) {
++      /* TODO: check that pinentry file is executable */
++      sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Invalid pinentry application: %s\n",dnie_priv.user_consent_app);
++       SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
 +    }
 +    argv[0]=dnie_priv.user_consent_app;
 +    argv[1]=NULL;
@@ -848,7 +857,7 @@ Index: src/libopensc/card-dnie.c
 +    }
 +    res = assuan_transact(
 +       ctx, 
-+       "SETDESC Está a punto de realizar una firma electrónica\n con su clave de FIRMA del DNI electrónico.\n\n¿Desea permitir esta operación?", 
++       "SETDESC Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?", 
 +       NULL, NULL, NULL, NULL, NULL, NULL);
 +    if (res!=0) {
 +       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETDESC: %s\n", _gpg_error(res));

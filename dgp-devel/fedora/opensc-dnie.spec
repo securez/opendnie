@@ -2,7 +2,7 @@
 
 Name:           opensc-dnie
 Version:        0.12.0
-Release:        2.svn%{svnrev}%{?dist}
+Release:        3.svn%{svnrev}%{?dist}
 Summary:        Smart card library and applications
 
 Group:          System Environment/Libraries
@@ -130,6 +130,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Sun Nov 14 2010 Juan Antonio Martinez <jonsito@terra.es> - 0.12.0-3.svn4874
+- ask_user_consent() fixes
+
 * Sat Nov 13 2010 Juan Antonio Martinez <jonsito@terra.es> - 0.12.0-2.svn4874
 - Fixes issues on pinentry command handling
 - Normalize pkg names and rpm generation

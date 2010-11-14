@@ -13,7 +13,7 @@ static char *user_consent_app=PIN_ENTRY;
 /* check for libassuan version */
 #ifndef ASSUAN_No_Error
 # define HAVE_ASSUAN_2
-# define _gpg_error(t) gpg_error((t))
+# define _gpg_error(t) gpg_strerror((t))
 #else
 # define HAVE_ASSUAN_1
 # define _gpg_error(t) assuan_strerror( (AssuanError) (t) )

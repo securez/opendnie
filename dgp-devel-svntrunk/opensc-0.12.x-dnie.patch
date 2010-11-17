@@ -1,0 +1,297 @@
+Index: m4/libassuan.m4
+===================================================================
+--- m4/libassuan.m4	(revisión: 0)
++++ m4/libassuan.m4	(revisión: 0)
+@@ -0,0 +1,160 @@
++dnl Autoconf macros for libassuan
++dnl       Copyright (C) 2002, 2003 Free Software Foundation, Inc.
++dnl
++dnl This file is free software; as a special exception the author gives
++dnl unlimited permission to copy and/or distribute it, with or without
++dnl modifications, as long as this notice is preserved.
++dnl
++dnl This file is distributed in the hope that it will be useful, but
++dnl WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
++dnl implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
++
++dnl
++dnl Common code used for libassuan detection [internal]
++dnl Returns ok set to yes or no.
++dnl
++AC_DEFUN([_AM_PATH_LIBASSUAN_COMMON],
++[ AC_ARG_WITH(libassuan-prefix,
++              AC_HELP_STRING([--with-libassuan-prefix=PFX],
++                             [prefix where LIBASSUAN is installed (optional)]),
++     libassuan_config_prefix="$withval", libassuan_config_prefix="")
++  if test x$libassuan_config_prefix != x ; then
++    libassuan_config_args="$libassuan_config_args --prefix=$libassuan_config_prefix"
++    if test x${LIBASSUAN_CONFIG+set} != xset ; then
++      LIBASSUAN_CONFIG=$libassuan_config_prefix/bin/libassuan-config
++    fi
++  fi
++  AC_PATH_PROG(LIBASSUAN_CONFIG, libassuan-config, no)
++
++  tmp=ifelse([$1], ,1:0.9.2,$1)
++  if echo "$tmp" | grep ':' >/dev/null 2>/dev/null ; then
++    req_libassuan_api=`echo "$tmp"     | sed 's/\(.*\):\(.*\)/\1/'`
++    min_libassuan_version=`echo "$tmp" | sed 's/\(.*\):\(.*\)/\2/'`
++  else
++    req_libassuan_api=0
++    min_libassuan_version="$tmp"
++  fi
++
++  if test "$LIBASSUAN_CONFIG" != "no" ; then
++    libassuan_version=`$LIBASSUAN_CONFIG --version`
++  fi
++  libassuan_version_major=`echo $libassuan_version | \
++               sed 's/\([[0-9]]*\)\.\([[0-9]]*\)\.\([[0-9]]*\).*/\1/'`
++  libassuan_version_minor=`echo $libassuan_version | \
++               sed 's/\([[0-9]]*\)\.\([[0-9]]*\)\.\([[0-9]]*\).*/\2/'`
++  libassuan_version_micro=`echo $libassuan_version | \
++               sed 's/\([[0-9]]*\)\.\([[0-9]]*\)\.\([[0-9]]*\).*/\3/'`
++
++  AC_MSG_CHECKING(for LIBASSUAN ifelse([$2], ,,[$2 ])- version >= $min_libassuan_version)
++  ok=no
++  if test "$LIBASSUAN_CONFIG" != "no" ; then
++    ifelse([$2], ,,[if `$LIBASSUAN_CONFIG --thread=$2 2> /dev/null` ; then])
++    req_major=`echo $min_libassuan_version | \
++               sed 's/\([[0-9]]*\)\.\([[0-9]]*\)\.\([[0-9]]*\)/\1/'`
++    req_minor=`echo $min_libassuan_version | \
++               sed 's/\([[0-9]]*\)\.\([[0-9]]*\)\.\([[0-9]]*\)/\2/'`
++    req_micro=`echo $min_libassuan_version | \
++               sed 's/\([[0-9]]*\)\.\([[0-9]]*\)\.\([[0-9]]*\)/\3/'`
++    if test "$libassuan_version_major" -gt "$req_major"; then
++        ok=yes
++    else 
++        if test "$libassuan_version_major" -eq "$req_major"; then
++            if test "$libassuan_version_minor" -gt "$req_minor"; then
++               ok=yes
++            else
++               if test "$libassuan_version_minor" -eq "$req_minor"; then
++                   if test "$libassuan_version_micro" -ge "$req_micro"; then
++                     ok=yes
++                   fi
++               fi
++            fi
++        fi
++    fi
++    ifelse([$2], ,,[fi])
++  fi
++
++  if test $ok = yes; then
++    AC_MSG_RESULT(yes)
++  else
++    AC_MSG_RESULT(no)
++  fi
++
++  if test $ok = yes; then
++    if test "$req_libassuan_api" -gt 0 ; then
++      tmp=`$LIBASSUAN_CONFIG --api-version 2>/dev/null || echo 0`
++      if test "$tmp" -gt 0 ; then
++        AC_MSG_CHECKING([LIBASSUAN ifelse([$2], ,,[$2 ])API version])
++        if test "$req_libassuan_api" -eq "$tmp" ; then
++          AC_MSG_RESULT(okay)
++        else
++          ok=no
++          AC_MSG_RESULT([does not match.  want=$req_libassuan_api got=$tmp.])
++        fi
++      fi
++    fi
++  fi
++
++])
++
++
++
++dnl AM_PATH_LIBASSUAN([MINIMUM-VERSION,
++dnl                   [ACTION-IF-FOUND [, ACTION-IF-NOT-FOUND ]]])
++dnl Test for libassuan and define LIBASSUAN_CFLAGS and LIBASSUAN_LIBS
++dnl
++AC_DEFUN([AM_PATH_LIBASSUAN],
++[ _AM_PATH_LIBASSUAN_COMMON($1)
++  if test $ok = yes; then
++    LIBASSUAN_CFLAGS=`$LIBASSUAN_CONFIG $libassuan_config_args --cflags`
++    LIBASSUAN_LIBS=`$LIBASSUAN_CONFIG $libassuan_config_args --libs`
++    ifelse([$2], , :, [$2])
++  else
++    LIBASSUAN_CFLAGS=""
++    LIBASSUAN_LIBS=""
++    ifelse([$3], , :, [$3])
++  fi
++  AC_SUBST(LIBASSUAN_CFLAGS)
++  AC_SUBST(LIBASSUAN_LIBS)
++])
++
++
++dnl AM_PATH_LIBASSUAN_PTH([MINIMUM-VERSION,
++dnl                      [ACTION-IF-FOUND [, ACTION-IF-NOT-FOUND ]]])
++dnl Test for libassuan and define LIBASSUAN_PTH_CFLAGS and LIBASSUAN_PTH_LIBS
++dnl
++AC_DEFUN([AM_PATH_LIBASSUAN_PTH],
++[ _AM_PATH_LIBASSUAN_COMMON($1,pth)
++  if test $ok = yes; then
++    LIBASSUAN_PTH_CFLAGS=`$LIBASSUAN_CONFIG $libassuan_config_args --thread=pth --cflags`
++    LIBASSUAN_PTH_LIBS=`$LIBASSUAN_CONFIG $libassuan_config_args --thread=pth --libs`
++    ifelse([$2], , :, [$2])
++  else
++    LIBASSUAN_PTH_CFLAGS=""
++    LIBASSUAN_PTH_LIBS=""
++    ifelse([$3], , :, [$3])
++  fi
++  AC_SUBST(LIBASSUAN_PTH_CFLAGS)
++  AC_SUBST(LIBASSUAN_PTH_LIBS)
++])
++
++
++dnl AM_PATH_LIBASSUAN_PTHREAD([MINIMUM-VERSION,
++dnl                           [ACTION-IF-FOUND [, ACTION-IF-NOT-FOUND ]]])
++dnl Test for libassuan and define LIBASSUAN_PTHREAD_CFLAGS 
++dnl                           and LIBASSUAN_PTHREAD_LIBS
++dnl
++AC_DEFUN([AM_PATH_LIBASSUAN_PTHREAD],
++[ _AM_PATH_LIBASSUAN_COMMON($1,pthread)
++  if test $ok = yes; then
++    LIBASSUAN_PTHREAD_CFLAGS=`$LIBASSUAN_CONFIG $libassuan_config_args --thread=pthread --cflags`
++    LIBASSUAN_PTHREAD_LIBS=`$LIBASSUAN_CONFIG $libassuan_config_args --thread=pthread --libs`
++    ifelse([$2], , :, [$2])
++  else
++    LIBASSUAN_PTHREAD_CFLAGS=""
++    LIBASSUAN_PTHREAD_LIBS=""
++    ifelse([$3], , :, [$3])
++  fi
++  AC_SUBST(LIBASSUAN_PTHREAD_CFLAGS)
++  AC_SUBST(LIBASSUAN_PTHREAD_LIBS)
++])
++
+Index: src/libopensc/cards.h
+===================================================================
+--- src/libopensc/cards.h	(revisión: 4874)
++++ src/libopensc/cards.h	(copia de trabajo)
+@@ -175,6 +175,11 @@
+ 	SC_CARD_TYPE_JAVACARD_BASE = 24000,
+ 	SC_CARD_TYPE_JAVACARD,
+ 
++        /* Spanish DNIe card */
++        SC_CARD_TYPE_DNIE_BASE = 25000,
++        SC_CARD_TYPE_DNIE_ADMIN,
++        SC_CARD_TYPE_DNIE_USER,
++        SC_CARD_TYPE_DNIE_TERMINATED,
+ };
+ 
+ extern sc_card_driver_t *sc_get_default_driver(void);
+@@ -207,6 +212,7 @@
+ extern sc_card_driver_t *sc_get_ias_driver(void);
+ extern sc_card_driver_t *sc_get_javacard_driver(void);
+ extern sc_card_driver_t *sc_get_itacns_driver(void);
++extern sc_card_driver_t *sc_get_dnie_driver(void);
+ 
+ #ifdef __cplusplus
+ }
+Index: src/libopensc/ctx.c
+===================================================================
+--- src/libopensc/ctx.c	(revisión: 4874)
++++ src/libopensc/ctx.c	(copia de trabajo)
+@@ -79,6 +79,7 @@
+ 	{ "rutoken_ecp",(void *(*)(void)) sc_get_rtecp_driver },
+ 	{ "westcos",	(void *(*)(void)) sc_get_westcos_driver },
+ 	{ "myeid",      (void *(*)(void)) sc_get_myeid_driver },
++	{ "dnie",       (void *(*)(void)) sc_get_dnie_driver },
+ 
+ /* Here should be placed drivers that need some APDU transactions to
+  * recognise its cards. */
+Index: src/libopensc/Makefile.am
+===================================================================
+--- src/libopensc/Makefile.am	(revisión: 4874)
++++ src/libopensc/Makefile.am	(copia de trabajo)
+@@ -3,6 +3,7 @@
+ MAINTAINERCLEANFILES = $(srcdir)/Makefile.in
+ 
+ EXTRA_DIST = Makefile.mak 
++SUBDIRS = dnie
+ 
+ lib_LTLIBRARIES = libopensc.la
+ noinst_HEADERS = cards.h ctbcs.h internal.h esteid.h muscle.h muscle-filesystem.h \
+@@ -53,7 +54,8 @@
+ 	$(OPTIONAL_ZLIB_LIBS) $(LTLIB_LIBS) \
+ 	$(top_builddir)/src/pkcs15init/libpkcs15init.la \
+ 	$(top_builddir)/src/scconf/libscconf.la \
+-	$(top_builddir)/src/common/libcompat.la
++	$(top_builddir)/src/common/libcompat.la \
++	$(top_builddir)/src/libopensc/dnie/libdniecard.la
+ if WIN32
+ libopensc_la_LIBADD += -lws2_32
+ endif
+Index: configure.ac
+===================================================================
+--- configure.ac	(revisión: 4874)
++++ configure.ac	(copia de trabajo)
+@@ -481,6 +481,15 @@
+ 	AC_DEFINE([ENABLE_PCSC], [1], [Define if PC/SC is to be enabled])
+ fi
+ 
++dnl AM_PATH_LIBASSUAN([MINIMUM-VERSION,
++dnl                   [ACTION-IF-FOUND [, ACTION-IF-NOT-FOUND ]]])
++dnl Test for libassuan and define LIBASSUAN_CFLAGS and LIBASSUAN_LIBS
++AM_PATH_LIBASSUAN(
++        [1.0.0],
++        [AC_DEFINE([HAVE_LIBASSUAN],[1],[Define if you have ASSUAN libraries and header files])],
++        [AC_MSG_ERROR([assuan is needed for opensc-dgp])]
++)
++
+ if test "${enable_man}" = "detect"; then
+ 	if test "${WIN32}" = "yes"; then
+ 		enable_man="no"
+@@ -588,6 +597,7 @@
+ 	src/Makefile
+ 	src/common/Makefile
+ 	src/libopensc/Makefile
++	src/libopensc/dnie/Makefile
+ 	src/libopensc/libopensc.pc
+ 	src/pkcs11/Makefile
+ 	src/pkcs15init/Makefile
+@@ -643,6 +653,8 @@
+ OPENCT_CFLAGS:           ${OPENCT_CFLAGS}
+ OPENCT_LIBS:             ${OPENCT_LIBS}
+ PCSC_CFLAGS:             ${PCSC_CFLAGS}
++LIBASSUAN_CFLAGS:        ${LIBASSUAN_CFLAGS}
++LIBASSUAN_LIBS:          ${LIBASSUAN_LIBS}
+ 
+ EOF
+ 
+Index: etc/opensc.conf.in
+===================================================================
+--- etc/opensc.conf.in	(revisión: 4874)
++++ etc/opensc.conf.in	(copia de trabajo)
+@@ -57,7 +57,7 @@
+ 		
+ 		# Connect to reader in exclusive mode.
+ 		# Default: false
+-		# connect_exclusive = true;
++		connect_exclusive = true;
+ 		#
+ 		# Reset the card after disconnect.
+ 		# Default: true
+@@ -69,7 +69,7 @@
+ 		#
+ 		# Enable pinpad if detected (PC/SC v2.0.2 Part 10)
+ 		# Default: true
+-		# enable_pinpad = false;
++		enable_pinpad = false;
+ 		#
+ 		# Use specific pcsc provider.
+ 		# Default: @DEFAULT_PCSC_PROVIDER@
+@@ -111,6 +111,14 @@
+ 		# The location of the driver library
+ 		# module = /usr/lib/opensc/drivers/card_customcos.so;
+ 	# }
++	
++        # Special configuration data for dnie card driver
++        # card_driver dnie {
++        #       # Enable/Disable user consent on signing (default: enable)
++        #       user_consent_enabled = true;
++        #       # Program to be used for ask confirmation (default: pinentry)
++        #       user_consent_app = /usr/bin/pinentry;
++        # }
+ 
+ 	# Force using specific card driver
+ 	#

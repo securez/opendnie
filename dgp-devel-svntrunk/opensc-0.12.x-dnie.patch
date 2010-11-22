@@ -165,7 +165,7 @@ Index: m4/libassuan.m4
 +
 Index: src/libopensc/cards.h
 ===================================================================
---- src/libopensc/cards.h	(revisión: 4874)
+--- src/libopensc/cards.h	(revisión: 4879)
 +++ src/libopensc/cards.h	(copia de trabajo)
 @@ -175,6 +175,11 @@
  	SC_CARD_TYPE_JAVACARD_BASE = 24000,
@@ -189,7 +189,7 @@ Index: src/libopensc/cards.h
  }
 Index: src/libopensc/ctx.c
 ===================================================================
---- src/libopensc/ctx.c	(revisión: 4874)
+--- src/libopensc/ctx.c	(revisión: 4879)
 +++ src/libopensc/ctx.c	(copia de trabajo)
 @@ -79,6 +79,7 @@
  	{ "rutoken_ecp",(void *(*)(void)) sc_get_rtecp_driver },
@@ -201,7 +201,7 @@ Index: src/libopensc/ctx.c
   * recognise its cards. */
 Index: src/libopensc/Makefile.am
 ===================================================================
---- src/libopensc/Makefile.am	(revisión: 4874)
+--- src/libopensc/Makefile.am	(revisión: 4879)
 +++ src/libopensc/Makefile.am	(copia de trabajo)
 @@ -3,6 +3,7 @@
  MAINTAINERCLEANFILES = $(srcdir)/Makefile.in
@@ -223,7 +223,7 @@ Index: src/libopensc/Makefile.am
  endif
 Index: configure.ac
 ===================================================================
---- configure.ac	(revisión: 4874)
+--- configure.ac	(revisión: 4879)
 +++ configure.ac	(copia de trabajo)
 @@ -481,6 +481,15 @@
  	AC_DEFINE([ENABLE_PCSC], [1], [Define if PC/SC is to be enabled])
@@ -260,7 +260,7 @@ Index: configure.ac
  
 Index: etc/opensc.conf.in
 ===================================================================
---- etc/opensc.conf.in	(revisión: 4874)
+--- etc/opensc.conf.in	(revisión: 4879)
 +++ etc/opensc.conf.in	(copia de trabajo)
 @@ -57,7 +57,7 @@
  		

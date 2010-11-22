@@ -236,6 +236,44 @@ sm_init_error:
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,result);
 }
 
+/**
+ * See if apdu needs to be encoded/decoded
+ *@param card card structure declaration
+ *@param apdu apdu to check
+ *@param flag 0:encode 1:decode
+ *@return err code (<0) 0:no wrap needed 1:wrap needed
+ */
+static int dnie_sm_need_wrap(struct sc_card *card,
+                      struct sc_apdu *apdu,
+                      int flag
+                     ) {
+    switch (flag) {
+      case 0: /* encode */
+    	/* according iso7816-4 sec 5.1.1 
+    	check CLA byte to see if apdu is encoded */
+    	if ( (apdu->cla & 0x0C)==0) return 0; /* already encoded */
+    	/* GET Response command should not to be encoded */
+    	if ( apdu->ins == 0xC0 ) return 0;
+        /* arriving here means encoding needed */
+    	return 1;
+      case 1: /* decode */
+        if (apdu->resplen==0) return 0; /* response has only sw1 sw2 */
+        /* acording to cwa-14890-1 sec 9.2 */
+        switch (apdu->resp[0]) {
+            case 0x81: /* plain value (to be protected by CC) */
+            case 0x87: /* padding-content + cryptogram */
+            case 0x8E: /* cryptographic checksum (MAC) */
+            case 0x97: /* Le (to be protected by CC ) */
+            case 0x99: /* processing status (SW1-SW2 protected by mac) */
+               return 1;
+            default:   /* else assume unencrypted */
+               /* TODO: revise correctness */
+               return 0;
+        }
+      default: return SC_ERROR_INTERNAL;
+    } 
+}
+
 int dnie_sm_wrap_apdu(struct sc_card *card,/* card data */
                       dnie_sm_handler_t *sm_handler, /* sm_handler */
                       struct sc_apdu *from,/* apdu to be parsed */
@@ -255,23 +293,21 @@ int dnie_sm_wrap_apdu(struct sc_card *card,/* card data */
          SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
       case DNIE_SM_INTERNAL:
       case DNIE_SM_EXTERNAL:
-         if (flag==0) { /* outgoing apdu */
-            /* according iso7816-4 sec 5.1.1 
-               check CLA byte to see if apdu is encoded */
-            if ( (from->cla & 0x0C)==0) { /* not encoded */
-                *to=*from; /* implicit memcpy() */
-                SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
-            }
-            result = handler->encode(card,from,to);
-         } else { /* ingoing response */
-            result = handler->encode(card,from,to);
-         }
-         SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU wrap failed");
+         result=dnie_sm_need_wrap(card,from,flag);
+         if (result<0) goto dnie_wrap_apdu_end; /* ERROR */
+         if (result==0) { /* no wrap */
+             *to=*from; 
+             result=SC_SUCCESS; 
+             goto dnie_wrap_apdu_end;
+         } 
+         if (flag==0) result=handler->encode(card,from,to); /* wrap */
+         else         result=handler->decode(card,from,to); /* unwrap */
          break;
       default:
          SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INTERNAL);
     }
-    SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+dnie_wrap_apdu_end:
+    SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,result);
 }
 
 /* end of secure_messaging.c */

@@ -1,3 +1,11 @@
+opensc-dnie (0.11.13-1ubuntu2dnie1) UNRELEASED; urgency=low
+
+  * Added support for Spanish DNI electronico (DNIe card)
+  * debian/rules: detect pcsc provider depending on the distribution.
+  * debian/control: Update Standards-Version to 3.9.1.
+
+ -- Enrique Hernández Bello <quique@osl.ull.es>  Thu, 18 Nov 2010 14:47:36 +0000
+
 opensc (0.11.13-1ubuntu2) maverick; urgency=low
 
   * debian/patches/fix-storing-key-on-entersafe: Fix storing a RSA key on

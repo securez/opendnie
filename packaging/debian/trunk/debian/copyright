@@ -1,5 +1,7 @@
 This package was debianized by Eric Dorland <eric@debian.org> on Mon,
-22 Dec 2003 23:23:29 -0500.
+22 Dec 2003 23:23:29 -0500 and adapted to support DNIe by
+Enrique Hernández Bello <quique@osl.ull.es> on Fri, 19 Nov 2010
+19:05:02 +0000.
 
 It was downloaded from http://www.opensc.org/
 

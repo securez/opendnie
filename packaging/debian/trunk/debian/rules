@@ -1,5 +1,11 @@
 #!/usr/bin/make -f
 
+ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
+	LIBPCSCLITE_PATH = /lib/libpcsclite.so.1
+else
+	LIBPCSCLITE_PATH = /usr/lib/libpcsclite.so.1
+endif
+
 %:
 	dh $@
 
@@ -9,7 +15,7 @@ override_dh_auto_configure:
 		--enable-pcsc \
 		--enable-openct \
 		--enable-doc \
-		--with-pcsc-provider=/lib/libpcsclite.so.1 \
+		--with-pcsc-provider=$(LIBPCSCLITE_PATH) \
 		--htmldir=/usr/share/doc/opensc/html
 
 override_dh_strip:

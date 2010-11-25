@@ -1,0 +1,12 @@
+Please use the git repo for development.
+--- opensc-dnie-0.11.13.orig/src/signer/dialog.c
++++ opensc-dnie-0.11.13/src/signer/dialog.c
+@@ -3,7 +3,7 @@
+ #include <stdarg.h>
+ 
+ #ifndef PIN_ENTRY
+-#define PIN_ENTRY "/usr/local/bin/gpinentry"
++#define PIN_ENTRY "/usr/bin/pinentry"
+ #endif
+ 
+ extern int ask_and_verify_pin_code(struct sc_pkcs15_card *p15card,

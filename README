@@ -1,13 +1,65 @@
 Contenido del repositorio
+-----------------------------------
 
-- dnie-static
+- dgp-sources
 Copia literal de los fuentes publicados por la Dirección General de la Policía y la Guardia Civil en:
 http://www.dnielectronico.es/descargas/codigo_fuente_pkcs11/src.zip
 
-- dnie-devel
+- opensc-dnie
 Adaptación del driver original para que compile y ejecute correctamente con
 OpenSC-0.12.x
 
-- opendnie
+- opensc-opendnie
 Nuevo driver con licencia LGPL escrito desde cero, para su integración en el
 proyecto OpenSC
+
+- tests
+Diversas aplicaciones de test
+
+- packaging
+Información adicional para los diversos sistemas de paquetería
+
+Organización (jerarquía de directorios)
+-----------------------------------------------------------------
+
+·-root
+\
+|--packaging
+|  \
+|  |--debian
+|  |  \
+|  |  |--branches
+|  |  |  \
+|  |  |  |--0.11.12
+|  |  |  |--0.11.13
+|  |  |  ·--0.12.0
+|  |  ·--trunk
+|  |--fedora
+|  |  \
+|  |  |--branches
+|  |  |  \
+|  |  |  |--0.11.12
+|  |  |  |--0.11.13
+|  |  |  ·--0.12.0
+|  |  ·--trunk
+|  .(más distribuciones)
+|  .
+|
+|--opensc-dnie
+|  \
+|  |--branches
+|  |  \
+|  |  |--0.11.12
+|  |  |--0.11.13
+|  |  ·--0.12.0
+|  ·--trunk
+|
+|--opensc-opendnie
+|  \
+|  |--branches
+|  |  \
+|  |  .--0.12.0
+|  ·--trunk
+|
+|--tests 
+·--dgp-sources

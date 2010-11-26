@@ -1,0 +1,112 @@
+Adaptación de los drivers originales del DNIe publicados por la DGP
+realizada por:
+
+Martin Paljak: martin @ paljak . pri . ee 
+Juan Antonio Martínez jonsito @ terra . es
+
+NOTAS sobre el driver DNIe para la versión 0.11.13 de OpenSC:
+----------------------------------------------------------------
+
+Este repositorio contiene:
+
+- El código derivado de los drivers para el DNI Electrónico
+publicados en su día, adaptados para su integración con
+OpenSC-0.11.13
+- Los parches necesarios para adaptar el código oficial
+de OpenSC-0.11.13 de manera que soporte el driver DNIe
+
+Esta versión compila como un todo, esto es: se genera un
+fichero libopensc.so.2 que contiene el driver DNIe integrado;
+no se genera pues un módulo libopensc-dnie.so como en los
+paquetes distribuídos por la DGP
+
+Debido a las licencia del código publicado por la Dirección
+General de la Policía y la Guardia Civil, Se ha cambiado 
+la licencia original (LGPLv2+) de OpenSC a GPLv3+
+
+INSTRUCCIONES DE INTALACION Y COMPILACION
+---------------------------------------------------
+0 - Requisitos previos
+
+- Tener un sistema Linux con el entorno de desarrollo C instalado
+
+- Tener instalados los paquetes (los nombres pueden variar en
+función de la distribución):
+
+* build-essential / pkgconfig / autoconf / automake / docbook-xsl
+* subversion
+* pcsc-lite / pcscd
+* pcsc-lite-devel / libpcsclite-dev
+* pcsc-tools
+* readline
+* readline-devel
+* openct-devel (recomendable)
+* openssl
+* openssl-devel / libssl-dev / libglobus-openssl-dev
+* libtool
+* libtool-ltdl-devel
+* libccid 
+* libassuan
+* libassuan-devel
+
+1 - Crear un directorio de trabajo
+
+bash$ mkdir workspace
+bash$ cd workspace
+
+2- Descargar el código del repositorio de Cenatic
+
+bash$ svn checkout https://svn.forge.morfeo-project.org/opendnie/opensc-dnie/branches/0.11.13
+bash$ cd 0.11.13
+
+3- Regenerar el entorno de compilación, generando los ficheros necesarios
+
+bash$ ./bootstrap
+
+4- Compilar e instalar
+
+bash$ ./configure --enable-pcsc
+bash$ make
+bash$ sudo make install
+
+4a- En el caso de distribuciones linux Fedora (y posiblemente otras), 
+las opciones extras para que "configure" instale en los directorios 
+standard son:
+
+./configure --prefix=/usr \
+        --sysconfdir=/etc \
+        --datadir=/usr/share \
+        --infodir=/usr/share/info \
+        --mandir=/usr/share/man \
+        --enable-pcsc
+
+5- Al contrario que los drivers publicados en la página web de la DGP
+Esta versión no genera un fichero /usr/lib/libopensc-dnie.so, sino que
+el driver DNIe está integrado dentro de /usr/lib/libopensc.so
+
+6- Una vez instalada, será necesario instalar los certificados de la DGP,
+módulo pkcs#11 en Firefox/Mozilla, etc siguiendo los procedimientos
+habituales descritos en la Web http://www.dnielectronico.es
+
+7- Nota sobre "pinentry"
+
+En función de la distribución de Linux, es posible que la aplicación
+"/usr/bin/pinentry" no esté instalada o tenga distinto nombre
+Para obviar este problema, será necesario editar el fichero de
+configuración /etc/opensc.conf.
+
+Para ello se busca y edita la entrada:
+....
+        # card_driver dnie {
+        #       # Enable/Disable user consent on signing (default: enable)
+        #       user_consent_enabled = true;
+        #       # Program to be used for ask confirmation (default: pinentry)
+        #       user_consent_app = /usr/bin/pinentry;
+        # }
+....
+Se descomenta dicha entrada, y se ajusta el valor de user_consent_app al
+correspondiente a nuestro sistema
+
+La variable user_consent_enabled es ignorada en esta versión, estando
+fijada al valor "true"
+

@@ -1,0 +1,36 @@
+include $(top_srcdir)/win32/ltrc.inc
+
+MAINTAINERCLEANFILES = \
+	$(srcdir)/Makefile.in $(srcdir)/versioninfo.rc
+CLEANFILES = versioninfo.rc
+EXTRA_DIST = Makefile.mak
+
+SUBDIRS = regression
+noinst_PROGRAMS = base64 lottery p15dump pintest prngtest
+
+INCLUDES = -I$(top_srcdir)/src/common -I$(top_builddir)/src/include
+LIBS = $(top_builddir)/src/libopensc/libopensc.la \
+	$(top_builddir)/src/common/libcompat.la
+
+COMMON_SRC = sc-test.c
+COMMON_INC = sc-test.h
+
+base64_SOURCES = base64.c $(COMMON_SRC) $(COMMON_INC)
+lottery_SOURCES = lottery.c $(COMMON_SRC) $(COMMON_INC)
+p15dump_SOURCES = p15dump.c print.c $(COMMON_SRC) $(COMMON_INC)
+pintest_SOURCES = pintest.c print.c $(COMMON_SRC) $(COMMON_INC)
+prngtest_SOURCES = prngtest.c $(COMMON_SRC) $(COMMON_INC)
+
+if WIN32
+base64_SOURCES += versioninfo.rc
+lottery_SOURCES += versioninfo.rc
+p15dump_SOURCES += versioninfo.rc
+pintest_SOURCES += versioninfo.rc
+prngtest_SOURCES += versioninfo.rc
+else
+dist_noinst_DATA = versioninfo.rc
+endif
+
+versioninfo.rc:
+	sed 's/@@FILE_DESCRIPTION@@/OpenSC Test Program/g' \
+		"$(top_builddir)/win32/versioninfo.rc.in" > versioninfo.rc

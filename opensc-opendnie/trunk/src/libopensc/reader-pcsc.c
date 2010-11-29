@@ -51,8 +51,9 @@ struct pcsc_global_private_data {
 	SCARDCONTEXT pcsc_wait_ctx;
 	int enable_pinpad;
 	int connect_exclusive;
-	int connect_reset;
-	int transaction_reset;
+	DWORD disconnect_action;
+	DWORD transaction_end_action;
+	DWORD reconnect_action;
 	const char *provider_library;
 	lt_dlhandle dlhandle;
 	SCardEstablishContext_t SCardEstablishContext;
@@ -90,6 +91,16 @@ struct pcsc_private_data {
 };
 
 static int pcsc_detect_card_presence(sc_reader_t *reader);
+
+static DWORD pcsc_reset_action(const char *str)
+{
+	if (!strcmp(str, "reset"))
+		return SCARD_RESET_CARD;
+	else if (!strcmp(str, "unpower"))
+		return SCARD_UNPOWER_CARD;
+	else
+		return SCARD_LEAVE_CARD;
+}
 
 static int pcsc_to_opensc_error(LONG rv)
 {
@@ -254,7 +265,7 @@ out:
 	return r;
 }
 
-
+/* Calls SCardGetStatusChange on the reader to set ATR and associated flags (card present/changed) */
 static int refresh_attributes(sc_reader_t *reader)
 {
 	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
@@ -305,11 +316,10 @@ static int refresh_attributes(sc_reader_t *reader)
 		if (priv->reader_state.cbAtr > SC_MAX_ATR_SIZE)
 			return SC_ERROR_INTERNAL;
 
-		/* ATR changes => card changed */
+		/* Some cards have a different cold (after a powerup) and warm (after a reset) ATR  */
 		if (memcmp(priv->reader_state.rgbAtr, reader->atr, priv->reader_state.cbAtr) != 0) {
 			reader->atr_len = priv->reader_state.cbAtr;	
 			memcpy(reader->atr, priv->reader_state.rgbAtr, reader->atr_len);
-			reader->flags |= SC_READER_CARD_CHANGED;
 		}
 
 		if (old_flags & SC_READER_CARD_PRESENT) {
@@ -373,13 +383,13 @@ static int check_forced_protocol(sc_context_t *ctx, u8 *atr, size_t atr_len, DWO
 			ok = 1;
 		}
 		if (ok)
-			sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "force_protocol: %s\n", forcestr);
+			sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "force_protocol: %s", forcestr);
 	}
 	return ok;
 }
 
 
-static int pcsc_reconnect(sc_reader_t * reader, int reset)
+static int pcsc_reconnect(sc_reader_t * reader, DWORD action)
 {
 	DWORD active_proto, tmp, protocol = SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1;
 	LONG rv;
@@ -404,7 +414,7 @@ static int pcsc_reconnect(sc_reader_t * reader, int reset)
 
 	rv = priv->gpriv->SCardReconnect(priv->pcsc_card,
 			    priv->gpriv->connect_exclusive ? SCARD_SHARE_EXCLUSIVE : SCARD_SHARE_SHARED,
-			    protocol, reset ? SCARD_UNPOWER_CARD : SCARD_LEAVE_CARD, &active_proto);
+			    protocol, action, &active_proto);
 
 	if (rv != SCARD_S_SUCCESS) {
 		PCSC_TRACE(reader, "SCardReconnect failed", rv);
@@ -432,9 +442,6 @@ static int pcsc_connect(sc_reader_t *reader)
 	if (!(reader->flags & SC_READER_CARD_PRESENT))
 		SC_FUNC_RETURN(reader->ctx, SC_LOG_DEBUG_VERBOSE, SC_ERROR_CARD_NOT_PRESENT);
 
-	/* Check if we need a specific protocol. refresh_attributes above already sets the ATR */
-	if (check_forced_protocol(reader->ctx, reader->atr, reader->atr_len, &tmp))
-		protocol = tmp;
 	
 	rv = priv->gpriv->SCardConnect(priv->gpriv->pcsc_ctx, reader->name,
 			  priv->gpriv->connect_exclusive ? SCARD_SHARE_EXCLUSIVE : SCARD_SHARE_SHARED,
@@ -451,12 +458,27 @@ static int pcsc_connect(sc_reader_t *reader)
 		PCSC_TRACE(reader, "SCardConnect failed", rv);
 		return pcsc_to_opensc_error(rv);
 	}
+
 	reader->active_protocol = pcsc_proto_to_opensc(active_proto);
 	priv->pcsc_card = card_handle;
+	
+	sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "Initial protocol: %s", reader->active_protocol == SC_PROTO_T1 ? "T=1" : "T=0");
 
-	/* after connect reader is not locked yet */
+	/* Check if we need a specific protocol. refresh_attributes above already sets the ATR */
+	if (check_forced_protocol(reader->ctx, reader->atr, reader->atr_len, &tmp)) {
+		if (active_proto != tmp) {
+			sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "Reconnecting to force protocol");
+			r = pcsc_reconnect(reader, SCARD_UNPOWER_CARD);
+			if (r != SC_SUCCESS) {
+				sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "pcsc_reconnect (to force protocol) failed", r);
+				return r;
+			}
+		}
+		sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "Final protocol: %s", reader->active_protocol == SC_PROTO_T1 ? "T=1" : "T=0");
+	}
+
+	/* After connect reader is not locked yet */
 	priv->locked = 0;
-	sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "After connect protocol = %d", reader->active_protocol);
 
 	return SC_SUCCESS;
 }
@@ -467,8 +489,7 @@ static int pcsc_disconnect(sc_reader_t * reader)
 
 	SC_FUNC_CALLED(reader->ctx, SC_LOG_DEBUG_NORMAL);
 
-	priv->gpriv->SCardDisconnect(priv->pcsc_card, priv->gpriv->connect_reset ?
-	          SCARD_RESET_CARD : SCARD_LEAVE_CARD);
+	priv->gpriv->SCardDisconnect(priv->pcsc_card, priv->gpriv->disconnect_action);
 	reader->flags = 0;
 	return SC_SUCCESS;
 }
@@ -495,7 +516,7 @@ static int pcsc_lock(sc_reader_t *reader)
 			return SC_ERROR_READER_REATTACHED;
 		case SCARD_W_RESET_CARD:
 			/* try to reconnect if the card was reset by some other application */
-			r = pcsc_reconnect(reader, 0);
+			r = pcsc_reconnect(reader, SCARD_LEAVE_CARD);
 			if (r != SC_SUCCESS) {
 				sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "pcsc_reconnect failed", r);
 				return r;
@@ -518,8 +539,7 @@ static int pcsc_unlock(sc_reader_t *reader)
 
 	SC_FUNC_CALLED(reader->ctx, SC_LOG_DEBUG_NORMAL);
 
-	rv = priv->gpriv->SCardEndTransaction(priv->pcsc_card, priv->gpriv->transaction_reset ?
-                           SCARD_RESET_CARD : SCARD_LEAVE_CARD);
+	rv = priv->gpriv->SCardEndTransaction(priv->pcsc_card, priv->gpriv->transaction_end_action);
 
 	priv->locked = 0;
 	if (rv != SCARD_S_SUCCESS) {
@@ -543,7 +563,7 @@ static int pcsc_reset(sc_reader_t *reader)
 	int r;
 	int old_locked = priv->locked;
 
-	r = pcsc_reconnect(reader, 1);
+	r = pcsc_reconnect(reader, SCARD_UNPOWER_CARD);
 	if(r != SC_SUCCESS)
 		return r;
 
@@ -601,9 +621,10 @@ static int pcsc_init(sc_context_t *ctx)
 	}
 
 	/* Defaults */
-	gpriv->connect_reset = 1;
 	gpriv->connect_exclusive = 0;
-	gpriv->transaction_reset = 0;
+	gpriv->disconnect_action = SCARD_RESET_CARD;
+	gpriv->transaction_end_action = SCARD_LEAVE_CARD;
+	gpriv->reconnect_action = SCARD_LEAVE_CARD;
 	gpriv->enable_pinpad = 1;
 	gpriv->provider_library = DEFAULT_PCSC_PROVIDER;
 	gpriv->pcsc_ctx = -1;
@@ -611,19 +632,21 @@ static int pcsc_init(sc_context_t *ctx)
 
 	conf_block = sc_get_conf_block(ctx, "reader_driver", "pcsc", 1);
 	if (conf_block) {
-		gpriv->connect_reset =
-		    scconf_get_bool(conf_block, "connect_reset", gpriv->connect_reset);
 		gpriv->connect_exclusive =
 		    scconf_get_bool(conf_block, "connect_exclusive", gpriv->connect_exclusive);
-		gpriv->transaction_reset =
-		    scconf_get_bool(conf_block, "transaction_reset", gpriv->transaction_reset);
+		gpriv->disconnect_action =
+		    pcsc_reset_action(scconf_get_str(conf_block, "disconnect_action", "reset"));
+		gpriv->transaction_end_action =
+		    pcsc_reset_action(scconf_get_str(conf_block, "transaction_end_action", "leave"));
+		gpriv->reconnect_action =
+		    pcsc_reset_action(scconf_get_str(conf_block, "reconnect_action", "leave"));
 		gpriv->enable_pinpad =
 		    scconf_get_bool(conf_block, "enable_pinpad", gpriv->enable_pinpad);
 		gpriv->provider_library =
 		    scconf_get_str(conf_block, "provider_library", gpriv->provider_library);
 	}
-	sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "PC/SC options: connect_reset=%d connect_exclusive=%d transaction_reset=%d enable_pinpad=%d",
-		gpriv->connect_reset, gpriv->connect_exclusive, gpriv->transaction_reset, gpriv->enable_pinpad);
+	sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "PC/SC options: connect_exclusive=%d disconnect_action=%d transaction_end_action=%d reconnect_action=%d enable_pinpad=%d",
+		gpriv->connect_exclusive, gpriv->disconnect_action, gpriv->transaction_end_action, gpriv->reconnect_action, gpriv->enable_pinpad);
 
 	gpriv->dlhandle = lt_dlopen(gpriv->provider_library);
 	if (gpriv->dlhandle == NULL) {

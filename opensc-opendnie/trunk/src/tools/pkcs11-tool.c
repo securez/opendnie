@@ -853,23 +853,58 @@ static void list_mechs(CK_SLOT_ID slot)
 					printf("%li", info.ulMaxKeySize);
 				printf("}");
 			}
-			if (info.flags & CKF_DIGEST)
-				printf(", digest");
-			if (info.flags & CKF_SIGN)
-				printf(", sign");
-			if (info.flags & CKF_VERIFY)
-				printf(", verify");
-			if (info.flags & CKF_WRAP)
-				printf(", wrap");
-			if (info.flags & CKF_UNWRAP)
-				printf(", unwrap");
-			if (info.flags & CKF_ENCRYPT)
+			if (info.flags & CKF_HW) {
+				printf(", hw");
+				info.flags &= ~CKF_HW;
+			}
+			if (info.flags & CKF_ENCRYPT) {
 				printf(", encrypt");
-			if (info.flags & CKF_DECRYPT)
+				info.flags &= ~CKF_ENCRYPT;
+			}
+			if (info.flags & CKF_DECRYPT) {
 				printf(", decrypt");
-			if (info.flags & CKF_GENERATE_KEY_PAIR)
-				printf(", keypairgen");
-			info.flags &= ~(CKF_DIGEST|CKF_SIGN|CKF_VERIFY|CKF_HW|CKF_UNWRAP|CKF_ENCRYPT|CKF_DECRYPT|CKF_GENERATE_KEY_PAIR);
+				info.flags &= ~CKF_DECRYPT;
+			}
+			if (info.flags & CKF_DIGEST) {
+				printf(", digest");
+				info.flags &= ~CKF_DIGEST;
+			}
+			if (info.flags & CKF_SIGN) {
+				printf(", sign");
+				info.flags &= ~CKF_SIGN;
+			}
+			if (info.flags & CKF_SIGN_RECOVER) {
+				printf(", sign_recover");
+				info.flags &= ~CKF_SIGN_RECOVER;
+			}
+			if (info.flags & CKF_VERIFY) {
+				printf(", verify");
+				info.flags &= ~CKF_VERIFY;
+			}
+			if (info.flags & CKF_VERIFY_RECOVER) {
+				printf(", verify_recover");
+				info.flags &= ~CKF_VERIFY_RECOVER;
+			}
+			if (info.flags & CKF_GENERATE) {
+				printf(", generate");
+				info.flags &= ~CKF_GENERATE;
+			}
+			if (info.flags & CKF_GENERATE_KEY_PAIR) {
+				printf(", generate_key_pair");
+				info.flags &= ~CKF_GENERATE_KEY_PAIR;
+			}
+			if (info.flags & CKF_WRAP) {
+				printf(", wrap");
+				info.flags &= ~CKF_WRAP;
+			}
+			if (info.flags & CKF_UNWRAP) {
+				printf(", unwrap");
+				info.flags &= ~CKF_UNWRAP;
+			}
+			if (info.flags & CKF_DERIVE) {
+				printf(", derive");
+				info.flags &= ~CKF_DERIVE;
+			}
 			if (info.flags)
 				printf(", other flags=0x%x", (unsigned int) info.flags);
 		}
@@ -1929,7 +1964,8 @@ VARATTR_METHOD(LABEL, char);
 VARATTR_METHOD(APPLICATION, char);
 VARATTR_METHOD(ID, unsigned char);
 VARATTR_METHOD(OBJECT_ID, unsigned char);
-VARATTR_METHOD(MODULUS, unsigned char);
+VARATTR_METHOD(MODULUS, CK_BYTE);
+VARATTR_METHOD(PUBLIC_EXPONENT, CK_BYTE);
 VARATTR_METHOD(VALUE, unsigned char);
 VARATTR_METHOD(GOSTR3410_PARAMS, unsigned char);
 
@@ -2490,13 +2526,14 @@ static int test_digest(CK_SLOT_ID slot)
 #ifdef ENABLE_OPENSSL
 static EVP_PKEY *get_public_key(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE privKeyObject)
 {
-	unsigned char  *id;
-	CK_ULONG        idLen;
+	CK_BYTE         *id, *mod, *exp;
+	CK_ULONG         idLen, modLen, expLen;
 	CK_OBJECT_HANDLE pubkeyObject;
 	unsigned char  *pubkey;
 	const unsigned char *pubkey_c;
 	CK_ULONG        pubkeyLen;
 	EVP_PKEY       *pkey;
+	RSA            *rsa;
 
 	id = NULL;
 	id = getID(session, privKeyObject, &idLen);
@@ -2511,6 +2548,39 @@ static EVP_PKEY *get_public_key(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE priv
 		return NULL;
 	}
 	free(id);
+
+	switch(getKEY_TYPE(session, pubkeyObject)) {
+		case CKK_RSA:
+			pkey = EVP_PKEY_new();
+			rsa = RSA_new();
+			mod = getMODULUS(session, pubkeyObject, &modLen);
+			exp = getPUBLIC_EXPONENT(session, pubkeyObject, &expLen);
+			if ( !pkey || !rsa || !mod || !exp) {
+				printf("public key not extractable\n");
+				if (pkey)
+					free(pkey);
+				if (rsa)
+					free(rsa);
+				if (mod)
+					free(mod);
+				if (exp)
+					free(exp);
+				return NULL;
+			}
+			rsa->n = BN_bin2bn(mod, modLen, NULL);
+			rsa->e = BN_bin2bn(exp, expLen, NULL);
+			EVP_PKEY_assign_RSA(pkey, rsa);
+			free(mod);
+			free(exp);
+			return pkey;
+		case CKK_DSA:
+		case CKK_ECDSA:
+		case CKK_GOSTR3410:
+			break;
+		default:
+			printf("public key of unsupported type\n");
+			return NULL;
+	}
 
 	pubkey = getVALUE(session, pubkeyObject, &pubkeyLen);
 	if (pubkey == NULL) {
@@ -2723,12 +2793,10 @@ static int test_signature(CK_SLOT_ID slot, CK_SESSION_HANDLE session)
 
 	rv = p11->C_SignUpdate(sess, data, 5);
 	if (rv == CKR_FUNCTION_NOT_SUPPORTED) {
-		printf("  Note: C_SignUpdate(), SignFinal() not supported\n");
-		/* finish the digest operation */
-		sigLen2 = sizeof(sig2);
-		rv = p11->C_Sign(sess, data, dataLen, sig2, &sigLen2);
-		if (rv != CKR_OK)
-			p11_fatal("C_Sign", rv);
+		p11_warn("C_SignUpdate", rv);
+	} else if (rv != CKR_OK) {
+		p11_perror("C_SignUpdate", rv);
+		errors++;
 	} else {
 		if (rv != CKR_OK)
 			p11_fatal("C_SignUpdate", rv);

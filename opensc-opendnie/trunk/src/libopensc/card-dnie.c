@@ -115,7 +115,7 @@ static int dnie_get_environment(sc_context_t *ctx,dnie_private_data_t *priv) {
         if (blk==NULL) continue;
         /* fill private data with configuration parameters */
         priv->user_consent_app = /* def user consent app is "pinentry" */
-            scconf_get_str(blk,"user_consent_app",USER_CONSENT_CMD); 
+            (char *) scconf_get_str(blk,"user_consent_app",USER_CONSENT_CMD); 
         priv->user_consent_enabled = /* user consent is enabled by default */
             scconf_get_bool(blk,"user_consent_enabled",1);
     }
@@ -720,11 +720,22 @@ static int dnie_card_ctl(struct sc_card *card,
     }
 }
 
+static int df_acl[4]= {
+      SC_AC_OP_CREATE, SC_AC_OP_DELETE ,
+      SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE
+    };
+static int ef_acl[4]= {
+      SC_AC_OP_READ, SC_AC_OP_UPDATE,
+      SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE
+    };
+
 static int dnie_process_fci(struct sc_card *card,
                             struct sc_file *file,
                             const u8 *buf,
                             size_t buflen){
     int res=SC_SUCCESS;
+    int *acl=df_acl;
+    int n=0;
     if ((card==NULL) || (card->ctx==NULL) || (file==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
@@ -734,17 +745,22 @@ static int dnie_process_fci(struct sc_card *card,
     /* if tag 0x85 is received, then file->prop_attr_len should be filled
      * by sc_file_set_prop_attr() code. So check and set data according manual 
      * Note errata at pg 35 of Manual  about DF identifier (should be 0x38) */
-    if(file->prop_attr_len==0) { /* no 0x85 tag received */
+    if(file->prop_attr_len==0) { /* no proprietary tag (0x85) received */
         res=SC_SUCCESS;
         goto dnie_process_fci_end;
     }
-    /* byte 1 denotes file type */
+    /* at least 10 bytes should be received */
+    if (file->prop_attr_len<10) {
+        res=SC_ERROR_WRONG_LENGTH;
+        goto dnie_process_fci_end;
+    }
+    /* byte 0 denotes file type */
     switch(file->prop_attr[0]) {
         case 0x01:
             file->type = SC_FILE_TYPE_WORKING_EF;
             file->ef_structure = SC_FILE_EF_TRANSPARENT;
             break;
-        case 0x15:
+        case 0x15: /* EF for keys: linear variable simple TLV */
             file->type = SC_FILE_TYPE_WORKING_EF;
             break;
         case 0x38: /* Errata: manual page 35 says wrong 0x34 */
@@ -754,12 +770,69 @@ static int dnie_process_fci(struct sc_card *card,
             res=SC_ERROR_UNKNOWN_DATA_RECEIVED;
             goto dnie_process_fci_end;
     }
-    /* bytes 2 and 3 stores file ID */
+    /* bytes 1 and 2 stores file ID */
     file->id = (file->prop_attr[1] << 8) | file->prop_attr[2];
-    /* bytes 4 and 5 states file length */
+    /* bytes 3 and 4 states file length */
     file->size = (file->prop_attr[3] << 8) | file->prop_attr[4];
-    /* bytes 6 to 10 states security information */
-    /* TODO: _process_fci() parse sec info write */
+    /* bytes 5 to 9 states security attributes */
+    /* NOTE: 
+     * seems that these 4 bytes are handled according iso7816-9 sect 8.
+     * but seems that each card uses their own bits :-(
+     * No info available (yet), so copy code from card-jcos.c and card-flex.c
+     * card drivers and pray... */
+    acl=(file->type==SC_FILE_TYPE_DF)? df_acl:ef_acl; 
+    for(n=0;n<0;n++,acl++) {
+        int key_ref=file->prop_attr[5+n] & 0x0F;
+        switch(0xF0 & file->prop_attr[5+n]) {
+          case 0x00: 
+            sc_file_add_acl_entry(file,*acl,SC_AC_NONE,SC_AC_KEY_REF_NONE); 
+            break;
+          case 0x10:
+          /* this tag is omitted in official code 
+          case 0x20: 
+          */
+          case 0x30:
+            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
+            break;
+          case 0x40:
+            sc_file_add_acl_entry(file,*acl,SC_AC_TERM,key_ref); 
+            break;
+           /* these tags are omitted in official code 
+          case 0x50:
+            sc_file_add_acl_entry(file,*acl,SC_AC_AUT,SC_AC_KEY_REF_NONE); 
+            break;
+          case 0x60: 
+            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*acl,SC_AC_PRO,SC_AC_KEY_REF_NONE); 
+            break;
+          case 0x70: 
+            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*acl,SC_AC_PRO,SC_AC_KEY_REF_NONE); 
+            break;
+          case 0x80: 
+            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*acl,SC_AC_AUT,key_ref
+            break;
+          case 0x90: 
+            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*acl,SC_AC_AUT,key_ref); 
+            break;
+          */
+          case 0xF0:
+            sc_file_add_acl_entry(file,*acl,SC_AC_NEVER,SC_AC_KEY_REF_NONE); 
+            break;
+          default:
+            sc_file_add_acl_entry(file,*acl,SC_AC_UNKNOWN,SC_AC_KEY_REF_NONE); 
+            break;
+        }
+    }
+    /* NOTE: Following bytes are described at DNIe manual pg 36, but No 
+    documentation about what to do with following data is provided... 
+    logs suggest that they are neither generated nor handled 
+    so we blindy ignore....
+    */
+    /* byte 10 (if present) shows Control Flags for security files */
+    /* bytes 11 and 12 (if present) states Control bytes for RSA crypto files */
 
 dnie_process_fci_end:
     SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,res);

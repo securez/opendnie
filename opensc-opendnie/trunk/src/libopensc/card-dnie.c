@@ -722,13 +722,13 @@ static int dnie_card_ctl(struct sc_card *card,
 
 static int df_acl[]= {
       SC_AC_OP_CREATE, SC_AC_OP_DELETE ,
-      SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE
-      /* !hey!, what about 5th byte of FCI info? */
+      SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE,
+      -1 /* !hey!, what about 5th byte of FCI info? */
     };
 static int ef_acl[]= {
       SC_AC_OP_READ, SC_AC_OP_UPDATE,
-      SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE
-      /* !hey!, what about 5th byte of FCI info? */
+      SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE,
+      -1 /* !hey!, what about 5th byte of FCI info? */
     };
 
 static int dnie_process_fci(struct sc_card *card,
@@ -785,6 +785,7 @@ static int dnie_process_fci(struct sc_card *card,
      * card drivers and pray... */
     acl=(file->type==SC_FILE_TYPE_DF)? df_acl:ef_acl; 
     for(n=0;n<4;n++,acl++) {
+        if (*acl==-1) continue; /* unused entry: skip */
         int key_ref=file->prop_attr[5+n] & 0x0F;
         switch(0xF0 & file->prop_attr[5+n]) {
           case 0x00: 

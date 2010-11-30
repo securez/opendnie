@@ -8,26 +8,34 @@ apt-get install devscripts dpkg-dev fakeroot
 apt-get build-dep opensc
 
 1. Get into your favorite release directory:
-cd opensc-dnie-xx.xx.xx/
+cd branches/opensc-dnie-xx.xx.xx/
 
-2. Check and install new build dependences if it exists:
+or, if you want the bleeding edge:
+cd trunk/
+
+2. Check and install new build dependences if they exist:
 dpkg-checkbuilddeps
 apt-get install ...
 
-3. Get the current binary for that release:
+3. Get the current tarball for that release:
 uscan --download-current-version
 
-4. Build it:
+4. Untar it:
+tar xzvf ../opensc-dnie_*.orig.tar.gz --transform 's|^.*/||'
+
+5. Build it:
 debuild -rfakeroot -us -uc -tc
 
-5. Install it:
+6. Install it:
 dpkg -i ../libopensc_*.deb ../dnie-support*.deb 
 
-6. Install all unmet dependences:
+7. Install all unmet dependences:
 apt-get -f install
 
-7. Plug your card reader to your PC.
+8. Plug your card reader to your PC and insert your DNIe card.
 
-8. Insert your DNIe card.
+9. Check your installation loading this URL with Mozilla Firefox:
+firefox http://www.dnielectronico.es/como_utilizar_el_dnie/verificar.html
+(click on 'Comprobación de certificados' at bottom of page)
 
-9. Enjoy! ;)
+10. Enjoy! ;)

@@ -833,7 +833,7 @@ static int dnie_process_fci(struct sc_card *card,
     */
     /* byte 10 (if present) shows Control Flags for security files */
     /* bytes 11 and 12 (if present) states Control bytes for RSA crypto files */
-
+    res=SC_SUCCESS; /* arriving here means success */
 dnie_process_fci_end:
     SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,res);
 }

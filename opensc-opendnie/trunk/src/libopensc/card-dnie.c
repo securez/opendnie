@@ -720,13 +720,15 @@ static int dnie_card_ctl(struct sc_card *card,
     }
 }
 
-static int df_acl[4]= {
+static int df_acl[]= {
       SC_AC_OP_CREATE, SC_AC_OP_DELETE ,
       SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE
+      /* !hey!, what about 5th byte of FCI info? */
     };
-static int ef_acl[4]= {
+static int ef_acl[]= {
       SC_AC_OP_READ, SC_AC_OP_UPDATE,
       SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE
+      /* !hey!, what about 5th byte of FCI info? */
     };
 
 static int dnie_process_fci(struct sc_card *card,
@@ -776,12 +778,13 @@ static int dnie_process_fci(struct sc_card *card,
     file->size = (file->prop_attr[3] << 8) | file->prop_attr[4];
     /* bytes 5 to 9 states security attributes */
     /* NOTE: 
-     * seems that these 4 bytes are handled according iso7816-9 sect 8.
-     * but seems that each card uses their own bits :-(
+     * seems that these 5 bytes are handled according iso7816-9 sect 8.
+     * but sadly that each card uses their own bits :-(
+     * Moreover: Manual talks on 5 bytes, but official driver only uses 4
      * No info available (yet), so copy code from card-jcos.c and card-flex.c
      * card drivers and pray... */
     acl=(file->type==SC_FILE_TYPE_DF)? df_acl:ef_acl; 
-    for(n=0;n<0;n++,acl++) {
+    for(n=0;n<4;n++,acl++) {
         int key_ref=file->prop_attr[5+n] & 0x0F;
         switch(0xF0 & file->prop_attr[5+n]) {
           case 0x00: 

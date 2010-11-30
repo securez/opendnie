@@ -368,10 +368,11 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
     }
     /* not cached, retrieve it by mean of an APDU */
     sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0xb8, 0x00, 0x00);
-    apdu.cla = 0x90;
+    apdu.cla = 0x90; /* propietary cmd */
     apdu.resp = rbuf;
     apdu.resplen = sizeof(rbuf);
-    apdu.le   = 0x11;
+    /* official driver read 0x11 bytes, but only uses 7. Manual says just 7 */
+    apdu.le   = 0x07;
     apdu.lc   = 0;
     apdu.datalen = 0;
     /* send apdu */
@@ -379,7 +380,6 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
     SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU transmit failed");
     if (apdu.sw1 != 0x90 || apdu.sw2 != 0x00) return SC_ERROR_INTERNAL;
     /* cache serial number */
-    /* According to doc only first seven bytes from response are meaningfull */
     memcpy(card->serialnr.value, apdu.resp, 7*sizeof(u8));
     card->serialnr.len = 7*sizeof(u8);
     /* copy and return serial number */

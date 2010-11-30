@@ -549,12 +549,47 @@ select_file_error:
     SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,result);
 }
 
-static int dnie_get_challenge(struct sc_card *card,
-                         u8 * buf,
-                         size_t count){
+/* Get challenge: retrieve 8 random bytes for any further use
+ * (eg perform an external authenticate command)
+ * NOTEs
+ * Official driver redundantly sets SM before execute this command
+ * No reason to do it, as is needed to do SM handshake...
+ * Also: official driver reads in blocks of 20 bytes. 
+ * Why? Manual and iso-7816-4 states that only 8 bytes 
+ * are required... so we will obbey Manual
+ */
+static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len) {
+    sc_apdu_t apdu;
+    u8 buf[10];
     int result=SC_SUCCESS;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    /* TODO: _get_challenge() write */
+    /* just a copy of iso7816::get_challenge() but call dnie_check_sw to
+     * look for extra error codes */
+    if ((rnd==NULL) || (len<=0)) {
+        /* no valid buffer provided */ 
+        result=SC_ERROR_INVALID_ARGUMENTS;
+        goto dnie_get_challenge_error;
+    }
+    sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0x84, 0x00, 0x00);
+    apdu.le      = 8;
+    apdu.resp    = buf;
+    apdu.resplen = 8;       /* include SW's */
+
+    /* perform consecutive reads until retrieve "len" bytes */
+    while (len > 0) {
+        size_t n = len > 8 ? 8 : len;
+        result = sc_transmit_apdu(card, &apdu);
+        SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU transmit failed");
+        if (apdu.resplen != 8) {
+            result=sc_check_sw(card, apdu.sw1, apdu.sw2);
+            goto dnie_get_challenge_error;
+        }
+        memcpy(rnd, apdu.resp, n);
+        len -= n;
+        rnd += n;
+    }
+    result=SC_SUCCESS;
+dnie_get_challenge_error:
     SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
 }
 
@@ -822,7 +857,7 @@ static int dnie_process_fci(struct sc_card *card,
      * No info available (yet), so copy code from card-jcos.c and card-flex.c
      * card drivers and pray... */
     acl=(file->type==SC_FILE_TYPE_DF)? df_acl:ef_acl; 
-    for(n=0;n<4;n++,acl++) {
+    for(n=0;n<5;n++,acl++) {
         if (*acl==-1) continue; /* unused entry: skip */
         int key_ref=file->prop_attr[5+n] & 0x0F;
         switch(0xF0 & file->prop_attr[5+n]) {

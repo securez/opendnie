@@ -700,6 +700,7 @@ static int dnie_card_ctl(struct sc_card *card,
                     result = SC_CARDCTRL_LIFECYCLE_ADMIN; break;
                case SC_CARD_TYPE_DNIE_USER :
                     result = SC_CARDCTRL_LIFECYCLE_USER; break;
+               case SC_CARD_TYPE_DNIE_BLANK:
                case SC_CARD_TYPE_DNIE_TERMINATED:
                     result = SC_CARDCTRL_LIFECYCLE_OTHER; break;
            }

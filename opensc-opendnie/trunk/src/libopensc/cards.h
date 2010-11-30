@@ -179,9 +179,10 @@ enum {
 
         /* Spanish DNIe card */
         SC_CARD_TYPE_DNIE_BASE = 25000,
-        SC_CARD_TYPE_DNIE_ADMIN,
-        SC_CARD_TYPE_DNIE_USER,
-        SC_CARD_TYPE_DNIE_TERMINATED,
+        SC_CARD_TYPE_DNIE_BLANK, /* ATR LC byte: 00 */
+        SC_CARD_TYPE_DNIE_ADMIN, /* ATR LC byte: 01 */
+        SC_CARD_TYPE_DNIE_USER,  /* ATR LC byte: 03 */
+        SC_CARD_TYPE_DNIE_TERMINATED, /* ATR LC byte: 0F */
 };
 
 extern sc_card_driver_t *sc_get_default_driver(void);

@@ -60,6 +60,44 @@ static struct sc_card_error dnie_errors[] = {
     { 0,0,NULL }
 };
 
+/* 
+ * DNIe ATR info from DGP web page
+ *
+Tag Value Meaning
+TS  0x3B  Direct Convention
+T0  0x7F  Y1=0x07=0111; TA1,TB1 y TC1 present.
+          K=0x0F=1111; 15 historical bytes
+TA1 0x38  FI (Factor de conversión de la tasa de reloj) = 744
+          DI (Factor de ajuste de la tasa de bits) = 12
+          Máximo 8 Mhz.
+TB1 0x00  Vpp (voltaje de programación) no requerido.
+TC1 0x00  No se requiere tiempo de espera adicional.
+H1  0x00  No usado
+H2  0x6A  Datos de preexpedición. Diez bytes con identificación del expedidor.
+H3  0x44  'D'
+H4  0x4E  'N'
+H5  0x49  'I'
+H6  0x65  'e'
+H7  Fabricante de la tecnología Match-on-Card incorporada.
+    0x10  SAGEM
+    0x20  SIEMENS
+H8  0x02  Fabricante del CI: STMicroelectronics.
+H9  0x4C
+H10 0x34  Tipo de CI: 19WL34
+H11 0x01  MSB de la version del SO: 1
+H12 0x1v  LSB de la version del SO: 1v
+H13 Fase del ciclo de vida .
+    0x00  prepersonalización.
+    0x01  personalización.
+    0x03  usuario.
+    0x0F  final.
+H14 0xss
+H15 0xss  Bytes de estado
+
+H13-H15: 0x03 0x90 0x00 user phase: tarjeta operativa
+H13-H15: 0x0F 0x65 0x81 final phase: tarjeta no operativa
+*/
+
 /* ATR Table list */
 static struct sc_atr_table dnie_atrs[] = {
     /* TODO: get ATR for uninitalized DNIe */

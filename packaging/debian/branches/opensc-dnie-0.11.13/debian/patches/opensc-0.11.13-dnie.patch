@@ -1,7 +1,16 @@
-Index: opensc-0.11.13/configure.ac
+Index: opensc-dnie-0.11.13/configure.ac
 ===================================================================
---- opensc-0.11.13.orig/configure.ac	(revisión: 4874)
-+++ opensc-0.11.13/configure.ac	(copia de trabajo)
+--- opensc-dnie-0.11.13.orig/configure.ac	2010-02-16 09:03:28.000000000 +0000
++++ opensc-dnie-0.11.13/configure.ac	2010-11-27 14:02:51.504474001 +0000
+@@ -7,7 +7,7 @@
+ define([PACKAGE_VERSION_FIX], [13])
+ define([PACKAGE_SUFFIX], [])
+ 
+-AC_INIT([opensc],[PACKAGE_VERSION_MAJOR.PACKAGE_VERSION_MINOR.PACKAGE_VERSION_FIX[]PACKAGE_SUFFIX])
++AC_INIT([opensc-dnie],[PACKAGE_VERSION_MAJOR.PACKAGE_VERSION_MINOR.PACKAGE_VERSION_FIX[]PACKAGE_SUFFIX])
+ AC_CONFIG_AUX_DIR([.])
+ AC_CONFIG_HEADERS([config.h])
+ AC_CONFIG_MACRO_DIR([m4])
 @@ -595,16 +595,25 @@
  	fi
  	AC_DEFINE_UNQUOTED([DEFAULT_PCSC_PROVIDER], ["${DEFAULT_PCSC_PROVIDER}"], [Default PC/SC provider])
@@ -37,10 +46,10 @@ Index: opensc-0.11.13/configure.ac
  	src/libopensc/opensc-config
  	src/libopensc/libopensc.pc
  	src/libopensc/libpkcs15init.pc
-Index: opensc-0.11.13/src/libopensc/cards.h
+Index: opensc-dnie-0.11.13/src/libopensc/cards.h
 ===================================================================
---- opensc-0.11.13.orig/src/libopensc/cards.h	(revisión: 4874)
-+++ opensc-0.11.13/src/libopensc/cards.h	(copia de trabajo)
+--- opensc-dnie-0.11.13.orig/src/libopensc/cards.h	2010-02-16 09:03:28.000000000 +0000
++++ opensc-dnie-0.11.13/src/libopensc/cards.h	2010-11-27 14:02:27.944474001 +0000
 @@ -150,6 +150,12 @@
  	/* MyEID cards */
  	SC_CARD_TYPE_MYEID_BASE = 20000,
@@ -62,10 +71,10 @@ Index: opensc-0.11.13/src/libopensc/cards.h
  
  #ifdef __cplusplus
  }
-Index: opensc-0.11.13/src/libopensc/reader-pcsc.c
+Index: opensc-dnie-0.11.13/src/libopensc/reader-pcsc.c
 ===================================================================
---- opensc-0.11.13.orig/src/libopensc/reader-pcsc.c	(revisión: 4874)
-+++ opensc-0.11.13/src/libopensc/reader-pcsc.c	(copia de trabajo)
+--- opensc-dnie-0.11.13.orig/src/libopensc/reader-pcsc.c	2010-02-16 09:03:28.000000000 +0000
++++ opensc-dnie-0.11.13/src/libopensc/reader-pcsc.c	2010-11-27 14:02:27.944474001 +0000
 @@ -80,7 +80,11 @@
  
  struct pcsc_slot_data {
@@ -102,28 +111,28 @@ Index: opensc-0.11.13/src/libopensc/reader-pcsc.c
  
  		/* Scan the current state of all readers to see if they
  		 * match any of the events we're polling for */
-Index: opensc-0.11.13/src/libopensc/internal-winscard.h
+Index: opensc-dnie-0.11.13/src/libopensc/internal-winscard.h
 ===================================================================
---- opensc-0.11.13.orig/src/libopensc/internal-winscard.h	(revisión: 4874)
-+++ opensc-0.11.13/src/libopensc/internal-winscard.h	(copia de trabajo)
+--- opensc-dnie-0.11.13.orig/src/libopensc/internal-winscard.h	2010-02-16 09:03:28.000000000 +0000
++++ opensc-dnie-0.11.13/src/libopensc/internal-winscard.h	2010-11-27 14:02:27.944474001 +0000
 @@ -112,8 +112,13 @@
  typedef LONG (PCSC_API *SCardEndTransaction_t)(SCARDHANDLE hCard, DWORD dwDisposition);
  typedef LONG (PCSC_API *SCardStatus_t)(SCARDHANDLE hCard, LPSTR mszReaderNames, LPDWORD pcchReaderLen,
  	LPDWORD pdwState, LPDWORD pdwProtocol, LPBYTE pbAtr, LPDWORD pcbAtrLen);
 +#ifdef PCSC_162
- typedef LONG (PCSC_API *SCardGetStatusChange_t)(SCARDCONTEXT hContext, DWORD dwTimeout,
++typedef LONG (PCSC_API *SCardGetStatusChange_t)(SCARDCONTEXT hContext, DWORD dwTimeout,
 +	LPSCARD_READERSTATE rgReaderStates, DWORD cReaders);
 +#else
-+typedef LONG (PCSC_API *SCardGetStatusChange_t)(SCARDCONTEXT hContext, DWORD dwTimeout,
+ typedef LONG (PCSC_API *SCardGetStatusChange_t)(SCARDCONTEXT hContext, DWORD dwTimeout,
  	LPSCARD_READERSTATE_A rgReaderStates, DWORD cReaders);
 +#endif
  typedef LONG (PCSC_API *SCardControlOLD_t)(SCARDHANDLE hCard, LPCVOID pbSendBuffer, DWORD cbSendLength,
  	LPVOID pbRecvBuffer, LPDWORD lpBytesReturned);
  typedef LONG (PCSC_API *SCardControl_t)(SCARDHANDLE hCard, DWORD dwControlCode, LPCVOID pbSendBuffer,
-Index: opensc-0.11.13/src/libopensc/ctx.c
+Index: opensc-dnie-0.11.13/src/libopensc/ctx.c
 ===================================================================
---- opensc-0.11.13.orig/src/libopensc/ctx.c	(revisión: 4874)
-+++ opensc-0.11.13/src/libopensc/ctx.c	(copia de trabajo)
+--- opensc-dnie-0.11.13.orig/src/libopensc/ctx.c	2010-02-16 09:03:28.000000000 +0000
++++ opensc-dnie-0.11.13/src/libopensc/ctx.c	2010-11-27 14:02:27.944474001 +0000
 @@ -86,6 +86,7 @@
  	{ "rutoken_ecp",(void *(*)(void)) sc_get_rtecp_driver },
  	{ "westcos",	(void *(*)(void)) sc_get_westcos_driver },
@@ -132,10 +141,10 @@ Index: opensc-0.11.13/src/libopensc/ctx.c
  	/* emv is not really used, not sure if it works, but it conflicts with
             muscle and rutoken driver, thus has to be after them */
  	{ "emv",	(void *(*)(void)) sc_get_emv_driver },
-Index: opensc-0.11.13/src/libopensc/Makefile.am
+Index: opensc-dnie-0.11.13/src/libopensc/Makefile.am
 ===================================================================
---- opensc-0.11.13.orig/src/libopensc/Makefile.am	(revisión: 4874)
-+++ opensc-0.11.13/src/libopensc/Makefile.am	(copia de trabajo)
+--- opensc-dnie-0.11.13.orig/src/libopensc/Makefile.am	2010-02-16 09:03:28.000000000 +0000
++++ opensc-dnie-0.11.13/src/libopensc/Makefile.am	2010-11-27 14:02:27.944474001 +0000
 @@ -4,6 +4,7 @@
  	$(srcdir)/Makefile.in $(srcdir)/versioninfo.rc
  CLEANFILES = versioninfo.rc
@@ -154,10 +163,10 @@ Index: opensc-0.11.13/src/libopensc/Makefile.am
  if WIN32
  libopensc_la_LIBADD += -lws2_32
  endif
-Index: opensc-0.11.13/etc/opensc.conf.in
+Index: opensc-dnie-0.11.13/etc/opensc.conf.in
 ===================================================================
---- opensc-0.11.13.orig/etc/opensc.conf.in	(revisión: 4874)
-+++ opensc-0.11.13/etc/opensc.conf.in	(copia de trabajo)
+--- opensc-dnie-0.11.13.orig/etc/opensc.conf.in	2010-02-16 09:03:28.000000000 +0000
++++ opensc-dnie-0.11.13/etc/opensc.conf.in	2010-11-27 14:02:27.954474001 +0000
 @@ -75,7 +75,7 @@
  		
  		# Connect to reader in exclusive mode.

@@ -150,12 +150,12 @@ static int dnie_sm_create_secure_channel(
     /* ensure that our card is a DNIe */
     if (card->type!=SC_CARD_TYPE_DNIE_USER)
         SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_CARD);
-    /* reset card */
-    sc_reset(card);
+    /* reset card (warm reset, do not unpower card) */
+    sc_reset(card,0); 
     /* Retrieve Card serial Number */
     res=sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, &serial);
     SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get DNIe serialnr");
-/* TODO: dni_sm_create_secure_channel() write */
+    /* TODO: dni_sm_create_secure_channel() write */
     /* Read Intermediate CA from card File:3F006020 */
     sc_format_path("3F006020",&path);
     /* Read Card certificate File:3F00601F */

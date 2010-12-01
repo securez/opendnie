@@ -948,7 +948,14 @@ static int dnie_pin_cmd(struct sc_card * card,
     res=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
     SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Establish SM failed");
 
-    /* TODO: _pin_cmd() what about pinpad support? */
+    /* what about pinpad support? */
+    /* NOTE: 
+     * don't know how to handle pinpad throught SM channel.
+     * as a temporary solution, mark use pinpad as an error 
+     */
+    if (data->flags & SC_PIN_CMD_USE_PINPAD ) {
+        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_NOT_SUPPORTED);
+    }
 
     /* only allow changes on CHV pin ) */
     switch (data->pin_type) {

@@ -922,6 +922,7 @@ static int dnie_pin_cmd(struct sc_card * card,
                         struct sc_pin_cmd_data * data,
                         int *tries_left){
     int res=SC_SUCCESS;
+    int lc=SC_CARDCTRL_LIFECYCLE_USER;
     sc_apdu_t apdu;
 
     u8 pinbuffer[SC_MAX_APDU_BUFFER_SIZE];
@@ -936,11 +937,17 @@ static int dnie_pin_cmd(struct sc_card * card,
     data->flags &= ~SC_PIN_CMD_NEED_PADDING; /* no pin padding */
     data->apdu = &apdu; /* prepare apdu struct */
 
+    /* ensure that card is in USER Lifecycle */
+    res=dnie_card_ctl(card,SC_CARDCTL_LIFECYCLE_GET,&lc);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get card LC status");
+    if (lc!=SC_CARDCTRL_LIFECYCLE_USER) {
+        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_CARD);
+    }
+
     /* ensure that secure channel is established */
     res=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
-    if (res!=SC_SUCCESS) SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,res);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Establish SM failed");
 
-    /* TODO: _pin_cmd() ensure that card is in USER Lifecycle */
     /* TODO: _pin_cmd() what about pinpad support? */
 
     /* only allow changes on CHV pin ) */

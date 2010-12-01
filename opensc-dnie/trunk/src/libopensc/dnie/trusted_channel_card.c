@@ -928,7 +928,7 @@ int card_card_create_secure_channel(struct sc_card *card)
   if (card->ctx->debug) sc_debug(card->ctx, SC_LOG_DEBUG_VERBOSE, "Entering function card_card_create_secure_channel\n");
 
   /* reset card */
-  (void) sc_reset(card);
+  (void) sc_reset(card,0);
 
   /* flag secure channel as being created */
   ((struct card_priv_data *) card->drv_data)->secure_channel_state = secure_channel_creating;

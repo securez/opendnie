@@ -261,7 +261,7 @@ int sc_disconnect_card(sc_card_t *card)
 	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, 0);
 }
 
-int sc_reset(sc_card_t *card)
+int sc_reset(sc_card_t *card, int do_cold_reset)
 {
 	int r, r2;
 
@@ -274,7 +274,7 @@ int sc_reset(sc_card_t *card)
 	if (r != SC_SUCCESS)
 		return r;
 
-	r = card->reader->ops->reset(card->reader);
+	r = card->reader->ops->reset(card->reader, do_cold_reset);
 	/* invalidate cache */
 	memset(&card->cache, 0, sizeof(card->cache));
 	card->cache_valid = 0;
@@ -706,6 +706,37 @@ int _sc_card_add_algorithm(sc_card_t *card, const sc_algorithm_info_t *info)
 	return SC_SUCCESS;
 }
 
+int  _sc_card_add_ec_alg(sc_card_t *card, unsigned int key_length,
+			unsigned long flags, unsigned long ext_flags)
+{
+	sc_algorithm_info_t info;
+
+	memset(&info, 0, sizeof(info));
+	info.algorithm = SC_ALGORITHM_EC;
+	info.key_length = key_length;
+	info.flags = flags;
+	info.u._ec.ext_flags = ext_flags;
+
+	return _sc_card_add_algorithm(card, &info);
+}
+
+sc_algorithm_info_t * sc_card_find_ec_alg(sc_card_t *card,
+		unsigned int key_length)
+{
+	int i;
+
+	for (i = 0; i < card->algorithm_count; i++) {
+		sc_algorithm_info_t *info = &card->algorithms[i];
+
+		if (info->algorithm != SC_ALGORITHM_EC)
+			continue;
+		if (info->key_length != key_length)
+			continue;
+		return info;
+	}
+	return NULL;
+}
+	
 int _sc_card_add_rsa_alg(sc_card_t *card, unsigned int key_length,
 			 unsigned long flags, unsigned long exponent)
 {

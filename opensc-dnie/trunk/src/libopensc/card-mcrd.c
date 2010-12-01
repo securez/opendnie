@@ -295,20 +295,17 @@ static int mcrd_init(sc_card_t * card)
 
 
 	if (is_esteid_card(card)) {
-		flags = SC_ALGORITHM_RSA_PAD_PKCS1 | SC_ALGORITHM_RSA_HASH_SHA1;
-		_sc_card_add_rsa_alg(card, 1024, flags, 0);
-
 		/* Reset the MULTOS card to get to a known state */
 		if (card->type == SC_CARD_TYPE_MCRD_ESTEID_V11)
-			sc_reset(card);
+			sc_reset(card, 0);
 
 		/* Select the EstEID AID to get to a known state.
 		 * For some reason a reset is required as well... */
 		if (card->type == SC_CARD_TYPE_MCRD_ESTEID_V30) {
 			flags = SC_ALGORITHM_RSA_HASH_SHA1 | SC_ALGORITHM_RSA_PAD_PKCS1 | SC_ALGORITHM_RSA_HASH_SHA256;
-			/* EstEID v3.0 supports 2048 bit keys */
+			/* EstEID v3.0 has 2048 bit keys */
 			_sc_card_add_rsa_alg(card, 2048, flags, 0);
-			sc_reset(card);
+			sc_reset(card, 0);
 
 			sc_format_apdu(card, &apdu, SC_APDU_CASE_3, 0xA4, 0x04, 0x00);
 			apdu.lc = sizeof(EstEID_v3_AID);
@@ -321,6 +318,10 @@ static int mcrd_init(sc_card_t * card)
 			sc_debug(card->ctx, SC_LOG_DEBUG_VERBOSE, "SELECT AID: %02X%02X", apdu.sw1, apdu.sw2);
 			if(apdu.sw1 != 0x90 && apdu.sw2 != 0x00)
 				SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,  SC_ERROR_CARD_CMD_FAILED);
+		} else {
+			/* EstEID v1.0 and 1.1 have 1024 bit keys */
+			flags = SC_ALGORITHM_RSA_PAD_PKCS1 | SC_ALGORITHM_RSA_HASH_SHA1;
+			_sc_card_add_rsa_alg(card, 1024, flags, 0);
 		}
 	} else {
 		flags = SC_ALGORITHM_RSA_RAW |SC_ALGORITHM_RSA_PAD_PKCS1 | SC_ALGORITHM_RSA_HASH_NONE;

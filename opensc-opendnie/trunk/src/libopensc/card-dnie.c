@@ -621,7 +621,8 @@ static int dnie_set_security_env(struct sc_card *card,
     if ( (card==NULL) || (env==NULL) ) 
       SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_ARGUMENTS);
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    /* check (if needed) algorithms */
+
+    /* check for algorithms */
     if (env->flags & SC_SEC_ENV_ALG_REF_PRESENT) {
       switch (env->algorithm) {
         case SC_ALGORITHM_RSA: result=SC_SUCCESS; break;
@@ -631,44 +632,79 @@ static int dnie_set_security_env(struct sc_card *card,
         default: result=SC_ERROR_NOT_SUPPORTED; break;
       }
       SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Unsupported algorithm");
-      /* TODO: 
-       * Manual says that only RSA with SHA1 is supported, but found
-       * some docs where states that SHA256 is also handled
-       */
-      if ( (env->algorithm_flags & SC_ALGORITHM_RSA_HASH_SHA1 )==0) result=SC_ERROR_NOT_SUPPORTED;
+      if ( (env->algorithm_flags & SC_ALGORITHM_RSA_HASH_SHA1 )==0) {
+        result=SC_ERROR_NOT_SUPPORTED;
+        /* TODO: 
+         * Manual says that only RSA with SHA1 is supported, but found
+         * some docs where states that SHA256 is also handled
+         */
+      }
       SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Only RSA with SHA1 is supported");
+      /* ok: insert algorithm reference into buffer */
+      *p++=0x80; /* algorithm reference tag */
+      *p++=0x01; /* len */
+      *p++=env->algorithm_ref & 0xff; /* val */ 
     }
-    /* check (if needed) key references */
+
+    /* check for key references */
     if (env->flags & SC_SEC_ENV_KEY_REF_PRESENT) {
       if (env->key_ref_len!=1) result=SC_ERROR_NOT_SUPPORTED;
       SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Invalid key id");
-      key_id=env->key_ref[0];
+      /* ok: insert key reference into buffer */
+      if (env->flags & SC_SEC_ENV_KEY_REF_ASYMMETRIC) 
+           *p++ = 0x83;
+      else *p++ = 0x84;
+      *p++ = env->key_ref_len;
+      memcpy(p, env->key_ref, env->key_ref_len);
+      p += env->key_ref_len;
     }
+
+    /* check for file references */
+    if (env->flags & SC_SEC_ENV_FILE_REF_PRESENT) {
+      /* insert file reference into buffer */
+      *p++ = 0x81;
+      *p++ = env->file_ref.len;
+      memcpy(p, env->file_ref.value, env->file_ref.len);
+      p += env->file_ref.len;
+    }
+
+    /* create and format apdu */
+    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,0x00,0x00);
+
     /* check and perform operation */
     switch (env->operation) {
       case SC_SEC_OPERATION_DECIPHER:
-        /* TODO: _set_security_env() revise if decipher() is supported
-        * not sure if supported: DGP's driver implements nonstandard
-        * decipher() function. Assumed here standard is supported too
-        */
-        sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,0xC1,0xB8);
-        /* TODO: _set_security_env() fill decipher() apdu data */
+        /* TODO: Manual is unsure about if decipher() is supported */
+        apdu.p1=0xC1;
+        apdu.p2=0xB8;
         break;
       case SC_SEC_OPERATION_SIGN:
-        sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,0x81,0xB6);
-        /* TODO: _set_security_env() fill signature() apdu data */
+        apdu.p1=0x41;
+        apdu.p2=0xB6;
         break;
       case SC_SEC_OPERATION_AUTHENTICATE:
         /* TODO: _set_security_env() study diffs on internal/external auth */
-        sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,0xC1,0xA4);
-        /* TODO: _set_security_env() fill authenticate() apdu data */
+        apdu.p1=0xC1;
+        apdu.p2=0xA4;
         break;
       default:
         SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_ARGUMENTS);
     }
-    /* send composed apdu and retrieve result */
-    result=sc_transmit_apdu(card,&apdu);
 
+    /* complete apdu contents with buffer data */
+    apdu.data=sbuf;
+    apdu.datalen=p-sbuf;
+    apdu.lc=p-sbuf;
+    apdu.resplen=0;
+    
+    /* Notice that Manual states that DNIE only allows handle of 
+     * current security environment, so se_num is ignored, and
+     * store sec env apdu (00 22 F2 se_num) command will not be issued */
+
+    /* send composed apdu and parse result */
+    result=sc_transmit_apdu(card,&apdu);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Set Security Environment failed");
+    result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
 dnie_set_sec_env_end:
     SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
 }

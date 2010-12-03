@@ -713,43 +713,80 @@ dnie_set_sec_env_end:
  *   security environment set in a call to set_security_env or
  *   restore_security_env. */
 static int dnie_decipher(struct sc_card *card, 
-                         const u8 * crgram,
-                         size_t crgram_len, 
-                         u8 * out,
-                         size_t outlen){
+                         const u8 * crgram, size_t crgram_len, 
+                         u8 * out, size_t outlen){
+    struct sc_apdu apdu;
+    u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
+    u8 sbuf[SC_MAX_APDU_BUFFER_SIZE];
+    size_t len;
     int result=SC_SUCCESS;
+    if ( (card==NULL) || (card->ctx==NULL) )return SC_ERROR_INVALID_ARGUMENTS;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    /* TODO: _decipher() write */
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
+    if ( (crgram==NULL) || (out==NULL) || (crgram_len>255) ) {
+      SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+    }
+    /* make sure that Secure Channel is on */
+    result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"decipher(); Cannot establish SM");
+
+    /* Official driver uses an undocumented proprietary APDU
+     * (90 74 40 keyID). This code uses standard 00 2A 80 8x one)
+     * as shown in card-atrust-acos.c and card-jcop.c
+     */
+    sc_format_apdu(card, &apdu, 
+        SC_APDU_CASE_4_SHORT, 
+        0x2A, /* INS: 0x2A  perform security operation */ 
+        0x80, /* P1: Response is plain value */
+        0x86  /* P2: 8x: Padding indicator byte followed by cryptogram */
+    );
+    apdu.resp = rbuf;
+    apdu.resplen = sizeof(rbuf);
+
+    sbuf[0] = 0; /* padding indicator byte, 0x00 = No further indication */
+    memcpy(sbuf + 1, crgram, crgram_len);
+    apdu.data = sbuf;
+    apdu.lc = crgram_len + 1;
+    apdu.datalen = crgram_len + 1;
+    apdu.le = 256;
+    /* send apdu */
+    result = sc_transmit_apdu(card, &apdu);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU transmit failed");
+    /* check response */
+    result=sc_check_sw(card,apdu.sw1,apdu.sw2);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"decipher returned error");
+    /* responde ok: fill result data and return */
+    len = apdu.resplen > outlen ? outlen : apdu.resplen;
+    memcpy(out, apdu.resp, len);
+    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, len);
 }
 
 /* compute_signature:  Generates a digital signature on the card.  Similiar
  *   to the function decipher. */
 static int dnie_compute_signature(struct sc_card *card,
-                                   const u8 * data,
-                                   size_t datalen,
-                                   u8 * out,
-                                   size_t outlen){
+                                   const u8 * data, size_t datalen,
+                                   u8 * out, size_t outlen){
     int result=SC_SUCCESS;
     struct sc_apdu apdu;
     u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
     u8 sbuf[SC_MAX_APDU_BUFFER_SIZE];
  
     /* some preliminar checks */
-    if ((card==NULL) || (data==NULL) || (out==NULL))
+    if ((card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
+    /* OK: start working */
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    /* more checks */
+    if ( (data==NULL) || (out==NULL))
       SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
     if (datalen > SC_MAX_APDU_BUFFER_SIZE || outlen > SC_MAX_APDU_BUFFER_SIZE)
       SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,SC_ERROR_BUFFER_TOO_SMALL);
 
-    /* OK: start working */
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
     /* ensure that secure channel is stablished */
     result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
-    if (result!=SC_SUCCESS) goto signature_error;
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"decipher(); Cannot establish SM");
     /* (Requested by DGP): on signature operation, ask user consent */
     if (dnie_priv.rsa_key_ref==0x02) { /* TODO: revise key ID handling */
         result=ask_user_consent(card);
-        if (result!=SC_SUCCESS) goto signature_error;
+        SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"User consent denied");
     }
     /* TODO _compute_signature(): handle separate hash process
        Manual says that dnie card can do hashing operations
@@ -777,12 +814,11 @@ static int dnie_compute_signature(struct sc_card *card,
     SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU transmit failed");
     /* check response */
     result=sc_check_sw(card,apdu.sw1,apdu.sw2);
-    if (result!=SC_NO_ERROR) goto signature_error;
-    memcpy(out,rbuf,outlen); /* copy result from buffer */
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU response error");
+    /* ok: copy result from buffer */
+    memcpy(out,rbuf,outlen);
     /* and return response length */
     SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,apdu.resplen);
-signature_error:
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
 }
 
 /*

@@ -614,19 +614,35 @@ static int dnie_set_security_env(struct sc_card *card,
                                 const struct sc_security_env *env, 
                                 int se_num){
     sc_apdu_t apdu;
+    u8 key_id;
+    u8 sbuf[SC_MAX_APDU_BUFFER_SIZE]; /* buffer to compose apdu data */
+    u8 *p=sbuf;
     int result=SC_SUCCESS;
     if ( (card==NULL) || (env==NULL) ) 
       SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_ARGUMENTS);
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    /* check algorithms and keys */
+    /* check (if needed) algorithms */
     if (env->flags & SC_SEC_ENV_ALG_REF_PRESENT) {
-      /* TODO: _set_security_env() revise algoritms. 
+      switch (env->algorithm) {
+        case SC_ALGORITHM_RSA: result=SC_SUCCESS; break;
+        case SC_ALGORITHM_DSA: 
+        case SC_ALGORITHM_EC: 
+        case SC_ALGORITHM_GOSTR3410: 
+        default: result=SC_ERROR_NOT_SUPPORTED; break;
+      }
+      SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Unsupported algorithm");
+      /* TODO: 
        * Manual says that only RSA with SHA1 is supported, but found
        * some docs where states that SHA256 is also handled
        */
+      if ( (env->algorithm_flags & SC_ALGORITHM_RSA_HASH_SHA1 )==0) result=SC_ERROR_NOT_SUPPORTED;
+      SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Only RSA with SHA1 is supported");
     }
+    /* check (if needed) key references */
     if (env->flags & SC_SEC_ENV_KEY_REF_PRESENT) {
-      /* TODO: _set_security_env() check key id reference */
+      if (env->key_ref_len!=1) result=SC_ERROR_NOT_SUPPORTED;
+      SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Invalid key id");
+      key_id=env->key_ref[0];
     }
     /* check and perform operation */
     switch (env->operation) {
@@ -652,6 +668,8 @@ static int dnie_set_security_env(struct sc_card *card,
     }
     /* send composed apdu and retrieve result */
     result=sc_transmit_apdu(card,&apdu);
+
+dnie_set_sec_env_end:
     SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
 }
 

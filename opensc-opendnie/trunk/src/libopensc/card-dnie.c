@@ -354,11 +354,8 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
     int result;
     sc_apdu_t apdu;
     u8        rbuf[SC_MAX_APDU_BUFFER_SIZE];
-    /* 
-     * TODO: get_serialnr() this function seems to be duplicated 
-     * on many cards, just variyng sent APDU. Look for integration
-     */
-    if ( (card==NULL) || (serial==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if ( (card==NULL) || (card->ctx==NULL) || (serial==NULL) ) 
+        return SC_ERROR_INVALID_ARGUMENTS;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
     if (card->type!=SC_CARD_TYPE_DNIE_USER) return SC_ERROR_NOT_SUPPORTED;
     /* if serial number is cached, use it */

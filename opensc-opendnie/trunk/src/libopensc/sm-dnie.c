@@ -27,10 +27,14 @@
 
 #include <stdlib.h>
 
+#include "config.h"
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
-
+#ifndef ENABLE_OPENSSL
+#error "this module needs to be compiled with OpenSSL support enabled"
+#endif
+#include <openssl/x509.h>
 #include "dnie.h"
 
 /********************* Keys and certificates as published by DGP ********/
@@ -140,26 +144,64 @@ static int dnie_sm_create_secure_channel(
                 sc_card_t *card, 
                 dnie_sm_handler_t *handler) {
     int res=SC_SUCCESS;
-    sc_serial_number_t serial;
-    sc_path_t path;
-    int *buffer=NULL;
+    sc_serial_number_t *serial;
+
+    /* data to get and parse certificates */
+    X509 *icc_cert,*ca_cert;
+    EVP_PKEY *icc_public_key;
+
+    /* data to read certificates from card */
+    sc_file_t *file=NULL;
+    sc_path_t *path;
+    u8 *buffer=NULL;
     size_t bufferlen=0;
 
     assert( (card!=NULL) && (card->ctx!=NULL) && (handler!=NULL) );
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    /* malloc required structures */
+    serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
+    path= (sc_path_t *) calloc(1,sizeof(sc_path_t));
+    if ( (serial==NULL) || (path==NULL) )
+        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_OUT_OF_MEMORY);
     /* ensure that our card is a DNIe */
     if (card->type!=SC_CARD_TYPE_DNIE_USER)
         SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_CARD);
     /* reset card (warm reset, do not unpower card) */
     sc_reset(card,0); 
     /* Retrieve Card serial Number */
-    res=sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, &serial);
+    res=sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, serial);
     SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get DNIe serialnr");
     /* TODO: dni_sm_create_secure_channel() write */
+    /* 
+     * Manual says that we must read intermediate CA cert , Componente cert
+     * And verify certificate chain
+     * Official driver just read component cert and simply verifies that
+     * matches a certificate file, without any verification
+     */
+
     /* Read Intermediate CA from card File:3F006020 */
-    sc_format_path("3F006020",&path);
+    sc_format_path("3F006020",path);
+    res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get intermediate CA cert");
+    ca_cert= d2i_X509(NULL,(const unsigned char **)buffer,bufferlen);
+    if (ca_cert==NULL) /* received data is not a certificate */
+        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OBJECT_NOT_VALID);
+    if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
+
     /* Read Card certificate File:3F00601F */
-    /* Verify Card certificate chain */
+    sc_format_path("3F00601F",path);
+    res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get Component cert");
+    icc_cert= d2i_X509(NULL,(const unsigned char **) buffer,bufferlen);
+    if (icc_cert==NULL) /* received data is not a certificate */
+        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OBJECT_NOT_VALID);
+    if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
+
+    /* TODO: Verify Card certificate chain */
+
+    /* Extract public key from ICC certificate */
+    icc_public_key= X509_get_pubkey(icc_cert);
+
     /* Send IFD intermediate CA in CVC format C_CV_CA */
     /* Send IFD certiticate in CVC format C_CV_IFD */
     /* Internal (Card) authentication (let the card verify sent ifd certs) */

@@ -175,8 +175,6 @@ static int dnie_sm_create_secure_channel(
     /* 
      * Manual says that we must read intermediate CA cert , Componente cert
      * And verify certificate chain
-     * Official driver just read component cert and simply verifies that
-     * matches a certificate file, without any verification
      */
 
     /* Read Intermediate CA from card File:3F006020 */
@@ -197,14 +195,25 @@ static int dnie_sm_create_secure_channel(
         SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OBJECT_NOT_VALID);
     if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
 
-    /* TODO: Verify Card certificate chain */
+    /* TODO: Verify icc Card certificate chain */
+    /* Notice that Official driver skips this step 
+     * and simply verifies that icc_cert is a valid certificate */
 
     /* Extract public key from ICC certificate */
     icc_public_key= X509_get_pubkey(icc_cert);
 
+    /* Select Root CA (key reference 0x020F according manual)
+     * in card for ifd certificate verification */
+    u8 root_ca_ref[] = {0x83,0x02,0x02,0x0F};
+    res=dnie_sm_set_security_env(card,0x81,0xB6,root_ca_ref,4);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Select Root CA failed");
+
     /* Send IFD intermediate CA in CVC format C_CV_CA */
+
     /* Send IFD certiticate in CVC format C_CV_IFD */
+
     /* Internal (Card) authentication (let the card verify sent ifd certs) */
+
     /* External (IFD)  authentication */
     /* Session key generation */
 

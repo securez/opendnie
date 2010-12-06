@@ -255,6 +255,47 @@ exit:
 #endif
 
 /**
+ *  Used to handle raw apdu data in set_security_env() on SM stblishment
+ *  Standard set_securiy_env() method has sc_security_env->buffer limited
+ *  to 8 bytes; so cannot send some of required SM commands.
+ *@param card pointer to card data 
+ *@param p1 apdu P1 parameter
+ *@param p2 apdu P2 parameter
+ *@param buffer raw data to be inserted in apdu
+ *@param length size of buffer
+ *@return SC_SUCCESS if ok; else error code
+ */
+extern int dnie_sm_set_security_env(
+        sc_card_t *card,
+        u8 p1,
+        u8 p2,
+        u8 *buffer,
+        size_t length
+        ) {
+    sc_apdu_t apdu;
+    int result=SC_SUCCESS;
+    /* safety check */
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if (!buffer || (length<=0) ) /* check received arguments */
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+
+    /* compose apdu for Manage Security Environment cmd */
+    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,p1,p2);
+    apdu.data=buffer;
+    apdu.datalen=length;
+    apdu.lc=length;
+    apdu.resplen=0;
+
+    /* send composed apdu and parse result */
+    result=sc_transmit_apdu(card,&apdu);
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM Set Security Environment failed");
+    result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,result);
+}
+
+/**
  * Select a file from card, process fci and if path is not A DF
  * read data and store into cache
  * This is done by mean of iso_select_file() and iso_read_binary()
@@ -275,10 +316,10 @@ int dnie_read_file(
         ) {
     u8 *data;
     int res = SC_SUCCESS;
-    assert( (card!=NULL) && (card->ctx!=NULL) && (path!=NULL) );
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx= card->ctx;
     SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
-    if (!buffer && !length) /* check received arguments */
+    if (!buffer || !length || !path ) /* check received arguments */
         SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_ARGUMENTS);
     /* try to adquire lock on card */
     res=sc_lock(card);
@@ -676,7 +717,7 @@ static int dnie_set_security_env(struct sc_card *card,
         apdu.p2=0xB8;
         break;
       case SC_SEC_OPERATION_SIGN:
-        apdu.p1=0x41;
+        apdu.p1=0x81;
         apdu.p2=0xB6;
         break;
       case SC_SEC_OPERATION_AUTHENTICATE:

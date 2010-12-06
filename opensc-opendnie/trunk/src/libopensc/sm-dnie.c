@@ -93,16 +93,6 @@ static const u8 C_CV_CA_CS_AUT_cert [] = {
   0x52, 0x44, 0x49, 0x60, 0x00, 0x06
 };
 
-/* Intermediate CA Certificate id */
-/* Hey! Data on Annex III of manual differs here from traces at Annex IV
- * On doubth, I'll trust my own traces and "understanding the DNIe manual"
- * (that matches Annex IV)... Need to ask DGP to solve this error
- */
-static const u8 select_key_verification_data[] = {
-  /* 8 bytes */
-  0x08, 0x65, 0x73, 0x53, 0x44, 0x49, 0x60, 0x00, 0x06
-};
-
 // Terminal (IFD) certificate in CVC format (PK.IFD.AUT)
 static const u8 C_CV_IFDuser_AUT_cert [] = {
   0x7f, 0x21, 0x81, 0xcd, 0x5f, 0x37, 0x81, 0x80, 0x82, 0x5b, 0x69, 0xc6,
@@ -123,12 +113,6 @@ static const u8 C_CV_IFDuser_AUT_cert [] = {
   0xc1, 0xeb, 0x3c, 0xe0, 0xb6, 0xb4, 0x39, 0x6a, 0xe2, 0x36, 0x59, 0x00,
   0x16, 0xba, 0x69, 0x00, 0x01, 0x00, 0x01, 0x42, 0x08, 0x65, 0x73, 0x53,
   0x44, 0x49, 0x60, 0x00, 0x06
-};
-
-/* IFD Certificate ID */
-static const u8 ifd_serial_data[] = {
-  /* 12 bytes */
-  0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
 };
 
 /*********************** Internal authentication routines *******************/
@@ -209,8 +193,23 @@ static int dnie_sm_create_secure_channel(
     SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Select Root CA failed");
 
     /* Send IFD intermediate CA in CVC format C_CV_CA */
+    res=dnie_sm_verify_cvc_certificate(card,C_CV_CA_CS_AUT_cert,sizeof(C_CV_CA_CS_AUT_cert));
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Verify CVC CA failed");
+
+    /* select public key of sent certificate */
+    u8 cvc_ca_ref[] = {0x83,0x08,0x65,0x73,0x53,0x44,0x49,0x60,0x00,0x06};
+    res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ca_ref,10);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC CA pubk failed");
 
     /* Send IFD certiticate in CVC format C_CV_IFD */
+    res=dnie_sm_verify_cvc_certificate(card,C_CV_IFDuser_AUT_cert,sizeof(C_CV_IFDuser_AUT_cert));
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Verify CVC IFD failed");
+
+    /* select public key of ifd certificate and icc private key */ 
+    u8 cvc_ifd_ref[] = {0x83,0x0C,0x00,0x00,0x00,0x00,0x20,0x00,0x00,
+                        0x00,0x00,0x00,0x00,0x01,0x84,0x02,0x02,0x1f};
+    res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ifd_ref,18);
+    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC IFD pubk failed");
 
     /* Internal (Card) authentication (let the card verify sent ifd certs) */
 

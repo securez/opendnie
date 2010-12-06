@@ -80,7 +80,7 @@ extern int dnie_read_file(
         size_t *length        /* data length */
 );
 
-/* used to handle raw apdu data in set_security_env() on SM stblishment */
+/* used to handle raw apdu data in set_security_env() on SM estblishment */
 extern int dnie_sm_set_security_env(
         sc_card_t *card,      /* card data */
         u8 p1,
@@ -88,5 +88,13 @@ extern int dnie_sm_set_security_env(
         u8 *buffer,           /* apdu data */
         size_t length         /* apdu length */
 );
+
+/* used to verify CVC certificate on SM estblishment */
+extern int dnie_sm_verify_cvc_certificate(
+        sc_card_t *card,      /* card data */
+        u8 *cert,             /* CVC certificate data */
+        size_t len            /* certificate length */
+);
+
 #endif
 

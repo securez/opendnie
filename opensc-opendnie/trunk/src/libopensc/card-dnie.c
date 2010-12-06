@@ -255,6 +255,42 @@ exit:
 #endif
 
 /**
+ * Used to verify CVC certificates in SM establishment process
+ * by mean of 00 2A 00 AE (Perform Security Operation: Verify Certificate)
+ *@param card pointer to card data
+ *@param cert Certificate in CVC format
+ *@param len  length of CVC certificate
+ *@return SC_SUCCESS if ok; else error code
+ */
+int dnie_sm_verify_cvc_certificate(
+        sc_card_t *card,
+        u8 *cert,
+        size_t len
+        ) {
+    sc_apdu_t apdu;
+    int result=SC_SUCCESS;
+    /* safety check */
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if (!cert || (len<=0) ) /* check received arguments */
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+
+    /* compose apdu for Manage Security Environment cmd */
+    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x2A,0x00,0xAE);
+    apdu.data=cert;
+    apdu.datalen=len;
+    apdu.lc=len;
+    apdu.resplen=0;
+
+    /* send composed apdu and parse result */
+    result=sc_transmit_apdu(card,&apdu);
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"Verify CVC certificate failed");
+    result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,result);
+}
+
+/**
  *  Used to handle raw apdu data in set_security_env() on SM stblishment
  *  Standard set_securiy_env() method has sc_security_env->buffer limited
  *  to 8 bytes; so cannot send some of required SM commands.
@@ -265,7 +301,7 @@ exit:
  *@param length size of buffer
  *@return SC_SUCCESS if ok; else error code
  */
-extern int dnie_sm_set_security_env(
+int dnie_sm_set_security_env(
         sc_card_t *card,
         u8 p1,
         u8 p2,

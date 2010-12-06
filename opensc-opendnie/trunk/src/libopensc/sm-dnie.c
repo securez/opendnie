@@ -26,6 +26,7 @@
 #define __SM_DNIE_C__
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "config.h"
 #include "opensc.h"
@@ -117,6 +118,127 @@ static const u8 C_CV_IFDuser_AUT_cert [] = {
 
 /*********************** Internal authentication routines *******************/
 
+
+/**
+ * Used to verify CVC certificates in SM establishment process
+ * by mean of 00 2A 00 AE (Perform Security Operation: Verify Certificate)
+ *@param card pointer to card data
+ *@param cert Certificate in CVC format
+ *@param len  length of CVC certificate
+ *@return SC_SUCCESS if ok; else error code
+ */
+static int dnie_sm_verify_cvc_certificate(
+        sc_card_t *card,
+        const u8 *cert,
+        size_t len
+        ) {
+    sc_apdu_t apdu;
+    int result=SC_SUCCESS;
+    /* safety check */
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if (!cert || (len<=0) ) /* check received arguments */
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+
+    /* compose apdu for Manage Security Environment cmd */
+    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x2A,0x00,0xAE);
+    apdu.data=cert;
+    apdu.datalen=len;
+    apdu.lc=len;
+    apdu.resplen=0;
+
+    /* send composed apdu and parse result */
+    result=sc_transmit_apdu(card,&apdu);
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"Verify CVC certificate failed");
+    result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,result);
+}
+
+/**
+ *  Used to handle raw apdu data in set_security_env() on SM stblishment
+ *  Standard set_securiy_env() method has sc_security_env->buffer limited
+ *  to 8 bytes; so cannot send some of required SM commands.
+ *@param card pointer to card data 
+ *@param p1 apdu P1 parameter
+ *@param p2 apdu P2 parameter
+ *@param buffer raw data to be inserted in apdu
+ *@param length size of buffer
+ *@return SC_SUCCESS if ok; else error code
+ */
+static int dnie_sm_set_security_env(
+        sc_card_t *card,
+        u8 p1,
+        u8 p2,
+        u8 *buffer,
+        size_t length
+        ) {
+    sc_apdu_t apdu;
+    int result=SC_SUCCESS;
+    /* safety check */
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if (!buffer || (length<=0) ) /* check received arguments */
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+
+    /* compose apdu for Manage Security Environment cmd */
+    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,p1,p2);
+    apdu.data=buffer;
+    apdu.datalen=length;
+    apdu.lc=length;
+    apdu.resplen=0;
+
+    /* send composed apdu and parse result */
+    result=sc_transmit_apdu(card,&apdu);
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM Set Security Environment failed");
+    result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,result);
+}
+
+/**
+ * SM internal authenticate
+ *@param data apdu data content
+ *@param datalen data length (16)
+ *@param resp response buffer
+ *@param resplen response bufferlen (128)
+ *@return SC_SUCCESS if OK: else error code
+ */
+static int dnie_sm_internal_auth(
+        sc_card_t *card,
+        const u8 *data, size_t datalen,
+        u8 *resp, size_t resplen
+        ) {
+    sc_apdu_t apdu;
+    u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
+    int result=SC_SUCCESS;
+    /* safety check */
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if (!data||(datalen<=0)||!resp||(resplen<=0)) /* check received arguments */
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+
+    /* compose apdu for Manage Security Environment cmd */
+    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x88,0x00,0x00);
+    apdu.data=data;
+    apdu.datalen=datalen;
+    apdu.lc=datalen;
+    apdu.resp=rbuf;
+    apdu.resplen=sizeof(rbuf);
+
+    /* send composed apdu and parse result */
+    result=sc_transmit_apdu(card,&apdu);
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM internal auth failed");
+    result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM internal auth invalid response");
+    if (apdu.resplen!=resplen) /* invalid number of bytes received */
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_UNKNOWN_DATA_RECEIVED);
+    memcpy(resp,apdu.resp,resplen); /* copy result to buffer */
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+    
+}
+
 /**
  * Create Secure channel
  * Based on Several documents:
@@ -140,22 +262,29 @@ static int dnie_sm_create_secure_channel(
     u8 *buffer=NULL;
     size_t bufferlen=0;
 
-    assert( (card!=NULL) && (card->ctx!=NULL) && (handler!=NULL) );
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    /* random numbers from icc and ifd */
+    u8 rndicc[8];
+    u8 rndifd[8];
+
+    if ( (card==NULL) || (card->ctx==NULL) || (handler==NULL) )
+         return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
     /* malloc required structures */
     serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
     path= (sc_path_t *) calloc(1,sizeof(sc_path_t));
     if ( (serial==NULL) || (path==NULL) )
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_OUT_OF_MEMORY);
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_OUT_OF_MEMORY);
     /* ensure that our card is a DNIe */
     if (card->type!=SC_CARD_TYPE_DNIE_USER)
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_CARD);
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_CARD);
+
     /* reset card (warm reset, do not unpower card) */
     sc_reset(card,0); 
+
     /* Retrieve Card serial Number */
     res=sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, serial);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get DNIe serialnr");
-    /* TODO: dni_sm_create_secure_channel() write */
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get DNIe serialnr");
     /* 
      * Manual says that we must read intermediate CA cert , Componente cert
      * And verify certificate chain
@@ -164,16 +293,16 @@ static int dnie_sm_create_secure_channel(
     /* Read Intermediate CA from card File:3F006020 */
     sc_format_path("3F006020",path);
     res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get intermediate CA cert");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get intermediate CA cert");
     ca_cert= d2i_X509(NULL,(const unsigned char **)buffer,bufferlen);
     if (ca_cert==NULL) /* received data is not a certificate */
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OBJECT_NOT_VALID);
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OBJECT_NOT_VALID);
     if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
 
     /* Read Card certificate File:3F00601F */
     sc_format_path("3F00601F",path);
     res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get Component cert");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get Component cert");
     icc_cert= d2i_X509(NULL,(const unsigned char **) buffer,bufferlen);
     if (icc_cert==NULL) /* received data is not a certificate */
         SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OBJECT_NOT_VALID);
@@ -188,37 +317,66 @@ static int dnie_sm_create_secure_channel(
 
     /* Select Root CA (key reference 0x020F according manual)
      * in card for ifd certificate verification */
-    u8 root_ca_ref[] = {0x83,0x02,0x02,0x0F};
+    u8 root_ca_ref[] = {
+        0x83,
+        0x02,
+        0x02,0x0F
+    };
     res=dnie_sm_set_security_env(card,0x81,0xB6,root_ca_ref,4);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Select Root CA failed");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select Root CA failed");
 
     /* Send IFD intermediate CA in CVC format C_CV_CA */
     res=dnie_sm_verify_cvc_certificate(card,C_CV_CA_CS_AUT_cert,sizeof(C_CV_CA_CS_AUT_cert));
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Verify CVC CA failed");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify CVC CA failed");
 
     /* select public key of sent certificate */
-    u8 cvc_ca_ref[] = {0x83,0x08,0x65,0x73,0x53,0x44,0x49,0x60,0x00,0x06};
+    u8 cvc_ca_ref[] = {
+        0x83,
+        0x08,
+        0x65,0x73,0x53,0x44,0x49,0x60,0x00,0x06
+    };
     res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ca_ref,10);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC CA pubk failed");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC CA pubk failed");
 
     /* Send IFD certiticate in CVC format C_CV_IFD */
     res=dnie_sm_verify_cvc_certificate(card,C_CV_IFDuser_AUT_cert,sizeof(C_CV_IFDuser_AUT_cert));
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Verify CVC IFD failed");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify CVC IFD failed");
 
     /* select public key of ifd certificate and icc private key */ 
-    u8 cvc_ifd_ref[] = {0x83,0x0C,0x00,0x00,0x00,0x00,0x20,0x00,0x00,
-                        0x00,0x00,0x00,0x00,0x01,0x84,0x02,0x02,0x1f};
+    u8 cvc_ifd_ref[] = {
+        0x83,
+        0x0C,
+        0x00,0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01,
+        0x84,
+        0x02,
+        0x02,0x1f
+    };
     res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ifd_ref,18);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC IFD pubk failed");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC IFD pubk failed");
 
     /* Internal (Card) authentication (let the card verify sent ifd certs) */
+    u8 sigbuf[128]; /* buffer to store signature response */
+    u8 rndbuf[16] = {
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, /* to store rndifd number */
+        0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01  /* ref to icc priv key */
+    };
+    RAND_bytes(rndifd,8); /* generate 8 random bytes */
+    memcpy(rndbuf,rndifd,8); /* insert into request */
+    res=dnie_sm_internal_auth(card,rndbuf,sizeof(rndbuf),sigbuf,sizeof(sigbuf));
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Internal auth failed");
 
-    /* External (IFD)  authentication */
-    /* Session key generation */
+    /* TODO: verify received signature */
 
-    /* Mark channel as created and setup wrapper pointers */
-    /* Cleanup */
-    SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,res);
+    /* get challenge: retrieve 8 random bytes from card */
+    res=card->ops->get_challenge(card,rndicc,8);
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Get Challenge failed");
+
+    /* TODO: External (IFD)  authentication */
+    /* TODO: Session key generation */
+
+    /* TODO: Mark channel as created and setup wrapper pointers */
+    /* TODO: sm create Cleanup */
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
 }
 
 /************************* public functions ***************/

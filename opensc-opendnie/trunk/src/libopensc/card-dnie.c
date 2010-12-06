@@ -255,83 +255,6 @@ exit:
 #endif
 
 /**
- * Used to verify CVC certificates in SM establishment process
- * by mean of 00 2A 00 AE (Perform Security Operation: Verify Certificate)
- *@param card pointer to card data
- *@param cert Certificate in CVC format
- *@param len  length of CVC certificate
- *@return SC_SUCCESS if ok; else error code
- */
-int dnie_sm_verify_cvc_certificate(
-        sc_card_t *card,
-        u8 *cert,
-        size_t len
-        ) {
-    sc_apdu_t apdu;
-    int result=SC_SUCCESS;
-    /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
-    sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    if (!cert || (len<=0) ) /* check received arguments */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
-
-    /* compose apdu for Manage Security Environment cmd */
-    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x2A,0x00,0xAE);
-    apdu.data=cert;
-    apdu.datalen=len;
-    apdu.lc=len;
-    apdu.resplen=0;
-
-    /* send composed apdu and parse result */
-    result=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"Verify CVC certificate failed");
-    result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,result);
-}
-
-/**
- *  Used to handle raw apdu data in set_security_env() on SM stblishment
- *  Standard set_securiy_env() method has sc_security_env->buffer limited
- *  to 8 bytes; so cannot send some of required SM commands.
- *@param card pointer to card data 
- *@param p1 apdu P1 parameter
- *@param p2 apdu P2 parameter
- *@param buffer raw data to be inserted in apdu
- *@param length size of buffer
- *@return SC_SUCCESS if ok; else error code
- */
-int dnie_sm_set_security_env(
-        sc_card_t *card,
-        u8 p1,
-        u8 p2,
-        u8 *buffer,
-        size_t length
-        ) {
-    sc_apdu_t apdu;
-    int result=SC_SUCCESS;
-    /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
-    sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    if (!buffer || (length<=0) ) /* check received arguments */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
-
-    /* compose apdu for Manage Security Environment cmd */
-    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,p1,p2);
-    apdu.data=buffer;
-    apdu.datalen=length;
-    apdu.lc=length;
-    apdu.resplen=0;
-
-    /* send composed apdu and parse result */
-    result=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM Set Security Environment failed");
-    result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,result);
-}
-
-/**
  * Select a file from card, process fci and if path is not A DF
  * read data and store into cache
  * This is done by mean of iso_select_file() and iso_read_binary()
@@ -352,7 +275,7 @@ int dnie_read_file(
         ) {
     u8 *data;
     int res = SC_SUCCESS;
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( (card==NULL) || (card->ctx==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx= card->ctx;
     SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
     if (!buffer || !length || !path ) /* check received arguments */
@@ -633,7 +556,7 @@ select_file_error:
  * are required... so we will obbey Manual
  */
 static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len) {
-    sc_apdu_t apdu;
+	sc_apdu_t apdu;
     u8 buf[10];
     int result=SC_SUCCESS;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);

@@ -11,6 +11,9 @@ LIBLTDL_LIB =     # E.g. C:\libtool-1.5.8-lib\lib\libltdl.lib
 
 OPENSC_FEATURES = pcsc
 
+#Include support of minidriver 'cardmon'
+MINIDRIVER_DEF = /DENABLE_MINIDRIVER
+
 # If you want support for OpenSSL (needed for a.o. pkcs15-init tool and openssl engine):
 # - download and build OpenSSL
 # - uncomment the line starting with OPENSSL_DEF
@@ -20,7 +23,7 @@ OPENSC_FEATURES = pcsc
 !IF "$(OPENSSL_DEF)" == "/DENABLE_OPENSSL"
 OPENSSL_INCL_DIR = /IC:\openssl\include
 OPENSSL_LIB = C:\openssl\out32dll\libeay32.lib
-PROGRAMS_OPENSSL = pkcs15-init.exe cryptoflex-tool.exe netkey-tool.exe piv-tool.exe
+PROGRAMS_OPENSSL = pkcs15-init.exe cryptoflex-tool.exe netkey-tool.exe piv-tool.exe westcos-tool.exe
 OPENSC_FEATURES = $(OPENSC_FEATURES) openssl
 !ENDIF
 
@@ -36,14 +39,11 @@ ZLIB_LIB = C:\ZLIB\LIB\zlib.lib
 OPENSC_FEATURES = $(OPENSC_FEATURES) zlib
 !ENDIF
 
-# No choice for DUMPRESTORE: it has to be desabled
-SIMCLIST_NO_DUMPRESTORE_DEF = /DSIMCLIST_NO_DUMPRESTORE
-
 # Mandatory path to 'ISO C9x compliant stdint.h and inttypes.h for Microsoft Visual Studio'
 # http://msinttypes.googlecode.com/files/msinttypes-r26.zip
 INTTYPES_INCL_DIR =  /IC:\opensc\dependencies\msys\local
 
-COPTS = /D_CRT_SECURE_NO_DEPRECATE /Zi /MD /nologo /DHAVE_CONFIG_H /I$(TOPDIR)\win32 /I$(TOPDIR)\src $(OPENSSL_INCL_DIR) $(ZLIB_INCL_DIR) $(LIBLTDL_INCL) $(INTTYPES_INCL_DIR) /D_WIN32_WINNT=0x0400 /DWIN32_LEAN_AND_MEAN $(OPENSSL_DEF) $(ZLIB_DEF) $(SIMCLIST_NO_DUMPRESTORE_DEF) /DOPENSC_FEATURES="\"$(OPENSC_FEATURES)\""
+COPTS = /D_CRT_SECURE_NO_DEPRECATE /Zi /MD /nologo /DHAVE_CONFIG_H /I$(TOPDIR)\win32 /I$(TOPDIR)\src $(OPENSSL_INCL_DIR) $(ZLIB_INCL_DIR) $(LIBLTDL_INCL) $(INTTYPES_INCL_DIR) /D_WIN32_WINNT=0x0400 /DWIN32_LEAN_AND_MEAN $(OPENSSL_DEF) $(ZLIB_DEF) /DOPENSC_FEATURES="\"$(OPENSC_FEATURES)\""
 LINKFLAGS = /DEBUG /NOLOGO /INCREMENTAL:NO /MACHINE:IX86
 
 .c.obj::
@@ -53,4 +53,4 @@ LINKFLAGS = /DEBUG /NOLOGO /INCREMENTAL:NO /MACHINE:IX86
 	rc /l 0x0409 /r $<
 
 clean::
-	del /Q *.obj *.dll *.exe *.pdb *.lib *.def
+	del /Q *.obj *.dll *.exe *.pdb *.lib *.def *.manifest

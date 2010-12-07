@@ -21,11 +21,13 @@
 #include "config.h"
 
 #ifdef ENABLE_OPENSSL
+#include <openssl/opensslconf.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
 #include <openssl/rsa.h>
-#ifndef OPENSSL_NO_EC
+#if OPENSSL_VERSION_NUMBER >= 0x00908000L && !defined(OPENSSL_NO_EC) && !defined(OPENSSL_NO_ECDSA)
 #include <openssl/ec.h>
+#include <openssl/ecdsa.h>
 #endif
 #include <openssl/bn.h>
 #include <openssl/err.h>
@@ -1242,16 +1244,13 @@ static void sign_data(CK_SLOT_ID slot, CK_SESSION_HANDLE session,
 		util_fatal("failed to open %s: %m", opt_output);
 	}
 
-#if ENABLE_OPENSSL
+#if defined(ENABLE_OPENSSL) && OPENSSL_VERSION_NUMBER >= 0x00908000L && !defined(OPENSSL_NO_EC) && !defined(OPENSSL_NO_ECDSA)
 /*
  * PKCS11 implies the ECDSA sig is 2nLen,
  * OpenSSL expects sequence of {integer, integer}
  * so we will write it for OpenSSL if built with OpenSSL
  */
 	if (opt_mechanism == CKM_ECDSA) {
-#ifdef OPENSSL_NO_EC
-		util_fatal("OpenSSL ECDSA_SIG: not supported");
-#else
 		int nLen;
 		ECDSA_SIG * ecsig = NULL;
 		unsigned char *p = NULL;
@@ -1269,9 +1268,8 @@ static void sign_data(CK_SLOT_ID slot, CK_SESSION_HANDLE session,
 		free(p);
 		ECDSA_SIG_free(ecsig);
 
-#endif
 	} else 
-#endif
+#endif /* ENABLE_OPENSSL  && !OPENSSL_NO_EC && !OPENSSL_NO_ECDSA */
 	r = write(fd, buffer, sig_len);
 	if (r < 0)
 		util_fatal("Failed to write to %s: %m", opt_output);

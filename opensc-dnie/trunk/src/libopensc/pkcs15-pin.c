@@ -502,7 +502,7 @@ void sc_pkcs15_pincache_add(struct sc_pkcs15_card *p15card, struct sc_pkcs15_obj
 }
 
 /* Validate the PIN code associated with an object */
-int sc_pkcs15_pincache_revalidate(struct sc_pkcs15_card *p15card, sc_pkcs15_object_t *obj)
+int sc_pkcs15_pincache_revalidate(struct sc_pkcs15_card *p15card, const sc_pkcs15_object_t *obj)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	sc_pkcs15_object_t *pin_obj;
@@ -526,7 +526,7 @@ int sc_pkcs15_pincache_revalidate(struct sc_pkcs15_card *p15card, sc_pkcs15_obje
 	}
 	
 	if (pin_obj->usage_counter >= p15card->opts.pin_cache_counter) {
-		sc_pkcs15_free_object_content(obj);
+		sc_pkcs15_free_object_content(pin_obj);
 		return SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
 	}
 
@@ -536,6 +536,9 @@ int sc_pkcs15_pincache_revalidate(struct sc_pkcs15_card *p15card, sc_pkcs15_obje
 	pin_obj->usage_counter++;
 	r = sc_pkcs15_verify_pin(p15card, pin_obj, pin_obj->content.value, pin_obj->content.len);
 	if (r != SC_SUCCESS) {
+		/* Ensure that wrong PIN isn't used again */ 
+		sc_pkcs15_free_object_content(pin_obj);
+
 		sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "Verify PIN error %i", r);
 		return SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
 	}

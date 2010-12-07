@@ -239,6 +239,54 @@ static int dnie_sm_internal_auth(
     
 }
 
+/* check the result of internal_authenticate operation
+ *@param card Pointer to sc_card_t data
+ *@param sigbuf received signature
+ *@param siglen signature length; should be 128
+ *@param rndifd ifd random generated data
+ *@param rndlen rndifd length; should be 8
+ *@param icc_pubkey icc public key
+ *@param ifd_privkey ifd private key
+ *@param kicc pointer to store resulting icc provided key
+ *@return SC_SUCCESS if ok; else error code
+ */
+static int dnie_sm_verify_internal_auth(
+        sc_card_t *card,
+        u8 *sigbuf,
+        size_t siglen,
+        u8 *rndifd,
+        size_t rndlen,
+	RSA *icc_pubkey,
+        RSA *ifd_privkey,
+        u8 *kicc
+    ) {
+    int res=SC_SUCCESS;
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if (!sigbuf || siglen!=128) res=SC_ERROR_INVALID_ARGUMENTS;
+    if (!rndifd || rndlen!=8) res=SC_ERROR_INVALID_ARGUMENTS;
+    if (!icc_pubkey || !ifd_privkey || !kicc)  res=SC_ERROR_INVALID_ARGUMENTS;
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify Signature: invalid arguments");
+    /* 
+    We have received data with this format:
+    sigbuf = E[PK.IFD.AUT](SIGMIN)
+    SIGMIN = min ( SIG, N.ICC-SIG )
+    SIG= DS[SK.ICC.AUT] (
+        0x6A  ||
+        PRND1 ||
+        Kicc  ||
+        sha1_hash(PRND1 || Kicc || RND.IFD || SN.IFD) ||
+        0xBC 
+    )
+    So we have to reverse the process and try to get valid results
+    */
+
+    /* decrypt data with our ifd priv key */
+
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+}
+    
 /**
  * Create Secure channel
  * Based on Several documents:
@@ -254,7 +302,8 @@ static int dnie_sm_create_secure_channel(
 
     /* data to get and parse certificates */
     X509 *icc_cert,*ca_cert;
-    EVP_PKEY *icc_public_key;
+    RSA *icc_pubkey=NULL;
+    RSA *ifd_privkey=NULL;
 
     /* data to read certificates from card */
     sc_file_t *file=NULL;
@@ -265,6 +314,7 @@ static int dnie_sm_create_secure_channel(
     /* random numbers from icc and ifd */
     u8 rndicc[8];
     u8 rndifd[8];
+    u8 kicc[32];
 
     if ( (card==NULL) || (card->ctx==NULL) || (handler==NULL) )
          return SC_ERROR_INVALID_ARGUMENTS;
@@ -313,14 +363,15 @@ static int dnie_sm_create_secure_channel(
      * and simply verifies that icc_cert is a valid certificate */
 
     /* Extract public key from ICC certificate */
-    icc_public_key= X509_get_pubkey(icc_cert);
+    EVP_PKEY *pk=X509_get_pubkey(icc_cert);
+    icc_pubkey=pk->pkey.rsa;
 
     /* Select Root CA (key reference 0x020F according manual)
      * in card for ifd certificate verification */
     u8 root_ca_ref[] = {
-        0x83,
-        0x02,
-        0x02,0x0F
+        /* T */ 0x83,
+        /* L */ 0x02,
+        /* V */ 0x02,0x0F
     };
     res=dnie_sm_set_security_env(card,0x81,0xB6,root_ca_ref,4);
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select Root CA failed");
@@ -331,9 +382,9 @@ static int dnie_sm_create_secure_channel(
 
     /* select public key of sent certificate */
     u8 cvc_ca_ref[] = {
-        0x83,
-        0x08,
-        0x65,0x73,0x53,0x44,0x49,0x60,0x00,0x06
+        /* T */ 0x83,
+        /* L */ 0x08,
+        /* V */ 0x65,0x73,0x53,0x44,0x49,0x60,0x00,0x06
     };
     res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ca_ref,10);
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC CA pubk failed");
@@ -344,12 +395,12 @@ static int dnie_sm_create_secure_channel(
 
     /* select public key of ifd certificate and icc private key */ 
     u8 cvc_ifd_ref[] = {
-        0x83,
-        0x0C,
-        0x00,0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01,
-        0x84,
-        0x02,
-        0x02,0x1f
+        /* T */ 0x83,
+        /* L */ 0x0C,
+        /* V */ 0x00,0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01,
+        /* T */ 0x84,
+        /* L */ 0x02,
+        /* V */ 0x02,0x1f
     };
     res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ifd_ref,18);
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC IFD pubk failed");
@@ -365,7 +416,29 @@ static int dnie_sm_create_secure_channel(
     res=dnie_sm_internal_auth(card,rndbuf,sizeof(rndbuf),sigbuf,sizeof(sigbuf));
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Internal auth failed");
 
-    /* TODO: verify received signature */
+    /* evaluate ifd_private key with keys provided in Annex 3 of Manual*/
+    ifd_privkey = RSA_new(); /* create RSA struct */
+    res=(ifd_privkey)?SC_SUCCESS:SC_ERROR_OUT_OF_MEMORY;
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Evaluate RSA ifd priv key failed");
+    ifd_privkey->n =
+        BN_bin2bn(ifd_modulus,sizeof(ifd_modulus),ifd_privkey->n);
+    ifd_privkey->e = 
+        BN_bin2bn(ifd_public_exponent,sizeof(ifd_public_exponent),ifd_privkey->e);
+    ifd_privkey->d = 
+        BN_bin2bn(ifd_private_exponent,sizeof(ifd_private_exponent),ifd_privkey->d);
+    
+    /* verify received signature */
+    res=dnie_sm_verify_internal_auth(
+        card,
+        sigbuf,         /* received signature */
+        sizeof(sigbuf), /* signature length; should be 128 */
+        rndifd,         /* generated ifd random */
+        sizeof(rndifd), /* rndifd length; should be 8 */
+	icc_pubkey,     /* evaluated icc public key */
+        ifd_privkey,    /* evaluated from DGP's Manual Annex 3 Data */
+        kicc            /* to store resulting icc provided key */
+    );    
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify signature failed");
 
     /* get challenge: retrieve 8 random bytes from card */
     res=card->ops->get_challenge(card,rndicc,8);

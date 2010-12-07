@@ -373,7 +373,7 @@ static int dnie_sm_create_secure_channel(
         /* L */ 0x02,
         /* V */ 0x02,0x0F
     };
-    res=dnie_sm_set_security_env(card,0x81,0xB6,root_ca_ref,4);
+    res=dnie_sm_set_security_env(card,0x81,0xB6,root_ca_ref,sizeof(root_ca_ref));
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select Root CA failed");
 
     /* Send IFD intermediate CA in CVC format C_CV_CA */
@@ -386,7 +386,7 @@ static int dnie_sm_create_secure_channel(
         /* L */ 0x08,
         /* V */ 0x65,0x73,0x53,0x44,0x49,0x60,0x00,0x06
     };
-    res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ca_ref,10);
+    res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ca_ref,sizeof(cvc_ca_ref));
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC CA pubk failed");
 
     /* Send IFD certiticate in CVC format C_CV_IFD */
@@ -402,7 +402,7 @@ static int dnie_sm_create_secure_channel(
         /* L */ 0x02,
         /* V */ 0x02,0x1f
     };
-    res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ifd_ref,18);
+    res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ifd_ref,sizeof(cvc_ifd_ref));
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC IFD pubk failed");
 
     /* Internal (Card) authentication (let the card verify sent ifd certs) */
@@ -414,9 +414,9 @@ static int dnie_sm_create_secure_channel(
     RAND_bytes(rndifd,8); /* generate 8 random bytes */
     memcpy(rndbuf,rndifd,8); /* insert into request */
     res=dnie_sm_internal_auth(card,rndbuf,sizeof(rndbuf),sigbuf,sizeof(sigbuf));
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Internal auth failed");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Internal auth cmd failed");
 
-    /* evaluate ifd_private key with keys provided in Annex 3 of Manual*/
+    /* compose ifd_private key with data provided in Annex 3 of DNIe Manual */
     ifd_privkey = RSA_new(); /* create RSA struct */
     res=(ifd_privkey)?SC_SUCCESS:SC_ERROR_OUT_OF_MEMORY;
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Evaluate RSA ifd priv key failed");
@@ -438,7 +438,7 @@ static int dnie_sm_create_secure_channel(
         ifd_privkey,    /* evaluated from DGP's Manual Annex 3 Data */
         kicc            /* to store resulting icc provided key */
     );    
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify signature failed");
+    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Internal Auth Verify failed");
 
     /* get challenge: retrieve 8 random bytes from card */
     res=card->ops->get_challenge(card,rndicc,8);

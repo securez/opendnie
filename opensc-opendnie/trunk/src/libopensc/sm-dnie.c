@@ -238,6 +238,28 @@ static int dnie_sm_internal_auth(
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
 }
 
+/* compose signature data for external auth */
+static int dnie_sm_prepare_external_auth(
+        sc_card_t *card,
+        RSA *icc_pubkey,
+        RSA *ifd_privkey,
+        sc_serial_number_t *serial,
+        dnie_internal_sm_t *sm
+    ) {
+    int result=SC_SUCCESS;
+    /* safety check */
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+     /* check received arguments */
+    if ( !icc_pubkey || !ifd_privkey || !serial || !sm )
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+
+    /* TODO: write sm_prepare_external_auth */
+
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+}
+
 /**
  * SM external authenticate
  *@param data apdu signature content
@@ -308,11 +330,12 @@ static int dnie_sm_verify_internal_auth(
     )
     So we have to reverse the process and try to get valid results
     */
-
     /* decrypt data with our ifd priv key */
     int len=RSA_private_decrypt(sizeof(sm->sig),sm->sig,decryptbuf,ifd_privkey,RSA_NO_PADDING);
     res=(len<=0)?SC_ERROR_DECRYPT_FAILED:SC_SUCCESS;
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify Signature: decrypt failed");
+
+    /* TODO: write rest of code */
 
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
 }
@@ -481,7 +504,15 @@ static int dnie_sm_create_secure_channel(
     res=card->ops->get_challenge(card,sm->rndicc,sizeof(sm->rndicc));
     if (res!=SC_SUCCESS) { msg="Get Challenge failed"; goto csc_end; }
 
-    /* TODO: compose signature data for external auth */
+    /* compose signature data for external auth */
+    res=dnie_sm_prepare_external_auth(
+        card,
+        icc_pubkey,
+        ifd_privkey,
+        serial,
+        sm
+    );
+    if (res!=SC_SUCCESS) { msg="Prepare external auth failed"; goto csc_end; }
 
     /* External (IFD)  authentication */
     res=dnie_sm_external_auth(card,sm);
@@ -494,7 +525,7 @@ static int dnie_sm_create_secure_channel(
     /* arriving here means ok: cleanup */
     res=SC_SUCCESS;
 csc_end:
-    /* TODO: sm create Cleanup */
+    /* TODO: clear memory before free() */
     if (serial)      free(serial);
     if (path)        free(path);
     if (buffer)      free(buffer);

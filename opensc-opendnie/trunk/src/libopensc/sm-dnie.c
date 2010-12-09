@@ -199,17 +199,16 @@ static int dnie_sm_set_security_env(
 /**
  * SM internal authenticate
  *@param card pointer to card data 
- *@param data apdu data content
- *@param datalen data length (16)
- *@param resp response buffer
- *@param resplen response bufferlen (128)
+ *@param sm   secure message data pointer
+ *@param data data to be sent in apdu
+ *@param datalen length of data to send
  *@return SC_SUCCESS if OK: else error code
  */
-static int dnie_sm_internal_auth(
+static int dnie_sm_internal_auth( 
         sc_card_t *card,
-        const u8 *data, size_t datalen,
-        u8 *resp, size_t resplen
-        ) {
+        dnie_internal_sm_t *sm,
+        u8 *data,
+        size_t datalen) {
     sc_apdu_t apdu;
     u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
     int result=SC_SUCCESS;
@@ -217,7 +216,7 @@ static int dnie_sm_internal_auth(
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    if (!data||(datalen<=0)||!resp||(resplen<=0)) /* check received arguments */
+    if ( !data || (datalen<=0) ) /* check received arguments */
         SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
 
     /* compose apdu for Internal Authenticate cmd */
@@ -233,9 +232,9 @@ static int dnie_sm_internal_auth(
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM internal auth failed");
     result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM internal auth invalid response");
-    if (apdu.resplen!=resplen) /* invalid number of bytes received */
+    if (apdu.resplen!=sizeof(sm->sig)) /* invalid number of bytes received */
         SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_UNKNOWN_DATA_RECEIVED);
-    memcpy(resp,apdu.resp,resplen); /* copy result to buffer */
+    memcpy(sm->sig,apdu.resp,apdu.resplen); /* copy result to buffer */
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
 }
 
@@ -245,24 +244,18 @@ static int dnie_sm_internal_auth(
  *@param datalen signature length (128)
  *@return SC_SUCCESS if OK: else error code
  */
-static int dnie_sm_external_aut(
-        sc_card_t *card,
-        const u8 *data, 
-        size_t datalen
-        ) {
+static int dnie_sm_external_auth( sc_card_t *card, dnie_internal_sm_t *sm) {
     sc_apdu_t apdu;
     int result=SC_SUCCESS;
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    if (!data||(datalen<=0)) /* check received arguments */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
 
     /* compose apdu for External Authenticate cmd */
     sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x82,0x00,0x00);
-    apdu.data=data;
-    apdu.datalen=datalen;
+    apdu.data=sm->sig;
+    apdu.datalen=sizeof(sm->sig);
     apdu.le=0;
     apdu.resp=NULL;
     apdu.resplen=0;
@@ -277,33 +270,28 @@ static int dnie_sm_external_aut(
 
 /* check the result of internal_authenticate operation
  *@param card Pointer to sc_card_t data
- *@param sigbuf received signature
- *@param siglen signature length; should be 128
- *@param rndifd ifd random generated data
- *@param rndlen rndifd length; should be 8
  *@param icc_pubkey icc public key
  *@param ifd_privkey ifd private key
- *@param kicc pointer to store resulting icc provided key
+ *@param ifdbuf buffer containing ( RND.IFD || SN.IFD )
+ *@param ifdlen buffer length; should be 16
+ *@param sm secure messaging internal data
  *@return SC_SUCCESS if ok; else error code
  */
 static int dnie_sm_verify_internal_auth(
         sc_card_t *card,
-        u8 *sigbuf,
-        size_t siglen,
-        u8 *ifdbuf,
-        size_t ifdlen,
 	RSA *icc_pubkey,
         RSA *ifd_privkey,
-        u8 *kicc
+        u8 *ifdbuf,
+        size_t ifdlen,
+        dnie_internal_sm_t *sm
     ) {
     int res=SC_SUCCESS;
     u8 *decryptbuf; /* to store decrypted signature */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
-    if (!sigbuf || siglen!=128) res=SC_ERROR_INVALID_ARGUMENTS;
     if (!ifdbuf || ifdlen!=16) res=SC_ERROR_INVALID_ARGUMENTS;
-    if (!icc_pubkey || !ifd_privkey || !kicc)  res=SC_ERROR_INVALID_ARGUMENTS;
+    if (!icc_pubkey || !ifd_privkey)  res=SC_ERROR_INVALID_ARGUMENTS;
     decryptbuf= (u8 *) calloc(128,sizeof(u8)); /* 128: RSA key len in bytes */
     if (!decryptbuf) res= SC_ERROR_OUT_OF_MEMORY;
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify Signature: invalid arguments");
@@ -322,7 +310,7 @@ static int dnie_sm_verify_internal_auth(
     */
 
     /* decrypt data with our ifd priv key */
-    int len=RSA_private_decrypt(siglen,sigbuf,decryptbuf,ifd_privkey,RSA_NO_PADDING);
+    int len=RSA_private_decrypt(sizeof(sm->sig),sm->sig,decryptbuf,ifd_privkey,RSA_NO_PADDING);
     res=(len<=0)?SC_ERROR_DECRYPT_FAILED:SC_SUCCESS;
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify Signature: decrypt failed");
 
@@ -355,22 +343,21 @@ static int dnie_sm_create_secure_channel(
     u8 *buffer=NULL;
     size_t bufferlen=0;
 
-    /* random numbers from icc and ifd */
-    u8 rndicc[8]; /* 8 bytes random number generated by card */
-    u8 rndifd[8]; /* 8 bytes random number generated by application */
-    u8 kicc[32];
-    u8 kifd[32];
-    u8 sigbuf[128]; /* buffer to store signature response */
-
-    if ( (card==NULL) || (card->ctx==NULL) || (handler==NULL) )
+    /* preliminary checks */
+    if ( !card || !card->ctx || !handler || !handler->sm_internal ) 
          return SC_ERROR_INVALID_ARGUMENTS;
-    sc_context_t *ctx=card->ctx;
+
+    /* comodity vars */
+    sc_context_t *ctx=card->ctx; 
+    dnie_internal_sm_t *sm=handler->sm_internal;
+
     SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
     /* malloc required structures */
     serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
     path= (sc_path_t *) calloc(1,sizeof(sc_path_t));
     if ( (serial==NULL) || (path==NULL) )
         SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_OUT_OF_MEMORY);
+
     /* ensure that our card is a DNIe */
     if (card->type!=SC_CARD_TYPE_DNIE_USER)
         SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_CARD);
@@ -463,9 +450,9 @@ static int dnie_sm_create_secure_channel(
         0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, /* RND.IFD (reserve 8 bytes) */
         0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01  /* SN.IFD */
     };
-    RAND_bytes(rndifd,8); /* generate 8 random bytes */
-    memcpy(rndbuf,rndifd,8); /* insert into rndbuf */
-    res=dnie_sm_internal_auth(card,rndbuf,sizeof(rndbuf),sigbuf,sizeof(sigbuf));
+    RAND_bytes(sm->rndifd,8); /* generate 8 random bytes */
+    memcpy(rndbuf,sm->rndifd,8); /* insert into rndbuf */
+    res=dnie_sm_internal_auth(card,sm,rndbuf,sizeof(rndbuf));
     if (res!=SC_SUCCESS) { msg="Internal auth cmd failed"; goto csc_end; }
 
     /* compose ifd_private key with data provided in Annex 3 of DNIe Manual */
@@ -482,27 +469,27 @@ static int dnie_sm_create_secure_channel(
     /* verify received signature */
     res=dnie_sm_verify_internal_auth(
         card,
-        sigbuf,         /* received signature */
-        sizeof(sigbuf), /* signature length; should be 128 */
-        rndbuf,         /* RND.IFD || SN.IFD */
-        sizeof(rndbuf), /* rndbuf length; should be 16 */
 	icc_pubkey,     /* evaluated icc public key */
         ifd_privkey,    /* evaluated from DGP's Manual Annex 3 Data */
-        kicc            /* to store resulting icc provided key */
+        rndbuf,         /* RND.IFD || SN.IFD */
+        sizeof(rndbuf), /* rndbuf length; should be 16 */
+        sm              /* sm data */
     );    
     if (res!=SC_SUCCESS) { msg="Internal Auth Verify failed"; goto csc_end; }
 
     /* get challenge: retrieve 8 random bytes from card */
-    res=card->ops->get_challenge(card,rndicc,8);
+    res=card->ops->get_challenge(card,sm->rndicc,sizeof(sm->rndicc));
     if (res!=SC_SUCCESS) { msg="Get Challenge failed"; goto csc_end; }
 
     /* TODO: compose signature data for external auth */
 
     /* External (IFD)  authentication */
-    res=dnie_sm_external_auth(card,sigbuf,sizeof(sigbuf));
+    res=dnie_sm_external_auth(card,sm);
     if (res!=SC_SUCCESS) { msg="External auth cmd failed"; goto csc_end; }
 
-    /* TODO: Session key generation */
+    /* Session key generation */
+    res=dnie_sm_compute_session_keys(card,sm);
+    if (res!=SC_SUCCESS) { msg="Session Key generation failed"; goto csc_end; }
 
     /* arriving here means ok: cleanup */
     res=SC_SUCCESS;
@@ -531,6 +518,9 @@ int dnie_sm_init(
         /* not initialized yet: time to do */
         handler=(dnie_sm_handler_t *) calloc(1,sizeof( dnie_sm_handler_t ));
         if (handler==NULL) return SC_ERROR_OUT_OF_MEMORY;
+        handler->sm_internal=(dnie_internal_sm_t *) 
+            calloc(1,sizeof( dnie_internal_sm_t ));
+        if (handler->sm_internal==NULL) return SC_ERROR_OUT_OF_MEMORY;
         handler->state=DNIE_SM_NONE;
         handler->deinit=NULL;
         handler->encode=NULL;

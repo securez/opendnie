@@ -304,6 +304,8 @@ static int dnie_sm_create_secure_channel(
                 sc_card_t *card, 
                 dnie_sm_handler_t *handler) {
     int res=SC_SUCCESS;
+    char *msg="Success";
+
     sc_serial_number_t *serial;
 
     /* data to get and parse certificates */
@@ -340,7 +342,7 @@ static int dnie_sm_create_secure_channel(
 
     /* Retrieve Card serial Number */
     res=sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, serial);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get DNIe serialnr");
+    if (res!=SC_SUCCESS) { msg="Cannot get DNIe serialnr"; goto csc_end; }
     /* 
      * Manual says that we must read intermediate CA cert , Componente cert
      * And verify certificate chain
@@ -349,19 +351,25 @@ static int dnie_sm_create_secure_channel(
     /* Read Intermediate CA from card File:3F006020 */
     sc_format_path("3F006020",path);
     res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get intermediate CA cert");
+    if (res!=SC_SUCCESS) { msg="Cannot get intermediate CA cert"; goto csc_end; }
     ca_cert= d2i_X509(NULL,(const unsigned char **)buffer,bufferlen);
-    if (ca_cert==NULL) /* received data is not a certificate */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OBJECT_NOT_VALID);
+    if (ca_cert==NULL) { /* received data is not a certificate */
+        res=SC_ERROR_OBJECT_NOT_VALID;
+        msg="Readed data is not a certificate";
+        goto csc_end;
+    }
     if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
 
     /* Read Card certificate File:3F00601F */
     sc_format_path("3F00601F",path);
     res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get Component cert");
+    if (res!=SC_SUCCESS) { msg="Cannot get Component cert"; goto csc_end; }
     icc_cert= d2i_X509(NULL,(const unsigned char **) buffer,bufferlen);
-    if (icc_cert==NULL) /* received data is not a certificate */
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OBJECT_NOT_VALID);
+    if (icc_cert==NULL) { /* received data is not a certificate */
+        res=SC_ERROR_OBJECT_NOT_VALID;
+        msg="Readed data is not a certificate";
+        goto csc_end;
+    }
     if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
 
     /* TODO: Verify icc Card certificate chain */
@@ -380,11 +388,11 @@ static int dnie_sm_create_secure_channel(
         /* V */ 0x02,0x0F
     };
     res=dnie_sm_set_security_env(card,0x81,0xB6,root_ca_ref,sizeof(root_ca_ref));
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select Root CA failed");
+    if (res!=SC_SUCCESS) { msg="Select Root CA failed"; goto csc_end; }
 
     /* Send IFD intermediate CA in CVC format C_CV_CA */
     res=dnie_sm_verify_cvc_certificate(card,C_CV_CA_CS_AUT_cert,sizeof(C_CV_CA_CS_AUT_cert));
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify CVC CA failed");
+    if (res!=SC_SUCCESS) { msg="Verify CVC CA failed"; goto csc_end; }
 
     /* select public key of sent certificate */
     u8 cvc_ca_ref[] = {
@@ -393,11 +401,11 @@ static int dnie_sm_create_secure_channel(
         /* V */ 0x65,0x73,0x53,0x44,0x49,0x60,0x00,0x06
     };
     res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ca_ref,sizeof(cvc_ca_ref));
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC CA pubk failed");
+    if (res!=SC_SUCCESS) { msg="Select CVC CA pubk failed"; goto csc_end; }
 
     /* Send IFD certiticate in CVC format C_CV_IFD */
     res=dnie_sm_verify_cvc_certificate(card,C_CV_IFDuser_AUT_cert,sizeof(C_CV_IFDuser_AUT_cert));
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify CVC IFD failed");
+    if (res!=SC_SUCCESS) { msg="Verify CVC IFD failed"; goto csc_end; }
 
     /* select public key of ifd certificate and icc private key */ 
     u8 cvc_ifd_ref[] = {
@@ -409,7 +417,7 @@ static int dnie_sm_create_secure_channel(
         /* V */ 0x02,0x1f
     };
     res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ifd_ref,sizeof(cvc_ifd_ref));
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Select CVC IFD pubk failed");
+    if (res!=SC_SUCCESS) { msg="Select CVC IFD pubk failed"; goto csc_end; }
 
     /* Internal (Card) authentication (let the card verify sent ifd certs) 
      SN.IFD equals 8 lsb bytes of ifd.pubk ref according cwa14890 sec 8.4.1 */
@@ -421,12 +429,12 @@ static int dnie_sm_create_secure_channel(
     RAND_bytes(rndifd,8); /* generate 8 random bytes */
     memcpy(rndbuf,rndifd,8); /* insert into rndbuf */
     res=dnie_sm_internal_auth(card,rndbuf,sizeof(rndbuf),sigbuf,sizeof(sigbuf));
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Internal auth cmd failed");
+    if (res!=SC_SUCCESS) { msg="Internal auth cmd failed"; goto csc_end; }
 
     /* compose ifd_private key with data provided in Annex 3 of DNIe Manual */
     ifd_privkey = RSA_new(); /* create RSA struct */
     res=(ifd_privkey)?SC_SUCCESS:SC_ERROR_OUT_OF_MEMORY;
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Evaluate RSA ifd priv key failed");
+    if (res!=SC_SUCCESS) { msg="Evaluate RSA ifd priv key failed"; goto csc_end; }
     ifd_privkey->n =
         BN_bin2bn(ifd_modulus,sizeof(ifd_modulus),ifd_privkey->n);
     ifd_privkey->e = 
@@ -445,7 +453,7 @@ static int dnie_sm_create_secure_channel(
         ifd_privkey,    /* evaluated from DGP's Manual Annex 3 Data */
         kicc            /* to store resulting icc provided key */
     );    
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Internal Auth Verify failed");
+    if (res!=SC_SUCCESS) { msg="Internal Auth Verify failed"; goto csc_end; }
 
     /* get challenge: retrieve 8 random bytes from card */
     res=card->ops->get_challenge(card,rndicc,8);
@@ -454,8 +462,16 @@ static int dnie_sm_create_secure_channel(
     /* TODO: External (IFD)  authentication */
     /* TODO: Session key generation */
 
-    /* TODO: Mark channel as created and setup wrapper pointers */
+    /* arriving here means ok: cleanup */
+    res=SC_SUCCESS;
+csc_end:
     /* TODO: sm create Cleanup */
+    if (serial)      free(serial);
+    if (path)        free(path);
+    if (buffer)      free(buffer);
+    if (icc_pubkey)  RSA_free(icc_pubkey);
+    if (ifd_privkey) RSA_free(ifd_privkey);
+    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
 }
 

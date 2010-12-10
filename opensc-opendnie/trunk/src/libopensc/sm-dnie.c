@@ -290,7 +290,37 @@ static int dnie_sm_external_auth( sc_card_t *card, dnie_internal_sm_t *sm) {
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
 }
 
-/* check the result of internal_authenticate operation
+/*
+ * Compare signature for internal auth procedure
+ * returns SC_SUCCESS or error code
+ */
+static int dnie_sm_compare_signature(
+        u8 *data,
+        size_t dlen,
+        u8 *ifd_data
+        ) {
+    u8 *buf=calloc(74+32+32,sizeof(u8));
+    u8 *sha=calloc(SHA_DIGEST_LENGTH,sizeof(u8));
+    int res=SC_SUCCESS;
+    if (!buf || !sha) {
+        res=SC_ERROR_OUT_OF_MEMORY;
+        goto compare_signature_end;
+    }
+    res=SC_ERROR_INVALID_DATA;
+    if (dlen!=128)       goto compare_signature_end; /* check length */
+    if (data[0]!=0x6a)   goto compare_signature_end; /* iso 9796-2 padding */ 
+    if (data[127]!=0xBC) goto compare_signature_end; /* iso 9796-2 padding */
+    memcpy(buf,data+1,74+32);
+    memcpy(buf+74+32,ifd_data,16);
+    SHA1(buf,74+32+16,sha);
+    if (memcmp(data+127-SHA_DIGEST_LENGTH,sha,SHA_DIGEST_LENGTH)==0) res=SC_SUCCESS;
+compare_signature_end:
+    if (buf) free(buf);
+    if (sha) free(sha);
+    return res;
+}
+
+/** check the result of internal_authenticate operation
  *@param card Pointer to sc_card_t data
  *@param icc_pubkey icc public key
  *@param ifd_privkey ifd private key
@@ -308,15 +338,27 @@ static int dnie_sm_verify_internal_auth(
         dnie_internal_sm_t *sm
     ) {
     int res=SC_SUCCESS;
-    u8 *decryptbuf; /* to store decrypted signature */
+    char *msg;
+    u8 *buf1; /* to decrypt with our private key */
+    u8 *buf2; /* to try SIGNUM==SIG */
+    u8 *buf3; /* to try SIGNUM==N.ICC-SIG */
+    size_t len1,len2,len3;
+    BIGNUM *bn;
+    BIGNUM *sigbn;
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
     if (!ifdbuf || ifdlen!=16) res=SC_ERROR_INVALID_ARGUMENTS;
     if (!icc_pubkey || !ifd_privkey)  res=SC_ERROR_INVALID_ARGUMENTS;
-    decryptbuf= (u8 *) calloc(128,sizeof(u8)); /* 128: RSA key len in bytes */
-    if (!decryptbuf) res= SC_ERROR_OUT_OF_MEMORY;
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify Signature: invalid arguments");
+    buf1= (u8 *) calloc(128,sizeof(u8)); /* 128: RSA key len in bytes */
+    buf2= (u8 *) calloc(128,sizeof(u8)); 
+    buf3= (u8 *) calloc(128,sizeof(u8)); 
+    if ( !buf1 || !buf2 || !buf3 ) {
+        msg= "Verify Signature: calloc() error";
+        res= SC_ERROR_OUT_OF_MEMORY;
+        goto verify_internal_done;
+    }
+
     /* 
     We have received data with this format:
     sigbuf = E[PK.IFD.AUT](SIGMIN)
@@ -328,15 +370,74 @@ static int dnie_sm_verify_internal_auth(
         sha1_hash(PRND1 || Kicc || RND.IFD || SN.IFD) ||
         0xBC 
     )
-    So we have to reverse the process and try to get valid results
+    So we should reverse the process and try to get valid results
     */
+    
     /* decrypt data with our ifd priv key */
-    int len=RSA_private_decrypt(sizeof(sm->sig),sm->sig,decryptbuf,ifd_privkey,RSA_NO_PADDING);
-    res=(len<=0)?SC_ERROR_DECRYPT_FAILED:SC_SUCCESS;
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"Verify Signature: decrypt failed");
+    len1=RSA_private_decrypt(sizeof(sm->sig),sm->sig,buf1,ifd_privkey,RSA_NO_PADDING);
+    if (len1<=0) {
+        msg="Verify Signature: decrypt with ifd privk failed";
+        res=SC_ERROR_DECRYPT_FAILED;
+        goto verify_internal_done;
+    }
 
-    /* TODO: write rest of code */
+    /* OK: now we have SIGMIN in buf1 */
+    /* check if SIGMIN data matches SIG or N.ICC-SIG */
+    /* evaluate DS[SK.ICC.AUTH](SIG) trying to decrypt with icc pubk */
+    len3=RSA_public_encrypt(len1,buf1,buf3,icc_pubkey,RSA_NO_PADDING);
+    if (len3<=0) goto verify_nicc_sig; /* evaluate N.ICC-SIG and retry */
+    res=dnie_sm_compare_signature(buf2,len2,ifdbuf);
+    if (res==SC_SUCCESS) goto verify_internal_ok;
 
+verify_nicc_sig: 
+   /* 
+    * Arriving here means need to evaluate N.ICC-SIG 
+    * So convert buffers to bignums to operate
+    */
+    bn=BN_bin2bn(buf1,len1,NULL); /* create BN data */
+    sigbn=BN_new();
+    if (!bn || !sigbn) {
+        msg="Verify Signature: cannot bignums creation error";
+        res=SC_ERROR_OUT_OF_MEMORY;
+        goto verify_internal_done;
+    }
+    res=BN_sub(sigbn,icc_pubkey->n,bn); /* eval N.ICC-SIG */
+    if(!res) {
+        msg="Verify Signature: evaluation of N.ICC-SIG failed";
+        res=SC_ERROR_INTERNAL;
+        goto verify_internal_done;
+    }
+    len2=BN_bn2bin(sigbn,buf2); /* copy result to buffer */
+    if (len2<=0) {
+        msg="Verify Signature: cannot conver bignum to buffer";
+        res=SC_ERROR_INTERNAL;
+        goto verify_internal_done;
+    }
+    /* ok: check again with new data */     
+    /* evaluate DS[SK.ICC.AUTH](I.ICC-SIG) trying to decrypt with icc pubk */
+    len3=RSA_public_encrypt(len2,buf2,buf3,icc_pubkey,RSA_NO_PADDING);
+    if (len3<=0) {
+        msg="Verify Signature: cannot get valid SIG data";
+        res=SC_ERROR_INVALID_DATA;
+        goto verify_internal_done;
+    }
+    res=dnie_sm_compare_signature(buf3,len3,ifdbuf);
+    if (res!=SC_SUCCESS) {
+        msg="Verify Signature: cannot get valid SIG data";
+        res=SC_ERROR_INVALID_DATA;
+        goto verify_internal_done;
+    } 
+    /* arriving here means OK: complete data structures */
+verify_internal_ok:
+    memcpy(sm->kicc,buf3+1+74,32); /* extract Kicc from buf3 */
+    res=SC_SUCCESS;
+verify_internal_done:
+    if (buf1) free(buf1);
+    if (buf2) free(buf2);
+    if (buf3) free(buf3);
+    if (bn) BN_free(bn);
+    if (sigbn) BN_free(sigbn);
+    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);    
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
 }
     

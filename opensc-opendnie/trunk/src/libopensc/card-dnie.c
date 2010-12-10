@@ -120,7 +120,7 @@ static struct sc_atr_table dnie_atrs[] = {
     { NULL, NULL, NULL, 0, 0, NULL }
 };
 
-static struct dnie_private_data dnie_priv;
+static dnie_private_data_t dnie_priv;
 static struct sc_card_operations dnie_ops;
 static struct sc_card_operations *iso_ops=NULL; 
 

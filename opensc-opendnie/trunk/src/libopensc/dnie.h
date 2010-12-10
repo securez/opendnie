@@ -28,16 +28,16 @@
 
 /* Secure Messaging state indicator */
 #define DNIE_SM_NONE            0x00 /* no channel defined */
-#define DNIE_SM_INPROGRESS      0x01 /* chanel is being created: dont use */
+#define DNIE_SM_INPROGRESS      0x01 /* channel is being created: don't use */
 #define DNIE_SM_INTERNAL        0x02 /* using local keys */
 #define DNIE_SM_EXTERNAL        0x03 /* using SSL connection to handle keys */
 
 /************************** data structures for DNIe **********************/
-typedef struct dnie_file_cache {
+typedef struct dnie_file_cache_st {
     sc_file_t *file;
     u8 *data;
     size_t datalen;
-    struct dnie_file_cache *next;
+    struct dnie_file_cache_st *next;
 } dnie_file_cache_t;
 
 typedef struct dnie_internal_sm_st {
@@ -50,18 +50,22 @@ typedef struct dnie_internal_sm_st {
     u8 kmac[16];   /* TDES key for checksum calculation */
     u8 ssc[8];     /* send sequence counter */
     u8 sig[128];   /* buffer to store & compute signatures (1024 bits) */
-    size_t siglen; /* signature length */
 } dnie_internal_sm_t;
 
-typedef struct dnie_sm_handler {
+typedef struct dnie_external_sm_st {
+	 char *url;     /* where to stablish SSL connection */
+} dnie_external_sm_t;
+
+typedef struct dnie_sm_handler_st {
     int state;
     int (*deinit)(struct sc_card *card);
     int (*encode)(sc_card_t *card,sc_apdu_t *from, sc_apdu_t *to);
     int (*decode)(sc_card_t *card,sc_apdu_t *from, sc_apdu_t *to);
     dnie_internal_sm_t *sm_internal;
+    dnie_external_sm_t *sm_external;
 } dnie_sm_handler_t;
 
-typedef struct dnie_private_data {
+typedef struct dnie_private_data_st {
     char *user_consent_app;
     int user_consent_enabled;
     sc_serial_number_t *serialnumber;

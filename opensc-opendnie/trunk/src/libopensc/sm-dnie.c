@@ -246,17 +246,59 @@ static int dnie_sm_prepare_external_auth(
         sc_serial_number_t *serial,
         dnie_internal_sm_t *sm
     ) {
-    int result=SC_SUCCESS;
+    /* we have to compose following message:
+    data = E[PK.ICC.AUT](SIGMIN)
+    SIGMIN = min ( SIG, N.IFD-SIG )
+    SIG= DS[SK.IFD.AUT] (
+        0x6A  || - padding according iso 9796-2
+        PRND2 || - (74 bytes) random data to make buffer 128 bytes length
+        Kifd  || - (32 bytes)- ifd random generated key
+        sha1_hash(
+             PRND2   ||  
+             Kifd    || 
+             RND.ICC || - (8 bytes) response to get_challenge() cmd
+             SN.ICC  - (8 bytes) serial number from get_serialnr() cmd
+        ) || 
+        0xBC - iso 9796-2 padding
+    ) - total: 128 bytes
+    
+    then, we should encrypt with our private key and then with icc pub key
+    returning resulting data
+    */
+    char *msg; /* to store error messages */ 
+    int res=SC_SUCCESS;
+    u8 *buf1; /* where to encrypt with icc pub key */
+    u8 *buf2; /* where to encrypt with ifd pub key */
+    u8 *buf3; /* where to compose message to be encrypted */
+    size_t len1,len2,len3;
+    u8 *sha_buf; /* to compose message to be sha'd */
+    u8 *sha_data; /* sha signature data */
+    
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
      /* check received arguments */
     if ( !icc_pubkey || !ifd_privkey || !serial || !sm )
         SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
-
+    buf1=calloc(128, sizeof(u8));
+    buf2=calloc(128, sizeof(u8));
+    buf3=calloc(128, sizeof(u8));
+    sha_buf=calloc(74+32+8+8,sizeof(u8));
+    sha_data=calloc(SHA_DIGEST_LENGTH,sizeof(u8));
+    if (!buf1 || !buf2 || !buf3 || !sha_buf || !sha_data) {
+        msg="prepare external auth: calloc error";
+        res=SC_ERROR_OUT_OF_MEMORY;
+        goto prepare_external_auth_end;
+    } 
     /* TODO: write sm_prepare_external_auth */
 
+prepare_external_auth_end:
+    if (buf1) free(buf1);
+    if (buf2) free(buf2);
+    if (buf3) free(buf3);
+    if (sha_buf) free(sha_buf);
+    if (sha_data) free(sha_data);
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
 }
 

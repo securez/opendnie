@@ -238,7 +238,16 @@ static int dnie_sm_internal_auth(
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
 }
 
-/* compose signature data for external auth */
+/**
+ * Compose signature data for external auth according CWA-14980
+ * Store resulting data  into sm->sig
+ *@param card pointer to st_card_t card data information
+ *@param icc_pubkey public key of card
+ *@param ifd_privkey private RSA key of ifd
+ *@param serial card serial number
+ *@param sm pointer to dnie_sm_internal_t data
+ *@return SC_SUCCESS if ok; else errorcode
+ */
 static int dnie_sm_prepare_external_auth(
         sc_card_t *card,
         RSA *icc_pubkey,
@@ -273,7 +282,10 @@ static int dnie_sm_prepare_external_auth(
     size_t len1,len2,len3;
     u8 *sha_buf; /* to compose message to be sha'd */
     u8 *sha_data; /* sha signature data */
-    
+    BIGNUM *bn = NULL;
+    BIGNUM *bnsub = NULL;
+    BIGNUM *bnres = NULL;
+
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
@@ -284,7 +296,7 @@ static int dnie_sm_prepare_external_auth(
     buf1=calloc(128, sizeof(u8));
     buf2=calloc(128, sizeof(u8));
     buf3=calloc(128, sizeof(u8));
-    sha_buf=calloc(74+32+8+8,sizeof(u8));
+    sha_buf=calloc(74+32+8+1+7,sizeof(u8));
     sha_data=calloc(SHA_DIGEST_LENGTH,sizeof(u8));
     if (!buf1 || !buf2 || !buf3 || !sha_buf || !sha_data) {
         msg="prepare external auth: calloc error";
@@ -292,14 +304,79 @@ static int dnie_sm_prepare_external_auth(
         goto prepare_external_auth_end;
     } 
     /* TODO: write sm_prepare_external_auth */
+    /* compose buffer data */
+    buf3[0]= 0x6A; /* iso padding */
+    RAND_bytes(buf3+1,74); /* pRND */
+    RAND_bytes(sm->kifd,32); /* Kifd */
+    memcpy(buf3+1+74,sm->kifd,32); /* copy Kifd into buffer */
+    /* prepare data to be hashed */
+    memcpy(sha_buf,buf3+1,74); /* copy pRND into sha_buf */
+    memcpy(sha_buf+74,buf3+75,32); /* copy kifd into sha_buf */
+    memcpy(sha_buf+74+32,sm->rndicc,8); /* copy 8 byte icc challenge */
+    memcpy(sha_buf+74+32+8+1,serial->value,7); /* copy serialnr, 1 byte pad */
+    SHA1(sha_buf,74+32+8+1+7,sha_data);
+    /* copy hashed data into buffer */
+    memcpy(sha_data,buf3+1+74+32,SHA_DIGEST_LENGTH);
+    buf3[127]= 0xBC; /* iso padding */
+ 
+    /* encrypt with ifd private key */
+    len2= RSA_private_decrypt(128,buf3,buf2,ifd_privkey,RSA_NO_PADDING);
+    if (len2<0) {
+        msg="Prepare external auth: ifd_privk encrypt failed";
+        res=SC_ERROR_DECRYPT_FAILED;
+        goto prepare_external_auth_end;
+    }
+
+    /* evaluate value of minsig and store into buf3 */
+    bn= BN_bin2bn(buf2,len2, NULL);
+    bnsub= BN_new();
+    if (!bn || !bnsub) {
+        msg="Prepare external auth: BN creation failed";
+        res=SC_ERROR_INTERNAL;
+        goto prepare_external_auth_end;
+    }
+    res=BN_sub(bnsub,ifd_privkey->n,bn); /* eval N.IFD-SIG */
+    if (res!=0) {
+        msg="Prepare external auth: BN sigmin evaluation failed";
+        res=SC_ERROR_INTERNAL;
+        goto prepare_external_auth_end;
+    }
+    bnres=(BN_cmp(bn,bnsub)<0)?bn:bnsub; /* choose min(SIG,N.IFD-SIG) */
+    if (BN_numbytes(bnres)>128) {
+        msg="Prepare external auth: BN sigmin result is too big";
+        res=SC_ERROR_INTERNAL;
+        goto prepare_external_auth_end;
+    }
+    res=BN_bn2bin(bnres,buf3); /* convert result back into buf3 */
+    if (res<=0) {
+        msg="Prepare external auth: BN to buffer conversion failed";
+        res=SC_ERROR_INTERNAL;
+        goto prepare_external_auth_end;
+    }
+
+    /* re-encrypt result with icc public key */
+    len1=RSA_private_decrypt(128,buf3,buf1,icc_pubkey,RSA_NO_PADDING);
+    if (len1<=0) {
+        msg="Prepare external auth: icc_pubk encrypt failed";
+        res=SC_ERROR_DECRYPT_FAILED;
+        goto prepare_external_auth_end;
+    }
+
+    /* process done: copy result into sm_internal buffer and return success */
+    memcpy(sm->sig,buf1,len1);
+    res=SC_SUCCESS;
 
 prepare_external_auth_end:
-    if (buf1) free(buf1);
-    if (buf2) free(buf2);
-    if (buf3) free(buf3);
-    if (sha_buf) free(sha_buf);
-    if (sha_data) free(sha_data);
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+    if (bn)    BN_free(bn);
+    if (bnsub) BN_free(bnsub);
+    if (buf1) { memset(buf1,0,128); free(buf1); }
+    if (buf2) { memset(buf2,0,128); free(buf2); }
+    if (buf3) { memset(buf3,0,128); free(buf3); }
+    if (sha_buf) { memset(sha_buf,0,74+32+8+1+7); free(sha_buf); }
+    if (sha_data) { memset(sha_data,0,SHA_DIGEST_LENGTH); free(sha_data); }
+
+    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
 }
 
 /**

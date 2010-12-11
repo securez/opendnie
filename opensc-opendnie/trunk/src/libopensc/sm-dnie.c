@@ -298,12 +298,13 @@ static int dnie_sm_prepare_external_auth(
     buf3=calloc(128, sizeof(u8));
     sha_buf=calloc(74+32+8+1+7,sizeof(u8));
     sha_data=calloc(SHA_DIGEST_LENGTH,sizeof(u8));
+    /* alloc() resources */
     if (!buf1 || !buf2 || !buf3 || !sha_buf || !sha_data) {
         msg="prepare external auth: calloc error";
         res=SC_ERROR_OUT_OF_MEMORY;
         goto prepare_external_auth_end;
     } 
-    /* TODO: write sm_prepare_external_auth */
+
     /* compose buffer data */
     buf3[0]= 0x6A; /* iso padding */
     RAND_bytes(buf3+1,74); /* pRND */
@@ -745,10 +746,9 @@ static int dnie_sm_create_secure_channel(
     /* arriving here means ok: cleanup */
     res=SC_SUCCESS;
 csc_end:
-    /* TODO: clear memory before free() */
-    if (serial)      free(serial);
-    if (path)        free(path);
-    if (buffer)      free(buffer);
+    if (serial)  { memset(serial,0,sizeof(sc_serial_number_t)); free(serial); }
+    if (path)    { memset(path,0,sizeof(sc_path_t)); free(path); } 
+    if (buffer)      free(buffer); /* no need to memset */
     if (icc_pubkey)  RSA_free(icc_pubkey);
     if (ifd_privkey) RSA_free(ifd_privkey);
     if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);

@@ -392,7 +392,7 @@ static int dnie_sm_external_auth( sc_card_t *card, dnie_internal_sm_t *sm) {
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
 
     /* compose apdu for External Authenticate cmd */
     sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x82,0x00,0x00);
@@ -408,6 +408,69 @@ static int dnie_sm_external_auth( sc_card_t *card, dnie_internal_sm_t *sm) {
     result=sc_check_sw(card,apdu.sw1,apdu.sw2);
     SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM external auth invalid response");
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+}
+
+/**
+ * SM creation of session keys
+ *@param card pointer to sc_card_t data
+ *@param sm pointer to dnie_sm_internal_t data
+ *@return SC_SUCCESS if ok; else error code
+ */
+static int dnie_sm_compute_session_keys(
+        sc_card_t *card,
+        dnie_internal_sm_t *sm ) {
+
+    char *msg=NULL;
+    int n=0;
+    int res=SC_SUCCESS;
+    u8 *kseed; /* to compose kifd ^ kicc */
+    u8 *data;  /* to compose kenc and kmac to be hashed */
+    u8 *sha_data; /* to store hash result */
+
+    /* safety check */
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    /* Just a literal transcription of cwa14890-1 sections 8.7.2 to 8.9 */
+    kseed=calloc(32,sizeof(u8));
+    data=calloc(32+4,sizeof(u8));
+    sha_data=calloc(SHA_DIGEST_LENGTH,sizeof(u8));
+    if (!kseed || !data || !sha_data) {
+        msg="Compute Session Keys: calloc() failed";
+        res=SC_ERROR_OUT_OF_MEMORY;
+        goto compute_session_keys_end;
+    }
+    /* compose kseed  (cwa-14980-1 sect 8.7.2) */
+    for (n=0;n<32;n++) *(kseed+n)= *(sm->kicc+n) ^ *(sm->kifd+n);
+
+    /* evaluate kenc (cwa-14980-1 sect 8.8) */
+    memcpy(data,kseed,32);
+    *(data+35)=0x01; /* data = kseed || 0x00 0x00 0x00 0x01 */
+    SHA1(data,32+4,sha_data);
+    memcpy(sm->kenc,sha_data,16); /* 16 MS bytes  of sha result */
+
+    /* evaluate kmac */
+    memset(data,0,32+4);
+    memset(sha_data,0,SHA_DIGEST_LENGTH); /* clear buffers */
+
+    memcpy(data,kseed,32);
+    *(data+35)=0x02; /* data = kseed || 0x00 0x00 0x00 0x02 */ 
+    SHA1(data,32+4,sha_data);
+    memcpy(sm->kmac,sha_data,16);
+
+    /* evaluate send sequence counter  (cwa-14980-1 sect 8.9 & 9.6 */
+    memcpy(sm->ssc,sm->rndicc+4,4); /* 4 least significant bytes of rndicc */
+    memcpy(sm->ssc+4,sm->rndifd+4,4); /* 4 least significant bytes of rndifd */
+
+    /* arriving here means process ok */
+    res=SC_SUCCESS;
+
+compute_session_keys_end:
+    if (kseed) { memset(kseed,0,32); free(kseed); }
+    if (data) { memset(data,0,32+4); free(data); }
+    if (sha_data) { memset(sha_data,0,SHA_DIGEST_LENGTH); free(sha_data); }
+    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
 }
 
 /*

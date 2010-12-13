@@ -136,6 +136,79 @@ static const u8 C_CV_IFDuser_AUT_cert [] = {
 
 /*********************** Internal authentication routines *******************/
 
+/**
+ * Routine to verify certificates provided by card
+ * This routine uses Root CA public key data From Annex III of manual
+ * to verify intermediate CA icc certificate provided by card
+ * if verify sucess, then extract public keys from intermediate CA
+ * and verify icc certificate
+ *@param card pointer to sc_card_contex
+ *@param sub_ca_cert icc intermediate CA certificate readed from card
+ *@param icc_ca icc certificate from card
+ *@return SC_SUCCESS if verification is ok; else error code
+ */
+static int dnie_sm_verify_icc_certificates(
+       sc_card_t *card,
+       X509 *sub_ca_cert,
+       X509 *icc_cert
+    ) {
+    char *msg;
+    int res=SC_SUCCESS;
+    EVP_PKEY *root_ca_key=NULL;
+    EVP_PKEY *sub_ca_key=NULL;
+    RSA *root_ca_rsa=NULL;
+    /* safety check */
+    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if (!sub_ca_cert || !icc_cert ) /* check received arguments */
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+
+    /* compose root_ca_public key with data provided by Dnie Manual */
+    root_ca_key= EVP_PKEY_new(); 
+    root_ca_rsa = RSA_new();
+    if ( !root_ca_key || !root_ca_rsa ) 
+        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OUT_OF_MEMORY);
+    root_ca_rsa->n=BN_bin2bn(icc_root_ca_modulus,
+                             sizeof(icc_root_ca_modulus),
+                             root_ca_rsa->n);
+    root_ca_rsa->e=BN_bin2bn(icc_root_ca_public_exponent,
+                             sizeof(icc_root_ca_public_exponent),
+                             root_ca_rsa->e);
+    res=EVP_PKEY_assign_RSA(root_ca_key,root_ca_rsa);
+    if (!res) {
+        msg="Cannot compose root CA public key";
+        res=SC_ERROR_INTERNAL;
+        goto verify_icc_certificates_end;
+    }
+
+    /* verify sub_ca_cert against root_ca_key */
+    res=X509_verify(sub_ca_cert,root_ca_key);
+    if (!res) {
+        msg="Cannot verify icc Sub-CA certificate";
+        res=SC_ERROR_INTERNAL;
+        goto verify_icc_certificates_end;
+    }
+
+    /* extract sub_ca_key from sub_ca_cert */
+    sub_ca_key=X509_get_pubkey(sub_ca_cert);
+
+    /* verify icc_cert against sub_ca_key */
+    res=X509_verify(icc_cert,sub_ca_key);
+    if (!res) {
+        msg="Cannot verify icc certificate";
+        res=SC_ERROR_INTERNAL;
+        goto verify_icc_certificates_end;
+    }
+
+    /* arriving here means certificate verification success */
+    res=SC_SUCCESS;
+verify_icc_certificates_end:
+    if (root_ca_key) EVP_PKEY_free(root_ca_key); /*implies root_ca_rsa free()*/
+    if (sub_ca_key) EVP_PKEY_free(sub_ca_key);
+    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
+}
 
 /**
  * Used to verify CVC certificates in SM establishment process
@@ -722,9 +795,15 @@ static int dnie_sm_create_secure_channel(
     }
     if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
 
-    /* TODO: Verify icc Card certificate chain */
+    /* Verify icc Card certificate chain */
     /* Notice that Official driver skips this step 
      * and simply verifies that icc_cert is a valid certificate */
+    res=dnie_sm_verify_icc_certificates(card,ca_cert,icc_cert);
+    if (res!=SC_SUCCESS) {
+        res=SC_ERROR_OBJECT_NOT_VALID;
+        msg="Icc Certificates verification failed";
+        goto csc_end;
+    }
 
     /* Extract public key from ICC certificate */
     EVP_PKEY *pk=X509_get_pubkey(icc_cert);

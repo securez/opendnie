@@ -631,7 +631,7 @@ static int sc_pkcs15_bind_internal(sc_pkcs15_card_t *p15card)
 	if ((err == SC_ERROR_FILE_NOT_FOUND) &&
 	    (card->app_count < 1)) {
 		sc_format_path("3F00", &p15card->file_app->path);
-		err = SC_NO_ERROR;
+		err = SC_SUCCESS;
 	}
 #endif
 	if (err < 0)
@@ -1218,7 +1218,7 @@ int sc_pkcs15_find_pin_by_reference(struct sc_pkcs15_card *p15card,
 
 int sc_pkcs15_find_pin_by_type_and_reference(struct sc_pkcs15_card *p15card,
 				const sc_path_t *path,
-				int auth_method, int reference,
+				unsigned auth_method, int reference,
 				struct sc_pkcs15_object **out)
 {
 	struct sc_context *ctx = p15card->card->ctx;

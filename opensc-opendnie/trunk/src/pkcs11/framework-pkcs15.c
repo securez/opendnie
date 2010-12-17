@@ -135,7 +135,7 @@ static const struct {
 };
 
 static int	__pkcs15_release_object(struct pkcs15_any_object *);
-static int	register_mechanisms(struct sc_pkcs11_card *p11card);
+static CK_RV	register_mechanisms(struct sc_pkcs11_card *p11card);
 static CK_RV	get_public_exponent(struct sc_pkcs15_pubkey *,
 					CK_ATTRIBUTE_PTR);
 static CK_RV	get_modulus(struct sc_pkcs15_pubkey *,
@@ -157,6 +157,7 @@ static CK_RV pkcs15_bind(struct sc_pkcs11_card *p11card)
 {
 	struct pkcs15_fw_data *fw_data;
 	int rc;
+	CK_RV rv;
 
 	if (!(fw_data = calloc(1, sizeof(*fw_data))))
 		return CKR_HOST_MEMORY;
@@ -168,10 +169,10 @@ static CK_RV pkcs15_bind(struct sc_pkcs11_card *p11card)
 		return sc_to_cryptoki_error(rc, NULL);
 	}
 
-	rc = register_mechanisms(p11card);
-	if (rc != CKR_OK) {
-		sc_debug(context, SC_LOG_DEBUG_NORMAL, "register_mechanisms failed: 0x%x", rc);
-		return rc;
+	rv = register_mechanisms(p11card);
+	if (rv != CKR_OK) {
+		sc_debug(context, SC_LOG_DEBUG_NORMAL, "register_mechanisms failed: 0x%x", rv);
+		return rv;
 	}
 
 	return CKR_OK;
@@ -235,6 +236,7 @@ static void pkcs15_init_token_info(struct sc_pkcs15_card *p15card, CK_TOKEN_INFO
 	pToken->firmwareVersion.minor = 0;
 }
 
+#ifdef USE_PKCS15_INIT
 static char *
 set_cka_label(CK_ATTRIBUTE_PTR attr, char *label) 
 { 
@@ -247,6 +249,7 @@ set_cka_label(CK_ATTRIBUTE_PTR attr, char *label)
 	label[len] = '\0'; 
 	return label; 
 } 
+#endif
 
 static int
 __pkcs15_create_object(struct pkcs15_fw_data *fw_data,
@@ -286,6 +289,7 @@ __pkcs15_release_object(struct pkcs15_any_object *obj)
 	return 0;
 }
 
+#ifdef USE_PKCS15_INIT
 static int
 __pkcs15_delete_object(struct pkcs15_fw_data *fw_data, struct pkcs15_any_object *obj)
 {
@@ -303,6 +307,7 @@ __pkcs15_delete_object(struct pkcs15_fw_data *fw_data, struct pkcs15_any_object 
 		}
 	return SC_ERROR_OBJECT_NOT_FOUND;
 }
+#endif
 
 CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo)
 {
@@ -2022,6 +2027,9 @@ kpgen_done:
 
 static CK_RV pkcs15_any_destroy(struct sc_pkcs11_session *session, void *object)
 {
+#ifndef USE_PKCS15_INIT
+	return CKR_FUNCTION_NOT_SUPPORTED;
+#else
 	struct pkcs15_data_object *obj = (struct pkcs15_data_object*) object;
 	struct pkcs15_any_object *any_obj = (struct pkcs15_any_object*) object;
 	struct sc_pkcs11_card *card = session->slot->card;
@@ -2057,6 +2065,7 @@ static CK_RV pkcs15_any_destroy(struct sc_pkcs11_session *session, void *object)
 		return sc_to_cryptoki_error(rv, "C_DestroyObject");
 
 	return CKR_OK;
+#endif
 }
 
 
@@ -3293,7 +3302,7 @@ static int register_ec_mechanisms(struct sc_pkcs11_card *p11card, int flags,
  * FIXME: We should consult the card's algorithm list to
  * find out what operations it supports
  */
-static int register_mechanisms(struct sc_pkcs11_card *p11card)
+static CK_RV register_mechanisms(struct sc_pkcs11_card *p11card)
 {
 	sc_card_t *card = p11card->card;
 	sc_algorithm_info_t *alg_info;
@@ -3378,8 +3387,13 @@ static int register_mechanisms(struct sc_pkcs11_card *p11card)
 		/* If the card supports RAW, it should by all means
 		 * have registered everything else, too. If it didn't
 		 * we help it a little
+		 * FIXME?  This may force us to support these in software
 		 */
-		flags |= SC_ALGORITHM_RSA_PAD_PKCS1 | SC_ALGORITHM_RSA_HASHES;
+		flags |= SC_ALGORITHM_RSA_PAD_PKCS1;
+#ifdef ENABLE_OPENSSL
+		/* all our software hashes are in OpenSSL */
+		flags |= SC_ALGORITHM_RSA_HASHES;
+#endif
 	}
 
 	/* Check for PKCS1 */
@@ -3391,9 +3405,13 @@ static int register_mechanisms(struct sc_pkcs11_card *p11card)
 
 		/* if the driver doesn't say what hashes it supports,
 		 * claim we will do all of them */
-		if (!(flags & SC_ALGORITHM_RSA_HASHES))
+		/* FIXME?  This may force us to support these in software */
+		/* FIXME?  and we only do hashes if OpenSSL is enabled */
+		if (!(flags & (SC_ALGORITHM_RSA_HASHES|SC_ALGORITHM_RSA_HASH_NONE)))
 			flags |= SC_ALGORITHM_RSA_HASHES;
 
+#ifdef ENABLE_OPENSSL
+		/* sc_pkcs11_register_sign_and_hash_mechanism expects software hash */
 		if (flags & SC_ALGORITHM_RSA_HASH_SHA1) {
 			rc = sc_pkcs11_register_sign_and_hash_mechanism(p11card, CKM_SHA1_RSA_PKCS, CKM_SHA_1, mt);
 			if (rc != CKR_OK)
@@ -3414,6 +3432,7 @@ static int register_mechanisms(struct sc_pkcs11_card *p11card)
 			if (rc != CKR_OK)
 				return rc;
 		}
+#endif
 
 		if (flags & SC_ALGORITHM_ONBOARD_KEY_GEN) {
 			mech_info.flags = CKF_GENERATE_KEY_PAIR;

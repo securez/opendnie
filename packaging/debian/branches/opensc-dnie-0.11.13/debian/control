@@ -99,7 +99,7 @@ Description: Debugging symbols for libopensc2
 
 Package: dnie-support
 Section: misc
-Architecture: any
+Architecture: all
 Pre-Depends: libnss3-tools, libopensc2
 Depends: libacr38u, libccid, firefox, mozilla-opensc, openct, opensc, ${misc:Depends}
 Description: Adds support for Spanish electronic ID card (DNIe)

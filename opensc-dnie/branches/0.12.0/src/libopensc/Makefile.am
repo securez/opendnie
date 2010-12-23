@@ -2,7 +2,7 @@ include $(top_srcdir)/win32/ltrc.inc
 
 MAINTAINERCLEANFILES = $(srcdir)/Makefile.in
 
-EXTRA_DIST = Makefile.mak 
+EXTRA_DIST = Makefile.mak
 SUBDIRS = dnie
 
 lib_LTLIBRARIES = libopensc.la

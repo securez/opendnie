@@ -1,5 +1,7 @@
 # Process this file with automake to create Makefile.in
 
+EXTRA_DIST = keys.inc
+
 includedir = @includedir@/opensc
 
 MAINTAINERCLEANFILES = Makefile.in
@@ -28,6 +30,7 @@ h_sources = \
         map.h \
         map_helper.h \
         base_card.h \
+        base_cardctl.h \
         pkcs15_default.h \
         pkcs15_standard.h \
         virtual_fs.h \

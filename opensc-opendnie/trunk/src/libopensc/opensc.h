@@ -220,6 +220,11 @@ typedef struct sc_app_info {
 
 struct sc_card_cache {
 	struct sc_path current_path;
+
+        struct sc_file *current_ef;
+        struct sc_file *current_df;
+
+	int valid;
 };
 
 #define SC_PROTO_T0		0x00000001
@@ -297,6 +302,8 @@ struct sc_pin_cmd_pin {
 	
 	int max_tries;	/* Used for signaling back from SC_PIN_CMD_GET_INFO */
 	int tries_left;	/* Used for signaling back from SC_PIN_CMD_GET_INFO */
+
+	struct sc_acl_entry acls[SC_MAX_SDO_ACLS];
 };
 
 struct sc_pin_cmd_data {
@@ -433,7 +440,6 @@ typedef struct sc_card {
 	int max_pin_len;
 
 	struct sc_card_cache cache;
-	int cache_valid;
 
 	sc_serial_number_t serialnr;
 
@@ -861,6 +867,17 @@ int sc_write_binary(sc_card_t *card, unsigned int idx, const u8 * buf,
  */
 int sc_update_binary(sc_card_t *card, unsigned int idx, const u8 * buf,
 		     size_t count, unsigned long flags);
+
+/**
+ * Sets (part of) the content fo an EF to its logical erased state
+ * @param  card   sc_card_t object on which to issue the command
+ * @param  idx    index within the file for the data to be erased
+ * @param  count  number of bytes to erase
+ * @param  flags  flags for the ERASE BINARY command (currently not used)
+ * @return number of bytes writen or an error code
+ */
+int sc_erase_binary(struct sc_card *card, unsigned int idx,
+		    size_t count, unsigned long flags);
 
 #define SC_RECORD_EF_ID_MASK		0x0001FUL
 /** flags for record operations */

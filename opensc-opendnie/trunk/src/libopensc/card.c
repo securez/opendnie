@@ -277,7 +277,7 @@ int sc_reset(sc_card_t *card, int do_cold_reset)
 	r = card->reader->ops->reset(card->reader, do_cold_reset);
 	/* invalidate cache */
 	memset(&card->cache, 0, sizeof(card->cache));
-	card->cache_valid = 0;
+	card->cache.valid = 0;
 
 	r2 = sc_mutex_unlock(card->ctx, card->mutex);
 	if (r2 != SC_SUCCESS) {
@@ -305,12 +305,12 @@ int sc_lock(sc_card_t *card)
 			if (r == SC_ERROR_CARD_RESET || r == SC_ERROR_READER_REATTACHED) {
 				/* invalidate cache */
 				memset(&card->cache, 0, sizeof(card->cache));
-				card->cache_valid = 0;
+				card->cache.valid = 0;
 				r = card->reader->ops->lock(card->reader);
 			}
 		}
 		if (r == 0)
-			card->cache_valid = 1;
+			card->cache.valid = 1;
 	}
 	if (r == 0)
 		card->lock_count++;
@@ -338,7 +338,7 @@ int sc_unlock(sc_card_t *card)
 #ifdef INVALIDATE_CARD_CACHE_IN_UNLOCK
 		/* invalidate cache */
 		memset(&card->cache, 0, sizeof(card->cache));
-		card->cache_valid = 0;
+		card->cache.valid = 0;
 		sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "cache invalidated");
 #endif
 		/* release reader lock */
@@ -530,6 +530,23 @@ int sc_update_binary(sc_card_t *card, unsigned int idx,
 	r = card->ops->update_binary(card, idx, buf, count, flags);
 	SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, r);
 }
+
+
+int sc_erase_binary(struct sc_card *card, unsigned int offs, size_t count, 
+		unsigned long flags)
+{
+	int r;
+
+	assert(card != NULL && card->ops != NULL);
+	sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "called; erase %d bytes from offset %d", count, offs);
+
+	if (card->ops->erase_binary == NULL)
+		SC_FUNC_RETURN(card->ctx, 2, SC_ERROR_NOT_SUPPORTED);
+
+	r = card->ops->erase_binary(card, offs, count, flags);
+	SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, r);
+}
+
 
 int sc_select_file(sc_card_t *card,
 		   const sc_path_t *in_path,

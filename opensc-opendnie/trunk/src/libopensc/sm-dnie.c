@@ -714,7 +714,28 @@ verify_internal_done:
     if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);    
     SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
 }
-    
+
+/**
+ * Increase send sequence counter SSC
+ *
+ * to further study: what about using bignum arithmetics?
+ */
+static int dnie_sm_increase_ssc(sc_card_t *card, dnie_sm_handler_t *handler) {
+    int n;
+    /* preliminary checks */
+    if ( !card || !card->ctx || !handler || !handler->sm_internal ) 
+         return SC_ERROR_INVALID_ARGUMENTS;
+    /* comodity vars */
+    sc_context_t *ctx=card->ctx; 
+    dnie_internal_sm_t *sm=handler->sm_internal;
+
+    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    /* u8 arithmetic; exit loop if no carry */
+    for(n=7;n>=0;n--) { sm->ssc[n]++; if ( (sm->ssc[n]) != 0x00 ) break; }
+    sc_debug(ctx,SC_LOG_DEBUG_VERBOSE,"Next SSC: '%s'",sc_dump_hex(sm->ssc,8));
+    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+}
+
 /**
  * Create Secure channel
  * Based on Several documents:

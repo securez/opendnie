@@ -30,21 +30,43 @@ INSTRUCCIONES DE INTALACION Y COMPILACION
 - Tener instalados los paquetes (los nombres pueden variar en
 función de la distribución):
 
+En sistemas Fedora, RedHat, Mandriva o CentOS
+
 * build-essential / pkgconfig / autoconf / automake / docbook-xsl
 * subversion
-* pcsc-lite / pcscd
-* pcsc-lite-devel / libpcsclite-dev
+* pcsc-lite
+* pcsc-lite-devel
 * pcsc-tools
 * readline
 * readline-devel
 * openct-devel (recomendable)
 * openssl
-* openssl-devel / libssl-dev / libglobus-openssl-dev
+* openssl-devel 
 * libtool
 * libtool-ltdl-devel
 * libccid 
 * libassuan
 * libassuan-devel
+* pinentry + pinentry-gtk / pinentry-qt
+
+En sistemas Debian o derivados como Ubuntu
+
+* build-essential / pkg-config / autoconf / automake / docbook-xsl
+* subversion
+* pcscd
+* libpcsclite-dev
+* pcsc-tools
+* libreadline6
+* libreadline-dev
+* libopenct-dev (recomendable)
+* openssl
+* libssl-dev
+* libtool
+* libltdl-dev
+* libccid
+* libassuan
+* libassuan-dev
+* pinentry-qt4 o pinentry-gtk2
 
 1 - Crear un directorio de trabajo
 

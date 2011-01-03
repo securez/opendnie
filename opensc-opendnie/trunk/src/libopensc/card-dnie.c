@@ -24,6 +24,12 @@
 
 #define __CARD_DNIE_C__
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#ifdef ENABLE_OPENSSL   /* empty file without openssl */
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -32,7 +38,6 @@
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
-#include "config.h"
 #include "dnie.h"
 
 #ifdef HAVE_LIBASSUAN
@@ -1167,3 +1172,5 @@ sc_card_driver_t * sc_get_dnie_driver(void) {
 }
 
 #undef __CARD_DNIE_C__
+
+#endif /* ENABLE_OPENSSL */

@@ -24,17 +24,18 @@
  */
 
 #define __SM_DNIE_C__
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#ifdef ENABLE_OPENSSL   /* empty file without openssl */
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "config.h"
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
-#ifndef ENABLE_OPENSSL
-#error "this module needs to be compiled with OpenSSL support enabled"
-#endif
 #include <openssl/x509.h>
 #include "dnie.h"
 
@@ -1080,3 +1081,6 @@ dnie_wrap_apdu_end:
 
 /* end of secure_messaging.c */
 #undef __SM_DNIE_C__
+
+#endif /* ENABLE_OPENSSL */
+

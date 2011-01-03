@@ -80,7 +80,9 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "rutoken_ecp",(void *(*)(void)) sc_get_rtecp_driver },
 	{ "westcos",	(void *(*)(void)) sc_get_westcos_driver },
 	{ "myeid",      (void *(*)(void)) sc_get_myeid_driver },
+#ifdef ENABLE_OPENSSL
 	{ "dnie",       (void *(*)(void)) sc_get_dnie_driver },
+#endif
 
 /* Here should be placed drivers that need some APDU transactions to
  * recognise its cards. */

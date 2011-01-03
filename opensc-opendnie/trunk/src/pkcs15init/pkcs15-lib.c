@@ -151,7 +151,9 @@ static struct profile_operations {
 	{ "rutoken_ecp", (void *) sc_pkcs15init_get_rtecp_ops },
 	{ "westcos", (void *) sc_pkcs15init_get_westcos_ops },
 	{ "myeid", (void *) sc_pkcs15init_get_myeid_ops },
+#ifdef ENABLE_OPENSSL
 	{ "authentic", (void *) sc_pkcs15init_get_authentic_ops },
+#endif
 	{ NULL, NULL },
 };
 
@@ -506,34 +508,43 @@ int
 sc_pkcs15init_delete_by_path(struct sc_profile *profile,
 		struct sc_pkcs15_card *p15card, const struct sc_path *file_path)
 {
-	struct sc_file *parent, *file;
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_file *parent = NULL, *file = NULL;
 	struct sc_path path;
-	int r;
+	int rv;
 
-	if (file_path->len >= 2) {
-		/* Select the parent DF */
-		path = *file_path;
-		path.len -= 2;
-		r = sc_select_file(p15card->card, &path, &parent);
-		if (r < 0)
-			return r;
+	SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_NORMAL);
+	sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "trying to delete '%s'", sc_print_path(file_path));
 
-		r = sc_pkcs15init_authenticate(profile, p15card, parent, SC_AC_OP_DELETE);
-		sc_file_free(parent);
-		if (r < 0)
-			return r;
-	}
+	/* For some cards, to delete file should be satisfied the 'DELETE' ACL of the file itself,
+	 * for the others the 'DELETE' ACL of parent.
+	 * Let's start from the file's 'DELETE' ACL.
+	 *
+	 * FIXME: will it be better to introduce the ACLs 'DELETE-CHILD' and 'DELETE-ITSELF',
+	 *        or dedicated card flag ?
+	 */
 
 	/* Select the file itself */
-	path = *file_path;
-	r = sc_select_file(p15card->card, &path, &file);
-	if (r < 0)
-		return r;
+        path = *file_path;
+        rv = sc_select_file(p15card->card, &path, &file);
+        SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, rv, "cannot select file to delete");
 
-	r = sc_pkcs15init_authenticate(profile, p15card, file, SC_AC_OP_ERASE);
-	sc_file_free(file);
-	if (r < 0) 
-		return r;
+        rv = sc_pkcs15init_authenticate(profile, p15card, file, SC_AC_OP_DELETE);
+        sc_file_free(file);
+
+	if (rv == SC_ERROR_SECURITY_STATUS_NOT_SATISFIED)   {
+		if (file_path->len >= 2) {
+			/* Select the parent DF */
+			path.len -= 2;
+			rv = sc_select_file(p15card->card, &path, &parent);
+			SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, rv, "Cannot select parent");
+
+			rv = sc_pkcs15init_authenticate(profile, p15card, parent, SC_AC_OP_DELETE);
+			sc_file_free(parent);
+			SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, rv, "parent 'DELETE' authentication failed");
+		}
+	}
+	SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, rv, "'DELETE' authentication failed");
 
 	memset(&path, 0, sizeof(path));
 	path.type = SC_PATH_TYPE_FILE_ID;
@@ -541,8 +552,8 @@ sc_pkcs15init_delete_by_path(struct sc_profile *profile,
 	path.value[1] = file_path->value[file_path->len - 1];
 	path.len = 2;
 
-	r = sc_delete_file(p15card->card, &path);
-	return r;
+	rv = sc_delete_file(p15card->card, &path);
+	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, rv);
 }
 
 
@@ -1064,8 +1075,7 @@ sc_pkcs15init_init_prkdf(struct sc_pkcs15_card *p15card,
 	/* Create the prkey object now.
 	 * If we find out below that we're better off reusing an
 	 * existing object, we'll ditch this one */
-	object = sc_pkcs15init_new_object(prkey_pkcs15_algo(p15card, key),
-				label, &keyargs->auth_id, NULL);
+	object = sc_pkcs15init_new_object(prkey_pkcs15_algo(p15card, key), label, &keyargs->auth_id, NULL);
 	if (object == NULL)
 		SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, SC_ERROR_OUT_OF_MEMORY, "Cannot allocate new PrKey object");
 
@@ -1082,15 +1092,10 @@ sc_pkcs15init_init_prkdf(struct sc_pkcs15_card *p15card,
 		key_info->native = 0;
 	}
 
-	if (keyargs->id.len != 0 && (keyargs->flags & SC_PKCS15INIT_SPLIT_KEY)) {
-		/* Split key; this ID exists already, don't check for
-		 * the pkcs15 object */
-	} else {
-		/* Select a Key ID if the user didn't specify one,
-		 * otherwise make sure it's compatible with our intended use */
-		r = select_id(p15card, SC_PKCS15_TYPE_PRKEY, &keyargs->id);
-		SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, r, "Cannot select ID for PrKey object");
-	}
+	/* Select a Key ID if the user didn't specify one,
+	 * otherwise make sure it's compatible with our intended use */
+	r = select_id(p15card, SC_PKCS15_TYPE_PRKEY, &keyargs->id);
+	SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, r, "Cannot select ID for PrKey object");
 
 	key_info->id = keyargs->id;
 
@@ -2105,15 +2110,19 @@ done:
 static int 
 select_id(struct sc_pkcs15_card *p15card, int type, struct sc_pkcs15_id *id)
 {
+	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_id unused_id;
 	struct sc_pkcs15_object *obj;
 	unsigned int nid = DEFAULT_ID;
 	int r;
 
+	SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_NORMAL);
 	/* If the user provided an ID, make sure we can use it */
 	if (id->len != 0) {
 		r = sc_pkcs15_find_object_by_id(p15card, type, id, &obj);
-		return (r == SC_ERROR_OBJECT_NOT_FOUND) ? 0 : r;
+		if (r == SC_ERROR_OBJECT_NOT_FOUND)
+			r = 0;
+		SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_VERBOSE, r);
 	}
 
 	memset(&unused_id, 0, sizeof(unused_id));
@@ -2131,14 +2140,10 @@ select_id(struct sc_pkcs15_card *p15card, int type, struct sc_pkcs15_id *id)
 				struct sc_pkcs15_search_key search_key;
 
 				memset(&search_key, 0, sizeof(search_key));
-				search_key.class_mask = 
-					SC_PKCS15_SEARCH_CLASS_PUBKEY |
-					SC_PKCS15_SEARCH_CLASS_CERT;
+				search_key.class_mask = SC_PKCS15_SEARCH_CLASS_PUBKEY | SC_PKCS15_SEARCH_CLASS_CERT;
 				search_key.id = id;
 
-				r = sc_pkcs15_search_objects(p15card,
-						&search_key,
-						NULL, 0);
+				r = sc_pkcs15_search_objects(p15card, &search_key, NULL, 0);
 				/* If there is a pubkey or cert with
 				 * this ID, skip it. */
 				if (r > 0)
@@ -2152,10 +2157,10 @@ select_id(struct sc_pkcs15_card *p15card, int type, struct sc_pkcs15_id *id)
 
 	if (unused_id.len) {
 		*id = unused_id;
-		return 0;
+		SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_VERBOSE, 0);
 	}
 	
-	return SC_ERROR_TOO_MANY_OBJECTS;
+	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_VERBOSE, SC_ERROR_TOO_MANY_OBJECTS);
 }
 
 

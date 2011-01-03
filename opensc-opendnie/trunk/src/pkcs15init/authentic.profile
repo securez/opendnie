@@ -40,9 +40,8 @@ PIN user-pin {
     attempts            = 5;
     max-length          = 4;
     min-length          = 4;
-    flags                = 0x10; # initialized
-    reference           = 193;
-    sen_reference        = 7;
+    flags               = 0x10; # initialized
+    reference           = 1;
 }
 PIN so-pin {
     auth-id = FF;
@@ -122,7 +121,7 @@ filesystem {
             }
 
             BSO template-private-key {
-		ACL     = UPDATE=CHV1, DELETE=CHV1, DECIPHER=CHV1, AUTHENTICATE=CHV1, GENERATE=CHV1, SIGN=NEVER;
+		ACL     = UPDATE=CHV1, DELETE=CHV1, PSO-DECRYPT=CHV1, INTERNAL-AUTHENTICATE=CHV1, GENERATE=CHV1, PSO-COMPUTE-SIGNATURE=NEVER;
             }
 
             BSO template-public-key {

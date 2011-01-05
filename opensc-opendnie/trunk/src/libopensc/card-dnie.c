@@ -175,7 +175,7 @@ static int dnie_get_environment(sc_context_t *ctx,dnie_private_data_t *priv) {
  */
 static int ask_user_consent(sc_card_t *card) {
    if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
-   sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Libassuan support is off. User Consent disabled");
+   sc_log(card->ctx,,"Libassuan support is off. User Consent disabled");
    return SC_SUCCESS;
 }
 
@@ -194,17 +194,18 @@ static int ask_user_consent(sc_card_t *card) {
     assuan_fd_t noclosefds[2];
     assuan_context_t ctx; 
     if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
+    
     dnie_get_environment(card->ctx,&dnie_priv);
     if (dnie_priv.user_consent_enabled==0) {
-        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"User Consent is disabled in configuration file");
+        sc_log(card->ctx,"User Consent is disabled in configuration file");
         return SC_SUCCESS;
     }
     res=stat(dnie_priv.user_consent_app,&buf);
     if (res!=0) {
       /* TODO: check that pinentry file is executable */
-      sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Invalid pinentry application: %s\n",dnie_priv.user_consent_app);
-       SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+      sc_log(card->ctx,"Invalid pinentry application: %s\n",dnie_priv.user_consent_app);
+       LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     argv[0]=dnie_priv.user_consent_app;
     argv[1]=NULL;
@@ -214,15 +215,15 @@ static int ask_user_consent(sc_card_t *card) {
 #ifdef HAVE_LIBASSUAN_2
     res = assuan_new(&ctx);
     if (res!=0) {
-      sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Can't create the User Consent environment: %s\n",_gpg_error(res));
-      SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INTERNAL);
+      sc_log(card->ctx,"Can't create the User Consent environment: %s\n",_gpg_error(res));
+      LOG_FUNC_RETURN(card->ctx,SC_ERROR_INTERNAL);
     }
     res = assuan_pipe_connect(ctx,dnie_priv.user_consent_app,argv,noclosefds,NULL,NULL,0);
 #else 
     res = assuan_pipe_connect(&ctx,dnie_priv.user_consent_app,argv,0);
 #endif
     if (res!=0) {
-        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"Can't connect to the User Consent module: %s\n",_gpg_error(res));
+        sc_log(card->ctx,"Can't connect to the User Consent module: %s\n",_gpg_error(res));
         res=SC_ERROR_INVALID_ARGUMENTS; /* invalid or not available pinentry */
         goto exit;
     }
@@ -231,20 +232,20 @@ static int ask_user_consent(sc_card_t *card) {
        "SETDESC Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?", 
        NULL, NULL, NULL, NULL, NULL, NULL);
     if (res!=0) {
-       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETDESC: %s\n", _gpg_error(res));
+       sc_log(card->ctx,"SETDESC: %s\n", _gpg_error(res));
        res=SC_ERROR_CARD_CMD_FAILED; /* perhaps should use a better errcode */
        goto exit;
     }
     res = assuan_transact(ctx,"CONFIRM",NULL,NULL,NULL,NULL,NULL,NULL);
 #ifdef HAVE_LIBASSUAN_1
     if (res == ASSUAN_Canceled) {
-       sc_debug(card->ctx,SC_LOG_DEBUG_VERBOSE,"CONFIRM: signature cancelled by user");
+       sc_log(card->ctx,"CONFIRM: signature cancelled by user");
        res= SC_ERROR_NOT_ALLOWED;
        goto exit;
     }
 #endif
     if (res) {
-       sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"SETERROR: %s\n",_gpg_error(res));
+       sc_log(card->ctx,"SETERROR: %s\n",_gpg_error(res));
        res=SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
      } else {
        res=SC_SUCCESS;
@@ -255,7 +256,7 @@ exit:
 #else
     assuan_disconnect(ctx);
 #endif
-    SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,res);
+    LOG_FUNC_RETURN(card->ctx,res);
 }
 #endif
 
@@ -282,12 +283,12 @@ int dnie_read_file(
     int res = SC_SUCCESS;
     if( (card==NULL) || (card->ctx==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx= card->ctx;
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     if (!buffer || !length || !path ) /* check received arguments */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     /* try to adquire lock on card */
     res=sc_lock(card);
-    SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, res, "sc_lock() failed");
+    LOG_TEST_RET(ctx, res, "sc_lock() failed");
     /* select file by mean of iso7816 ops */
     res=iso_ops->select_file(card,path,file);
     if (res!=SC_SUCCESS) goto dnie_read_file_err;
@@ -328,7 +329,7 @@ dnie_read_file_err:
     if (*file) sc_file_free(*file);
 dnie_read_file_end:
     sc_unlock(card);
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,res);
+    LOG_FUNC_RETURN(ctx,res);
 }
 
 /************************** cardctl defined operations *******************/
@@ -344,9 +345,9 @@ dnie_read_file_end:
 static int dnie_generate_key(sc_card_t *card, void *data) {
     if ( (card==NULL) || (data==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     int result=SC_ERROR_NOT_SUPPORTED;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     /* TODO: write dnie_generate_key() */
-    SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(card->ctx,result);
 }
 
 /**
@@ -361,7 +362,7 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
     u8        rbuf[SC_MAX_APDU_BUFFER_SIZE];
     if ( (card==NULL) || (card->ctx==NULL) || (serial==NULL) ) 
         return SC_ERROR_INVALID_ARGUMENTS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     if (card->type!=SC_CARD_TYPE_DNIE_USER) return SC_ERROR_NOT_SUPPORTED;
     /* if serial number is cached, use it */
     if (card->serialnr.len) {
@@ -379,7 +380,7 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
     apdu.datalen = 0;
     /* send apdu */
     result=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU transmit failed");
+    LOG_TEST_RET(card->ctx,result,"APDU transmit failed");
     if (apdu.sw1 != 0x90 || apdu.sw2 != 0x00) return SC_ERROR_INTERNAL;
     /* cache serial number */
     memcpy(card->serialnr.value, apdu.resp, 7*sizeof(u8));
@@ -399,10 +400,10 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
  * this function. */
 static int dnie_match_card(struct sc_card *card){
     int result=0;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     int matched=_sc_match_atr(card,dnie_atrs,&card->type);
     result=(matched>=0)? SC_SUCCESS:SC_ERROR_NO_CARD_SUPPORT;
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(card->ctx,result);
 }
 
 /* Called when ATR of the inserted card matches an entry in ATR
@@ -410,8 +411,8 @@ static int dnie_match_card(struct sc_card *card){
  * the card cannot be handled with this driver. */
 static int dnie_init(struct sc_card *card){
     int result=SC_SUCCESS;
-    assert(card!=NULL);
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
+    LOG_FUNC_CALLED(card->ctx);
 
     /* if recognized as terminated DNIe card, return error */
     if (card->type==SC_CARD_TYPE_DNIE_TERMINATED) {
@@ -444,16 +445,16 @@ static int dnie_init(struct sc_card *card){
     _sc_card_add_rsa_alg(card,1024,algoflags,0);
     _sc_card_add_rsa_alg(card,2048,algoflags,0);
     
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+    result=SC_SUCCESS;
 dnie_init_error:
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,result);
+    LOG_FUNC_RETURN(card->ctx,result);
 }
 
 /* Called when the card object is being freed.  finish() has to
  * deallocate all possible private data. */
 static int dnie_finish(struct sc_card *card) {
     int result=SC_SUCCESS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     /* disable sm channel if stablished */
     dnie_sm_init(card, &dnie_priv.sm_handler, DNIE_SM_NONE);
     /* free any cached data */
@@ -465,7 +466,7 @@ static int dnie_finish(struct sc_card *card) {
         free(pt);
         pt=next;
     }
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(card->ctx,result);
 }
 
 /* Called before invoke card_driver->ops->transmit.
@@ -475,15 +476,16 @@ static int dnie_finish(struct sc_card *card) {
  * Returns SC_SUCCESS or error code */
 static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *from,sc_apdu_t *to,int flag) {
     int res=SC_SUCCESS;
-    assert( (card!=NULL) && (from!=NULL) && (to!=NULL) );
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if( (card==NULL) || (card->ctx==NULL) || (from==NULL) || (to==NULL) )
+        return SC_ERROR_INVALID_ARGUMENTS;
+    LOG_FUNC_CALLED(card->ctx);
     if (dnie_priv.sm_handler==NULL) { /* not initialized yet: time to do */
         res=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_NONE);
-        if (res!=SC_SUCCESS) SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,res);
+        if (res!=SC_SUCCESS) LOG_FUNC_RETURN(card->ctx,res);
     }
     /* encode/decode apdu */
     res=dnie_sm_wrap_apdu(card,dnie_priv.sm_handler,from,to,flag);
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,res);
+    LOG_FUNC_RETURN(card->ctx,res);
 }
 
 /* ISO 7816-4 functions */
@@ -494,11 +496,11 @@ static int dnie_read_binary(struct sc_card *card,
                        size_t count,
                        unsigned long flags){
     int result=SC_SUCCESS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     /* TODO: dnie_read_binary: detect and use cache */
     /* data is not cached: use std iso function */
     result=iso_ops->read_binary(card,idx,buf,count, flags);
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(card->ctx, result);
 }
 
 /* select_file: Does the equivalent of SELECT FILE command specified
@@ -508,7 +510,7 @@ static int dnie_select_file(struct sc_card *card,
                        const struct sc_path *path,
                        struct sc_file **file_out){
     int result=SC_SUCCESS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     /* Manual says that some special paths store data in compressed
      * format. So trap those paths, and perform file_read() & uncompress.
      * in that way next read_binary call will use catched data */
@@ -519,7 +521,7 @@ static int dnie_select_file(struct sc_card *card,
         /* file found in cache */
         dnie_priv.cache_pt=pt;
         *file_out=pt->file;
-        SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+        LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
     }
     /* arriving here means file is not in cache: read and store */
     /* create a new cache entry */
@@ -544,11 +546,11 @@ static int dnie_select_file(struct sc_card *card,
     dnie_priv.cache_pt=cache;
     /* and set up return values */
     *file_out=cache->file;
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,SC_SUCCESS);
+    LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
 select_file_error:
     if (cache && cache->file) sc_file_free(cache->file);
     if (cache) free(cache);
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,result);
+    LOG_FUNC_RETURN(card->ctx,result);
 }
 
 /* Get challenge: retrieve 8 random bytes for any further use
@@ -564,7 +566,8 @@ static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len) {
 	sc_apdu_t apdu;
     u8 buf[10];
     int result=SC_SUCCESS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
+    LOG_FUNC_CALLED(card->ctx);
     /* just a copy of iso7816::get_challenge() but call dnie_check_sw to
      * look for extra error codes */
     if ((rnd==NULL) || (len<=0)) {
@@ -581,7 +584,7 @@ static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len) {
     while (len > 0) {
         size_t n = len > 8 ? 8 : len;
         result = sc_transmit_apdu(card, &apdu);
-        SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU transmit failed");
+        LOG_TEST_RET(card->ctx,result,"APDU transmit failed");
         if (apdu.resplen != 8) {
             result=sc_check_sw(card, apdu.sw1, apdu.sw2);
             goto dnie_get_challenge_error;
@@ -592,7 +595,7 @@ static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len) {
     }
     result=SC_SUCCESS;
 dnie_get_challenge_error:
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(card->ctx,result);
 }
 
 /*
@@ -601,12 +604,12 @@ dnie_get_challenge_error:
 
 /* logout: Resets all access rights that were gained. */
 static int dnie_logout(struct sc_card *card){
-    assert(card && card->ctx);
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if ( (card==NULL) || (card->ctx==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    LOG_FUNC_CALLED(card->ctx);
     /* disable and free any sm channel related data */
     int result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_NONE);
     /* TODO: _logout() see comments.txt on what to do here */
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(card->ctx, result);
 }
 
 /* set_security_env:  Initializes the security environment on card
@@ -620,9 +623,9 @@ static int dnie_set_security_env(struct sc_card *card,
     u8 sbuf[SC_MAX_APDU_BUFFER_SIZE]; /* buffer to compose apdu data */
     u8 *p=sbuf;
     int result=SC_SUCCESS;
-    if ( (card==NULL) || (env==NULL) ) 
-      SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_ARGUMENTS);
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if ( (card==NULL) || (card->ctx==NULL) || (env==NULL) ) 
+      return SC_ERROR_INVALID_ARGUMENTS;
+    LOG_FUNC_CALLED(card->ctx);
 
     /* check for algorithms */
     if (env->flags & SC_SEC_ENV_ALG_REF_PRESENT) {
@@ -633,7 +636,7 @@ static int dnie_set_security_env(struct sc_card *card,
         case SC_ALGORITHM_GOSTR3410: 
         default: result=SC_ERROR_NOT_SUPPORTED; break;
       }
-      SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Unsupported algorithm");
+      LOG_TEST_RET(card->ctx,result,"Unsupported algorithm");
       if ( (env->algorithm_flags & SC_ALGORITHM_RSA_HASH_SHA1 )==0) {
         result=SC_ERROR_NOT_SUPPORTED;
         /* TODO: 
@@ -641,7 +644,7 @@ static int dnie_set_security_env(struct sc_card *card,
          * some docs where states that SHA256 is also handled
          */
       }
-      SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Only RSA with SHA1 is supported");
+      LOG_TEST_RET(card->ctx,result,"Only RSA with SHA1 is supported");
       /* ok: insert algorithm reference into buffer */
       *p++=0x80; /* algorithm reference tag */
       *p++=0x01; /* len */
@@ -651,7 +654,7 @@ static int dnie_set_security_env(struct sc_card *card,
     /* check for key references */
     if (env->flags & SC_SEC_ENV_KEY_REF_PRESENT) {
       if (env->key_ref_len!=1) result=SC_ERROR_NOT_SUPPORTED;
-      SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Invalid key id");
+      LOG_TEST_RET(card->ctx,result,"Invalid key id");
       /* ok: insert key reference into buffer */
       if (env->flags & SC_SEC_ENV_KEY_REF_ASYMMETRIC) 
            *p++ = 0x83;
@@ -690,7 +693,7 @@ static int dnie_set_security_env(struct sc_card *card,
         apdu.p2=0xA4;
         break;
       default:
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
 
     /* complete apdu contents with buffer data */
@@ -705,10 +708,10 @@ static int dnie_set_security_env(struct sc_card *card,
 
     /* send composed apdu and parse result */
     result=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"Set Security Environment failed");
+    LOG_TEST_RET(card->ctx,result,"Set Security Environment failed");
     result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
 dnie_set_sec_env_end:
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(card->ctx,result);
 }
 
 /* decipher:  Engages the deciphering operation.  Card will use the
@@ -723,13 +726,13 @@ static int dnie_decipher(struct sc_card *card,
     size_t len;
     int result=SC_SUCCESS;
     if ( (card==NULL) || (card->ctx==NULL) )return SC_ERROR_INVALID_ARGUMENTS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     if ( (crgram==NULL) || (out==NULL) || (crgram_len>255) ) {
-      SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+      LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     /* make sure that Secure Channel is on */
     result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"decipher(); Cannot establish SM");
+    LOG_TEST_RET(card->ctx,result,"decipher(); Cannot establish SM");
 
     /* Official driver uses an undocumented proprietary APDU
      * (90 74 40 keyID). This code uses standard 00 2A 80 8x one)
@@ -752,14 +755,14 @@ static int dnie_decipher(struct sc_card *card,
     apdu.le = 256;
     /* send apdu */
     result = sc_transmit_apdu(card, &apdu);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU transmit failed");
+    LOG_TEST_RET(card->ctx,result,"APDU transmit failed");
     /* check response */
     result=sc_check_sw(card,apdu.sw1,apdu.sw2);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"decipher returned error");
+    LOG_TEST_RET(card->ctx,result,"decipher returned error");
     /* responde ok: fill result data and return */
     len = apdu.resplen > outlen ? outlen : apdu.resplen;
     memcpy(out, apdu.resp, len);
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, len);
+    LOG_FUNC_RETURN(card->ctx, len);
 }
 
 /* compute_signature:  Generates a digital signature on the card.  Similiar
@@ -775,20 +778,20 @@ static int dnie_compute_signature(struct sc_card *card,
     /* some preliminar checks */
     if ((card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     /* OK: start working */
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     /* more checks */
     if ( (data==NULL) || (out==NULL))
-      SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+      LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     if (datalen > SC_MAX_APDU_BUFFER_SIZE || outlen > SC_MAX_APDU_BUFFER_SIZE)
-      SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,SC_ERROR_BUFFER_TOO_SMALL);
+      LOG_FUNC_RETURN(card->ctx,SC_ERROR_BUFFER_TOO_SMALL);
 
     /* ensure that secure channel is stablished */
     result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"decipher(); Cannot establish SM");
+    LOG_TEST_RET(card->ctx,result,"decipher(); Cannot establish SM");
     /* (Requested by DGP): on signature operation, ask user consent */
     if (dnie_priv.rsa_key_ref==0x02) { /* TODO: revise key ID handling */
         result=ask_user_consent(card);
-        SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"User consent denied");
+        LOG_TEST_RET(card->ctx,result,"User consent denied");
     }
     /* TODO _compute_signature(): handle separate hash process
        Manual says that dnie card can do hashing operations
@@ -813,14 +816,14 @@ static int dnie_compute_signature(struct sc_card *card,
     apdu.datalen = datalen;
     /* tell card to compute signature */
     result = sc_transmit_apdu(card, &apdu);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU transmit failed");
+    LOG_TEST_RET(card->ctx,result,"APDU transmit failed");
     /* check response */
     result=sc_check_sw(card,apdu.sw1,apdu.sw2);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,result,"APDU response error");
+    LOG_TEST_RET(card->ctx,result,"APDU response error");
     /* ok: copy result from buffer */
     memcpy(out,rbuf,outlen);
     /* and return response length */
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,apdu.resplen);
+    LOG_FUNC_RETURN(card->ctx,apdu.resplen);
 }
 
 /*
@@ -835,27 +838,27 @@ static int dnie_check_sw(struct sc_card *card,
                          unsigned int sw2){
     int res=SC_SUCCESS;
     int n=0;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     /* check specific dnie errors */
     for( n=0; dnie_errors[n].SWs!=0; n++) {
       if (dnie_errors[n].SWs == ((sw1 << 8) | sw2)) {
-        sc_debug(card->ctx,SC_LOG_DEBUG_NORMAL,"%s",dnie_errors[n].errorstr);
+        sc_log(card->ctx,"%s",dnie_errors[n].errorstr);
         return dnie_errors[n].errorno;
       }
     }
     /* arriving here means check for supported iso error codes */
     res=iso_ops->check_sw(card,sw1,sw2);
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,res);
+    LOG_FUNC_RETURN(card->ctx,res);
 }
 
 static int dnie_card_ctl(struct sc_card *card,
                          unsigned long request,
                          void *data){
     int result=SC_SUCCESS;
-    if ( card==NULL) return SC_ERROR_INVALID_ARGUMENTS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if ( (card==NULL) || (card->ctx==NULL))  return SC_ERROR_INVALID_ARGUMENTS;
+    LOG_FUNC_CALLED(card->ctx);
     if ( data==NULL) {
-        SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS); 
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS); 
     }
     switch(request) {
         /* obtain lifecycle status by reading card->type */
@@ -870,18 +873,18 @@ static int dnie_card_ctl(struct sc_card *card,
                     result = SC_CARDCTRL_LIFECYCLE_OTHER; break;
            }
            *(int*)data=result;
-           SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+           LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
         /* call card to obtain serial number */
         case SC_CARDCTL_GET_SERIALNR:
            result=dnie_get_serialnr(card, (sc_serial_number_t *) data);
-           SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,result);
+           LOG_FUNC_RETURN(card->ctx,result);
         case SC_CARDCTL_DNIE_GENERATE_KEY:
            /* some reports says that this card supports genkey */
            result=dnie_generate_key(card,data);
-           SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,result);
+           LOG_FUNC_RETURN(card->ctx,result);
         default:
            /* default: unsupported function */
-           SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_NOT_SUPPORTED);
+           LOG_FUNC_RETURN(card->ctx,SC_ERROR_NOT_SUPPORTED);
     }
 }
 
@@ -905,10 +908,10 @@ static int dnie_process_fci(struct sc_card *card,
     int n=0;
     if ((card==NULL) || (card->ctx==NULL) || (file==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     /* first of all, let iso do the hard work */
     res = iso_ops -> process_fci(card,file,buf,buflen);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,res,"iso7816_process_fci() failed");
+    LOG_TEST_RET(ctx,res,"iso7816_process_fci() failed");
     /* if tag 0x85 is received, then file->prop_attr_len should be filled
      * by sc_file_set_prop_attr() code. So check and set data according manual 
      * Note errata at pg 35 of Manual  about DF identifier (should be 0x38) */
@@ -1004,7 +1007,7 @@ static int dnie_process_fci(struct sc_card *card,
     /* bytes 11 and 12 (if present) states Control bytes for RSA crypto files */
     res=SC_SUCCESS; /* arriving here means success */
 dnie_process_fci_end:
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,res);
+    LOG_FUNC_RETURN(card->ctx,res);
 }
 
 /* pin_cmd: verify/change/unblock command; optionally using the
@@ -1021,9 +1024,9 @@ static int dnie_pin_cmd(struct sc_card * card,
     int pinlen=0;
     int padding=0;
 
-    if ( (card==NULL) || (data==NULL) ) 
-       SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    if ( (card==NULL) || (card->ctx==NULL) || (data==NULL) ) 
+       return SC_ERROR_INVALID_ARGUMENTS;
+    LOG_FUNC_CALLED(card->ctx);
 
     /* some flags and settings from documentation */
     data->flags &= ~SC_PIN_CMD_NEED_PADDING; /* no pin padding */
@@ -1031,14 +1034,14 @@ static int dnie_pin_cmd(struct sc_card * card,
 
     /* ensure that card is in USER Lifecycle */
     res=dnie_card_ctl(card,SC_CARDCTL_LIFECYCLE_GET,&lc);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Cannot get card LC status");
+    LOG_TEST_RET(card->ctx,res,"Cannot get card LC status");
     if (lc!=SC_CARDCTRL_LIFECYCLE_USER) {
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_CARD);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_CARD);
     }
 
     /* ensure that secure channel is established */
     res=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"Establish SM failed");
+    LOG_TEST_RET(card->ctx,res,"Establish SM failed");
 
     /* what about pinpad support? */
     /* NOTE: 
@@ -1046,7 +1049,7 @@ static int dnie_pin_cmd(struct sc_card * card,
      * as a temporary solution, mark use pinpad as an error 
      */
     if (data->flags & SC_PIN_CMD_USE_PINPAD ) {
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_NOT_SUPPORTED);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_NOT_SUPPORTED);
     }
 
     /* only allow changes on CHV pin ) */
@@ -1055,9 +1058,9 @@ static int dnie_pin_cmd(struct sc_card * card,
       case SC_AC_TERM: /* Terminal auth */
       case SC_AC_PRO:  /* SM auth */
       case SC_AC_AUT:  /* Key auth */
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_NOT_SUPPORTED);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_NOT_SUPPORTED);
       default: 
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     /* This DNIe driver only supports VERIFY operation */
     switch (data->cmd) {
@@ -1065,9 +1068,9 @@ static int dnie_pin_cmd(struct sc_card * card,
       case SC_PIN_CMD_CHANGE:
       case SC_PIN_CMD_UNBLOCK:
       case SC_PIN_CMD_GET_INFO:
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_NOT_SUPPORTED);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_NOT_SUPPORTED);
       default: 
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     /* Arriving here means that's all checks are OK. So do task */
 
@@ -1075,7 +1078,7 @@ static int dnie_pin_cmd(struct sc_card * card,
     if (data->flags & SC_PIN_CMD_NEED_PADDING) padding=1;
     data->pin1.offset=0;
     res=sc_build_pin(pinbuffer,sizeof(pinbuffer),&data->pin1,padding);
-    if (res<0) SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,res);
+    if (res<0) LOG_FUNC_RETURN(card->ctx,res);
     pinlen=res;
 
     /* compose apdu */
@@ -1093,13 +1096,13 @@ static int dnie_pin_cmd(struct sc_card * card,
 
     /* and send to card throught virtual channel */
     res=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,res,"VERIFY APDU Transmit fail");
+    LOG_TEST_RET(card->ctx,res,"VERIFY APDU Transmit fail");
     
     /* check response and if requested setup tries_left */
     if (tries_left!=NULL) { /* returning tries_left count is requested */
       if ( (apdu.sw1==0x63) && ((apdu.sw2 & 0xF0)==0xC0) ) {
         *tries_left=apdu.sw2&0x0F;
-        SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_PIN_CODE_INCORRECT);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_PIN_CODE_INCORRECT);
       }
     }
     res=dnie_check_sw(card,apdu.sw1,apdu.sw2); /* not a pinerr: parse result */
@@ -1107,7 +1110,7 @@ static int dnie_pin_cmd(struct sc_card * card,
     /* the end: a bit of Mister Proper and return */
     memset(&apdu, 0, sizeof(apdu)); /* clear buffer */
     data->apdu = NULL;
-    SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE,res);
+    LOG_FUNC_RETURN(card->ctx,res);
 }
 
 /**********************************************************************/

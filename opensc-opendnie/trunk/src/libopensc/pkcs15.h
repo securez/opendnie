@@ -438,8 +438,7 @@ typedef struct sc_pkcs15_unusedspace sc_pkcs15_unusedspace_t;
 typedef struct sc_pkcs15_sec_env_info {
 	int			se;
 	struct sc_object_id	owner;
-	u8			aid[SC_MAX_AID_SIZE];
-	size_t			aid_len;
+	struct sc_aid aid;
 } sc_pkcs15_sec_env_info_t;
 
 typedef struct sc_pkcs15_tokeninfo {
@@ -503,7 +502,7 @@ typedef struct sc_pkcs15_card {
  * and initializes a new PKCS #15 card object.  Will return
  * SC_ERROR_PKCS15_APP_NOT_FOUND, if the card hasn't got a
  * valid PKCS #15 file structure. */
-int sc_pkcs15_bind(struct sc_card *card,
+int sc_pkcs15_bind(struct sc_card *card, struct sc_aid *aid,
 		   struct sc_pkcs15_card **pkcs15_card);
 /* sc_pkcs15_unbind:  Releases a PKCS #15 card object, and frees any
  * memory allocations done on the card object. */

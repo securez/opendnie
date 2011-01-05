@@ -27,10 +27,6 @@
 #include "types.h"
 #include "iso7816.h"
 
-#define LOGN_FUNC_CALLED(ctx) SC_FUNC_CALLED((ctx), SC_LOG_DEBUG_NORMAL)
-#define LOGN_FUNC_RETURN(ctx, r) SC_FUNC_RETURN((ctx), SC_LOG_DEBUG_NORMAL, (r))
-#define LOGN_TEST_RET(ctx, r, text) SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, r, text)
-
 #ifndef CKM_RSA_PKCS
 	#define CKM_RSA_PKCS		0x00000001
 	#define CKM_SHA1_RSA_PKCS	0x00000006
@@ -133,30 +129,30 @@ struct sc_authentic_tlv {
 	unsigned char *value;
 };
 
+/* 
+ * DOCP (Data Object Control Parameters)
+ * Common holder for the all DOCP types.
+ */
 struct sc_authentic_sdo_docp {
-	unsigned char mech, id, security_parameter;
+	unsigned char mech;			/* Crypto Mechanism ID */
+	unsigned char id;			/* Data Object ID */
+	unsigned char security_parameter;	/* Security Control Parameter */
 	unsigned char velocity_limit, try_limit;
 
-	unsigned char acl_data[16];
+	unsigned char acl_data[16];		/* Encoded AuthentIC ACL data */
 	size_t acl_data_len;
 
 	unsigned char usage_counter[2];
 };
 
 struct sc_authentic_sdo  {
-	unsigned char sdo_class;
-	unsigned char sdo_ref;
-
-	unsigned int usage;
-
 	struct sc_authentic_sdo_docp docp;
-
 	union {
 		struct sc_pkcs15_prkey *prvkey;
 	} data;
 
 	struct sc_file *file;
-	
+
 	unsigned magic;
 };
 

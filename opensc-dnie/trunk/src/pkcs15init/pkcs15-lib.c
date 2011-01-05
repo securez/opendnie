@@ -459,7 +459,7 @@ sc_pkcs15init_erase_card(struct sc_pkcs15_card *p15card, struct sc_profile *prof
 {
 	/* Needs the 'SOPIN' AUTH pkcs15 object.
 	 * So that, SOPIN can be found by it's reference. */
-	if (sc_pkcs15_bind(p15card->card, &p15card) >= 0)
+	if (sc_pkcs15_bind(p15card->card, NULL, &p15card) >= 0)
 		profile->p15_data = p15card;						        
 
 	if (profile->ops->erase_card == NULL)
@@ -771,8 +771,8 @@ sc_pkcs15init_add_app(struct sc_card *card, struct sc_profile *profile,
 
 	app->path = p15card->file_app->path;
 	if (p15card->file_app->namelen <= SC_MAX_AID_SIZE) {
-		app->aid_len = p15card->file_app->namelen;
-		memcpy(app->aid, p15card->file_app->name, app->aid_len);
+		app->aid.len = p15card->file_app->namelen;
+		memcpy(app->aid.value, p15card->file_app->name, app->aid.len);
 	}
 
 	/* set serial number if explicitly specified */
@@ -2348,7 +2348,7 @@ sc_pkcs15init_update_dir(struct sc_pkcs15_card *p15card,
 
 		sc_format_path("3F002F00", &path);
 		r = sc_profile_get_file_by_path(profile, &path, &dir_file);
-		SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r, "DIR file not defined in profile");
+		SC_TEST_RET(ctx, SC_LOG_DEBUG_NORMAL, r, "DIR file not defined in profile");
 
 		/* Create DIR file */
 		r = sc_pkcs15init_update_file(profile, p15card, dir_file, NULL, 0);
@@ -2359,7 +2359,7 @@ sc_pkcs15init_update_dir(struct sc_pkcs15_card *p15card,
 		card->app[card->app_count++] = app;
 		r = sc_update_dir(card, NULL);
 	}
-	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_VERBOSE, r);
+	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, r);
 }
 
 

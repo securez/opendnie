@@ -161,15 +161,15 @@ static int dnie_sm_verify_icc_certificates(
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     if (!sub_ca_cert || !icc_cert ) /* check received arguments */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
 
     /* compose root_ca_public key with data provided by Dnie Manual */
     root_ca_key= EVP_PKEY_new(); 
     root_ca_rsa = RSA_new();
     if ( !root_ca_key || !root_ca_rsa ) 
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_OUT_OF_MEMORY);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
     root_ca_rsa->n=BN_bin2bn(icc_root_ca_modulus,
                              sizeof(icc_root_ca_modulus),
                              root_ca_rsa->n);
@@ -207,8 +207,8 @@ static int dnie_sm_verify_icc_certificates(
 verify_icc_certificates_end:
     if (root_ca_key) EVP_PKEY_free(root_ca_key); /*implies root_ca_rsa free()*/
     if (sub_ca_key) EVP_PKEY_free(sub_ca_key);
-    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
+    if (res!=SC_SUCCESS) sc_log(ctx,msg);
+    LOG_FUNC_RETURN(ctx,res);
 }
 
 /**
@@ -229,9 +229,9 @@ static int dnie_sm_verify_cvc_certificate(
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     if (!cert || (len<=0) ) /* check received arguments */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
 
     /* compose apdu for Perform Security Operation (Verify cert) cmd */
     sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x2A,0x00,0xAE);
@@ -242,9 +242,9 @@ static int dnie_sm_verify_cvc_certificate(
 
     /* send composed apdu and parse result */
     result=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"Verify CVC certificate failed");
+    LOG_TEST_RET(ctx,result,"Verify CVC certificate failed");
     result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(ctx,result);
 }
 
 /**
@@ -270,9 +270,9 @@ static int dnie_sm_set_security_env(
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     if (!buffer || (length<=0) ) /* check received arguments */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
 
     /* compose apdu for Manage Security Environment cmd */
     sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,p1,p2);
@@ -283,9 +283,9 @@ static int dnie_sm_set_security_env(
 
     /* send composed apdu and parse result */
     result=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM Set Security Environment failed");
+    LOG_TEST_RET(ctx,result,"SM Set Security Environment failed");
     result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(ctx,result);
 }
 
 /**
@@ -307,9 +307,9 @@ static int dnie_sm_internal_auth(
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     if ( !data || (datalen<=0) ) /* check received arguments */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
 
     /* compose apdu for Internal Authenticate cmd */
     sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x88,0x00,0x00);
@@ -321,13 +321,13 @@ static int dnie_sm_internal_auth(
 
     /* send composed apdu and parse result */
     result=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM internal auth failed");
+    LOG_TEST_RET(ctx,result,"SM internal auth failed");
     result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM internal auth invalid response");
+    LOG_TEST_RET(ctx,result,"SM internal auth invalid response");
     if (apdu.resplen!=sizeof(sm->sig)) /* invalid number of bytes received */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_UNKNOWN_DATA_RECEIVED);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_UNKNOWN_DATA_RECEIVED);
     memcpy(sm->sig,apdu.resp,apdu.resplen); /* copy result to buffer */
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
 /**
@@ -381,10 +381,10 @@ static int dnie_sm_prepare_external_auth(
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
      /* check received arguments */
     if ( !icc_pubkey || !ifd_privkey || !serial || !sm )
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     buf1=calloc(128, sizeof(u8));
     buf2=calloc(128, sizeof(u8));
     buf3=calloc(128, sizeof(u8));
@@ -468,8 +468,8 @@ prepare_external_auth_end:
     if (sha_buf) { memset(sha_buf,0,74+32+8+1+7); free(sha_buf); }
     if (sha_data) { memset(sha_data,0,SHA_DIGEST_LENGTH); free(sha_data); }
 
-    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
+    if (res!=SC_SUCCESS) sc_log(ctx,msg);
+    LOG_FUNC_RETURN(ctx,res);
 }
 
 /**
@@ -484,7 +484,7 @@ static int dnie_sm_external_auth( sc_card_t *card, dnie_internal_sm_t *sm) {
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
 
     /* compose apdu for External Authenticate cmd */
     sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x82,0x00,0x00);
@@ -496,10 +496,10 @@ static int dnie_sm_external_auth( sc_card_t *card, dnie_internal_sm_t *sm) {
 
     /* send composed apdu and parse result */
     result=sc_transmit_apdu(card,&apdu);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM external auth failed");
+    LOG_TEST_RET(ctx,result,"SM external auth failed");
     result=sc_check_sw(card,apdu.sw1,apdu.sw2);
-    SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM external auth invalid response");
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+    LOG_TEST_RET(ctx,result,"SM external auth invalid response");
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
 /**
@@ -522,7 +522,7 @@ static int dnie_sm_compute_session_keys(
     /* safety check */
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     /* Just a literal transcription of cwa14890-1 sections 8.7.2 to 8.9 */
     kseed=calloc(32,sizeof(u8));
     data=calloc(32+4,sizeof(u8));
@@ -561,8 +561,8 @@ compute_session_keys_end:
     if (kseed) { memset(kseed,0,32); free(kseed); }
     if (data) { memset(data,0,32+4); free(data); }
     if (sha_data) { memset(sha_data,0,SHA_DIGEST_LENGTH); free(sha_data); }
-    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
+    if (res!=SC_SUCCESS) sc_log(ctx,msg);
+    LOG_FUNC_RETURN(ctx,res);
 }
 
 /*
@@ -622,7 +622,7 @@ static int dnie_sm_verify_internal_auth(
     BIGNUM *sigbn;
     if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     if (!ifdbuf || ifdlen!=16) res=SC_ERROR_INVALID_ARGUMENTS;
     if (!icc_pubkey || !ifd_privkey)  res=SC_ERROR_INVALID_ARGUMENTS;
     buf1= (u8 *) calloc(128,sizeof(u8)); /* 128: RSA key len in bytes */
@@ -712,8 +712,8 @@ verify_internal_done:
     if (buf3) free(buf3);
     if (bn) BN_free(bn);
     if (sigbn) BN_free(sigbn);
-    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);    
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+    if (res!=SC_SUCCESS) sc_log(ctx,msg);    
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
 /**
@@ -730,11 +730,11 @@ static int dnie_sm_increase_ssc(sc_card_t *card, dnie_sm_handler_t *handler) {
     sc_context_t *ctx=card->ctx; 
     dnie_internal_sm_t *sm=handler->sm_internal;
 
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     /* u8 arithmetic; exit loop if no carry */
     for(n=7;n>=0;n--) { sm->ssc[n]++; if ( (sm->ssc[n]) != 0x00 ) break; }
-    sc_debug(ctx,SC_LOG_DEBUG_VERBOSE,"Next SSC: '%s'",sc_dump_hex(sm->ssc,8));
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+    sc_log(ctx,"Next SSC: '%s'",sc_dump_hex(sm->ssc,8));
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
 /**
@@ -771,16 +771,16 @@ static int dnie_sm_create_secure_channel(
     sc_context_t *ctx=card->ctx; 
     dnie_internal_sm_t *sm=handler->sm_internal;
 
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     /* malloc required structures */
     serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
     path= (sc_path_t *) calloc(1,sizeof(sc_path_t));
     if ( (serial==NULL) || (path==NULL) )
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_OUT_OF_MEMORY);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
 
     /* ensure that our card is a DNIe */
     if (card->type!=SC_CARD_TYPE_DNIE_USER)
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_ERROR_INVALID_CARD);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_CARD);
 
     /* reset card (warm reset, do not unpower card) */
     sc_reset(card,0); 
@@ -933,8 +933,8 @@ csc_end:
     if (buffer)      free(buffer); /* no need to memset */
     if (icc_pubkey)  RSA_free(icc_pubkey);
     if (ifd_privkey) RSA_free(ifd_privkey);
-    if (res!=SC_SUCCESS) sc_debug(ctx,SC_LOG_DEBUG_NORMAL,msg);
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,res);
+    if (res!=SC_SUCCESS) sc_log(ctx,msg);
+    LOG_FUNC_RETURN(ctx,res);
 }
 
 /************************* public functions ***************/
@@ -946,7 +946,7 @@ int dnie_sm_init(
     int result;
     assert( (card!=NULL) && (card->ctx!=NULL) && (sm_handler!=NULL));
     sc_context_t *ctx=card->ctx;
-    SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(ctx);
     if (*sm_handler==NULL) {
         /* not initialized yet: time to do */
         handler=(dnie_sm_handler_t *) calloc(1,sizeof( dnie_sm_handler_t ));
@@ -965,12 +965,12 @@ int dnie_sm_init(
     }
     if (handler->state==final_state) {
         /* already done */
-        SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+        LOG_FUNC_RETURN(ctx,SC_SUCCESS);
     }
     /* call de-init if required*/
     if ( handler->deinit!=NULL) {
         result=handler->deinit(card);
-        SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,result,"SM Deinit() failed");
+        LOG_TEST_RET(ctx,result,"SM Deinit() failed");
     }
     /* now initialize to requested state */
     switch(final_state) {
@@ -980,7 +980,7 @@ int dnie_sm_init(
             handler->encode = NULL;
             break;
         case DNIE_SM_INPROGRESS: /* work in progress; (what about locks?) */
-            SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_NOT_ALLOWED);
+            LOG_FUNC_RETURN(ctx,SC_ERROR_NOT_ALLOWED);
         case DNIE_SM_INTERNAL:
             handler->state=DNIE_SM_INPROGRESS;
             result = dnie_sm_create_secure_channel(card,handler);
@@ -988,13 +988,13 @@ int dnie_sm_init(
             break;
         case DNIE_SM_EXTERNAL:
             /* TODO: support for remote (SSL) APDU handling */ 
-            SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_NOT_SUPPORTED);
+            LOG_FUNC_RETURN(ctx,SC_ERROR_NOT_SUPPORTED);
         default:
-            SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INVALID_ARGUMENTS);
+            LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     /* arriving here means success */
     handler->state=final_state;
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 
 sm_init_error:
     /* error in init: back into non-sm mode */
@@ -1002,7 +1002,7 @@ sm_init_error:
     handler->deinit = NULL;
     handler->encode = NULL;
     handler->encode = NULL;
-    SC_FUNC_RETURN(ctx,SC_LOG_DEBUG_NORMAL,result);
+    LOG_FUNC_RETURN(ctx,result);
 }
 
 /**
@@ -1053,13 +1053,13 @@ int dnie_sm_wrap_apdu(struct sc_card *card,/* card data */
     dnie_sm_handler_t *handler=(dnie_sm_handler_t *) sm_handler;
     if ( (card==NULL) || (handler==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     if ( (from==NULL) || (to==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
-    SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+    LOG_FUNC_CALLED(card->ctx);
     switch (handler->state) {
       case DNIE_SM_NONE:
       case DNIE_SM_INPROGRESS:
          /* just copy structure data */
          *to=*from; /* implicit memcpy() */
-         SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,SC_SUCCESS);
+         LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
       case DNIE_SM_INTERNAL:
       case DNIE_SM_EXTERNAL:
          result=dnie_sm_need_wrap(card,from,flag);
@@ -1073,10 +1073,10 @@ int dnie_sm_wrap_apdu(struct sc_card *card,/* card data */
          else         result=handler->decode(card,from,to); /* unwrap */
          break;
       default:
-         SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_NORMAL,SC_ERROR_INTERNAL);
+         LOG_FUNC_RETURN(card->ctx,SC_ERROR_INTERNAL);
     }
 dnie_wrap_apdu_end:
-    SC_FUNC_RETURN(card->ctx,SC_LOG_DEBUG_VERBOSE,result);
+    LOG_FUNC_RETURN(card->ctx,result);
 }
 
 /* end of secure_messaging.c */

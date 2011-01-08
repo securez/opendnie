@@ -940,6 +940,20 @@ csc_end:
 /************************* SM internal APDU encoding ******/
 
 /**
+ * ISO 7816 padding
+ * Adds an 0x80 at the end of buffer and as many zeroes to get len 
+ * multiple of 8
+ * Buffer must be long enougth to store additional bytes
+ *
+ *@param buffer where to compose data
+ *@param len pointer to buffer length
+ */
+static void dnie_sm_iso7816_padding(u8 *buffer,size_t *len) {
+    *(buffer+*len++)=0x80;
+    for(; (*len & 0x07)==0x00; *len++) *(buffer+*len)=0x00;
+}
+
+/**
  * Encode an APDU
  * Calling this functions means that It's has been verified
  * That source apdu needs encoding

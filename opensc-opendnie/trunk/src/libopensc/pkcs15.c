@@ -18,7 +18,9 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "config.h"
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -258,9 +260,6 @@ static const struct sc_asn1_entry c_asn1_ddo[] = {
 
 static void fix_authentic_ddo(struct sc_pkcs15_card *p15card)
 {
-	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_path tmp_path;
-
 	/* AuthentIC v3.2 card has invalid ODF and tokenInfo paths encoded into DDO.
 	 * Cleanup this attributes -- default values must be OK.
 	 */
@@ -578,6 +577,13 @@ void sc_pkcs15_card_free(struct sc_pkcs15_card *p15card)
 		free(p15card->tokeninfo->seInfo);
 	}
 	free(p15card->tokeninfo);
+	if (p15card->app)   {
+		if (p15card->app->label)
+			free(p15card->app->label);
+		if (p15card->app->ddo.value)
+			free(p15card->app->ddo.value);
+		free(p15card->app);
+	}
 	free(p15card);
 }
 
@@ -668,20 +674,40 @@ const sc_app_info_t * sc_find_app(sc_card_t *card, struct sc_aid *aid)
 	return NULL;
 }
 
+static struct sc_app_info *sc_dup_app_info(const struct sc_app_info *info)
+{
+	struct sc_app_info *out = calloc(1, sizeof(struct sc_app_info));
+
+	if (!out)
+		return NULL;
+
+	memcpy(out, info, sizeof(struct sc_app_info));
+
+	out->label = strdup(info->label);
+	if (!out->label)
+		return NULL;
+
+	out->ddo.value = malloc(info->ddo.len);
+	if (!out->ddo.value)
+		return NULL;
+	memcpy(out->ddo.value, info->ddo.value, info->ddo.len);
+
+	return out;
+}
+
 static int sc_pkcs15_bind_internal(sc_pkcs15_card_t *p15card, struct sc_aid *aid)
 {
-	unsigned char *buf = NULL;
-	int    err, ok = 0, ii;
-	size_t len;
 	sc_path_t tmppath;
 	sc_card_t    *card = p15card->card;
 	sc_context_t *ctx  = card->ctx;
 	sc_pkcs15_tokeninfo_t tokeninfo;
 	sc_pkcs15_df_t *df;
 	const sc_app_info_t *info = NULL;
+	unsigned char *buf = NULL;
+	size_t len;
+	int    err, ok = 0;
 
 	SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_NORMAL);
-
 	/* Enumerate apps now */
 	if (card->app_count < 0) {
 		err = sc_enum_apps(card);
@@ -703,8 +729,14 @@ static int sc_pkcs15_bind_internal(sc_pkcs15_card_t *p15card, struct sc_aid *aid
 		if (info->path.len)
 			p15card->file_app->path = info->path;
 
-		if (info->ddo)
-			parse_ddo(p15card, info->ddo, info->ddo_len);
+		if (info->ddo.value && info->ddo.len)
+			parse_ddo(p15card, info->ddo.value, info->ddo.len);
+
+		p15card->app = sc_dup_app_info(info);
+		if (!p15card->app)   {
+			err = SC_ERROR_OUT_OF_MEMORY;
+			goto end;
+		}
 	}
 	else if (aid)   {
 		sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "Application(aid:'%s') not found", sc_dump_hex(aid->value, aid->len));

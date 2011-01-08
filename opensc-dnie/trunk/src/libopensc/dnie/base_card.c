@@ -106,10 +106,10 @@ int _dnie_add_rsa_alg(sc_card_t *card, unsigned int key_length,
 }
 
 
-static int dnie_match_atr_table(sc_context_t *ctx, struct sc_atr_table *table, u8 *atr, size_t atr_len)
+static int dnie_match_atr_table(sc_context_t *ctx, struct sc_atr_table *table, struct sc_atr *atr)
 {
-        u8 *card_atr_bin = atr;
-        size_t card_atr_bin_len = atr_len;
+        u8 *card_atr_bin = atr->value;
+        size_t card_atr_bin_len = atr->len;
         char card_atr_hex[3 * SC_MAX_ATR_SIZE];
         size_t card_atr_hex_len;
         unsigned int i = 0;
@@ -173,7 +173,7 @@ int _dnie_match_atr(sc_card_t *card, struct sc_atr_table *table, int *type_out)
 
         if (card == NULL)
                 return -1;
-        res = dnie_match_atr_table(card->ctx, table, card->atr, card->atr_len);
+        res = dnie_match_atr_table(card->ctx, table, &card->atr);
         if (res < 0)
                 return res;
         if (type_out != NULL)

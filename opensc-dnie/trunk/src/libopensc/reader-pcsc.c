@@ -317,9 +317,9 @@ static int refresh_attributes(sc_reader_t *reader)
 			return SC_ERROR_INTERNAL;
 
 		/* Some cards have a different cold (after a powerup) and warm (after a reset) ATR  */
-		if (memcmp(priv->reader_state.rgbAtr, reader->atr, priv->reader_state.cbAtr) != 0) {
-			reader->atr_len = priv->reader_state.cbAtr;	
-			memcpy(reader->atr, priv->reader_state.rgbAtr, reader->atr_len);
+		if (memcmp(priv->reader_state.rgbAtr, reader->atr.value, priv->reader_state.cbAtr) != 0) {
+			reader->atr.len = priv->reader_state.cbAtr;	
+			memcpy(reader->atr.value, priv->reader_state.rgbAtr, reader->atr.len);
 		}
 		
 		/* Is the reader in use by some other application ? */
@@ -367,12 +367,12 @@ static int pcsc_detect_card_presence(sc_reader_t *reader)
 	SC_FUNC_RETURN(reader->ctx, SC_LOG_DEBUG_VERBOSE, reader->flags);
 }
 
-static int check_forced_protocol(sc_context_t *ctx, u8 *atr, size_t atr_len, DWORD *protocol)
+static int check_forced_protocol(sc_context_t *ctx, struct sc_atr *atr, DWORD *protocol)
 {
 	scconf_block *atrblock = NULL;
 	int ok = 0;
 
-	atrblock = _sc_match_atr_block(ctx, NULL, atr, atr_len);
+	atrblock = _sc_match_atr_block(ctx, NULL, atr);
 	if (atrblock != NULL) {
 		const char *forcestr;
 
@@ -411,7 +411,7 @@ static int pcsc_reconnect(sc_reader_t * reader, DWORD action)
 		return SC_ERROR_CARD_NOT_PRESENT;
 
 	/* Check if we need a specific protocol. refresh_attributes above already sets the ATR */
-	if (check_forced_protocol(reader->ctx, reader->atr, reader->atr_len, &tmp))
+	if (check_forced_protocol(reader->ctx, &reader->atr, &tmp))
 		protocol = tmp;
 
 	/* reconnect always unlocks transaction */
@@ -470,7 +470,7 @@ static int pcsc_connect(sc_reader_t *reader)
 	sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "Initial protocol: %s", reader->active_protocol == SC_PROTO_T1 ? "T=1" : "T=0");
 
 	/* Check if we need a specific protocol. refresh_attributes above already sets the ATR */
-	if (check_forced_protocol(reader->ctx, reader->atr, reader->atr_len, &tmp)) {
+	if (check_forced_protocol(reader->ctx, &reader->atr, &tmp)) {
 		if (active_proto != tmp) {
 			sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "Reconnecting to force protocol");
 			r = pcsc_reconnect(reader, SCARD_UNPOWER_CARD);
@@ -963,13 +963,17 @@ static int pcsc_detect_readers(sc_context_t *ctx)
 				continue;
 				
 			sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "Requesting reader features ... ");
-			
+
+			rv = SCARD_E_SHARING_VIOLATION;
+			/* Use DIRECT mode only if there is no card in the reader */
+			if (!(reader->flags & SC_READER_CARD_PRESENT)) {
 #ifndef _WIN32	/* Apple 10.5.7 and pcsc-lite previous to v1.5.5 do not support 0 as protocol identifier */
-			rv = gpriv->SCardConnect(gpriv->pcsc_ctx, reader->name, SCARD_SHARE_DIRECT, SCARD_PROTOCOL_T0|SCARD_PROTOCOL_T1, &card_handle, &active_proto);
+				rv = gpriv->SCardConnect(gpriv->pcsc_ctx, reader->name, SCARD_SHARE_DIRECT, SCARD_PROTOCOL_T0|SCARD_PROTOCOL_T1, &card_handle, &active_proto);
 #else
-			rv = gpriv->SCardConnect(gpriv->pcsc_ctx, reader->name, SCARD_SHARE_DIRECT, 0, &card_handle, &active_proto);
+				rv = gpriv->SCardConnect(gpriv->pcsc_ctx, reader->name, SCARD_SHARE_DIRECT, 0, &card_handle, &active_proto);
 #endif
-			PCSC_TRACE(reader, "SCardConnect(DIRECT)", rv);
+				PCSC_TRACE(reader, "SCardConnect(DIRECT)", rv);
+			}
 			if (rv == (LONG)SCARD_E_SHARING_VIOLATION) { /* Assume that there is a card in the reader in shared mode if direct communcation failed */
 				rv = gpriv->SCardConnect(gpriv->pcsc_ctx, reader->name, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0|SCARD_PROTOCOL_T1, &card_handle, &active_proto);
 				PCSC_TRACE(reader, "SCardConnect(SHARED)", rv);

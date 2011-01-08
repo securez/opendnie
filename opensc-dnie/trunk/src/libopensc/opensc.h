@@ -207,14 +207,38 @@ typedef struct sc_algorithm_info {
 } sc_algorithm_info_t;
 
 typedef struct sc_app_info {
-	struct sc_aid aid;
 	char *label;
+
+	struct sc_aid aid;
+	struct sc_lv_data ddo;
+
 	struct sc_path path;
-	u8 *ddo;
-	size_t ddo_len;
 
 	int rec_nr;		/* -1, if EF(DIR) is transparent */
 } sc_app_info_t;
+
+struct sc_ef_atr {
+	unsigned char card_service;
+	unsigned char ic_manufacturer;
+	unsigned char ic_type;
+	unsigned char os_version;
+	unsigned char iasecc_version;
+	
+	unsigned char df_selection;
+	size_t unit_size;
+	unsigned char card_capabilities;
+
+	struct sc_aid aid;
+
+	size_t max_size_send;
+	size_t max_size_send_sc;
+	size_t max_size_recv;
+	size_t max_size_recv_sc;
+
+	struct sc_object_id allocation_oid;
+
+	unsigned status;
+};
 
 struct sc_card_cache {
 	struct sc_path current_path;
@@ -260,9 +284,8 @@ typedef struct sc_reader {
 	
 	unsigned long flags, capabilities;
 	unsigned int supported_protocols, active_protocol;
-	u8 atr[SC_MAX_ATR_SIZE];
-	size_t atr_len;
 
+	struct sc_atr atr;
 	struct _atr_info {
 		u8 *hist_bytes;
 		size_t hist_bytes_len;
@@ -417,18 +440,20 @@ typedef struct sc_card {
 	struct sc_context *ctx;
 	struct sc_reader *reader;
 
+	struct sc_atr atr;
+
 	int type;			/* Card type, for card driver internal use */
 	unsigned long caps, flags;
 	unsigned int wait_resend_apdu;	/* Delay (msec) before responding to an SW = 6CXX */
 	int cla;
-	u8 atr[SC_MAX_ATR_SIZE];
-	size_t atr_len;
 	size_t max_send_size; /* Max Lc supported by the card */
 	size_t max_recv_size; /* Max Le supported by the card */
 
 	struct sc_app_info *app[SC_MAX_CARD_APPS];
 	int app_count;
 	struct sc_file *ef_dir;
+
+	struct sc_ef_atr *ef_atr;
 
 	struct sc_algorithm_info *algorithms;
 	int algorithm_count;
@@ -1119,6 +1144,8 @@ int sc_make_cache_dir(sc_context_t *ctx);
 
 int sc_enum_apps(sc_card_t *card);
 void sc_free_apps(sc_card_t *card);
+int sc_parse_ef_atr(sc_card_t *card);
+void sc_free_ef_atr(sc_card_t *card);
 int sc_update_dir(sc_card_t *card, sc_app_info_t *app);
 
 struct sc_algorithm_info * sc_card_find_rsa_alg(sc_card_t *card,

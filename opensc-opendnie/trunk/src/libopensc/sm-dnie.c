@@ -937,6 +937,46 @@ csc_end:
     LOG_FUNC_RETURN(ctx,res);
 }
 
+/************************* SM internal APDU encoding ******/
+
+/**
+ * Encode an APDU
+ * Calling this functions means that It's has been verified
+ * That source apdu needs encoding
+ * Based on section 9 of CWA-14890 and Sect 6 of iso7816-4 standards
+ * And DNIe's manual
+ *
+ *@param card card info structure
+ *@param from APDU to be encoded
+ *@param to Where to store encoded apdu
+ *@return SC_SUCCESS if ok; else error code
+ */
+static int dnie_sm_internal_encode_apdu(
+    sc_card_t *card,
+    sc_apdu_t *from,
+    sc_apdu_t *to
+    ) {
+    int res=SC_SUCCESS;
+    /* mandatory check */
+    if( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    dnie_private_data_t *priv= (dnie_private_data_t *) card->drv_data;
+    LOG_FUNC_CALLED(ctx);
+    /* check remaining arguments */
+    if ((from==NULL) || (to==NULL)|| (priv==NULL)) 
+            LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+    if ( /* check for properly initialized SM status */
+         (priv->sm_handler==NULL) || 
+         (priv->sm_handler->state!=DNIE_SM_INTERNAL ) ||
+         (priv->sm_handler->sm_internal==NULL) )
+            LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
+    /* retrieve sm channel data */
+    dnie_internal_sm_t *sm=priv->sm_handler->sm_internal;
+
+    /* TODO: write */
+    LOG_FUNC_RETURN(ctx,res);
+}
+
 /************************* public functions ***************/
 int dnie_sm_init(
         struct sc_card *card,
@@ -944,7 +984,8 @@ int dnie_sm_init(
         int final_state) {
     dnie_sm_handler_t *handler;
     int result;
-    assert( (card!=NULL) && (card->ctx!=NULL) && (sm_handler!=NULL));
+    if( (card==NULL) || (card->ctx==NULL) || (sm_handler==NULL))
+        return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     if (*sm_handler==NULL) {
@@ -985,6 +1026,10 @@ int dnie_sm_init(
             handler->state=DNIE_SM_INPROGRESS;
             result = dnie_sm_create_secure_channel(card,handler);
             if (result!=SC_SUCCESS) goto sm_init_error;
+            handler->encode = dnie_sm_internal_encode_apdu;
+            /* TODO: write and uncomment */
+            /* handler->decode = dnie_sm_internal_decode_apdu; */
+            /* handler->deinit = dmie_sm_internal_deinit; */
             break;
         case DNIE_SM_EXTERNAL:
             /* TODO: support for remote (SSL) APDU handling */ 

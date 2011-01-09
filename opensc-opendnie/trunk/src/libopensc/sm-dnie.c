@@ -37,6 +37,7 @@
 #include "cardctl.h"
 #include "internal.h"
 #include <openssl/x509.h>
+#include <openssl/des.h>
 #include "dnie.h"
 
 /********************* Keys and certificates as published by DGP ********/
@@ -721,14 +722,14 @@ verify_internal_done:
  *
  * to further study: what about using bignum arithmetics?
  */
-static int dnie_sm_increase_ssc(sc_card_t *card, dnie_sm_handler_t *handler) {
+static int dnie_sm_increase_ssc(
+    sc_card_t *card,
+    dnie_internal_sm_t *sm) {
     int n;
     /* preliminary checks */
-    if ( !card || !card->ctx || !handler || !handler->sm_internal ) 
-         return SC_ERROR_INVALID_ARGUMENTS;
+    if ( !card || !card->ctx || !sm ) return SC_ERROR_INVALID_ARGUMENTS;
     /* comodity vars */
     sc_context_t *ctx=card->ctx; 
-    dnie_internal_sm_t *sm=handler->sm_internal;
 
     LOG_FUNC_CALLED(ctx);
     /* u8 arithmetic; exit loop if no carry */
@@ -970,6 +971,14 @@ static int dnie_sm_internal_encode_apdu(
     sc_apdu_t *from,
     sc_apdu_t *to
     ) {
+    u8 *apdubuf; /* to store resulting apdu */
+    size_t apdulen;
+    u8 *ccbuf; /* where to store data to eval cryptographic checksum CC */
+    u8 macbuf[8]; /* to store and compute CC */
+    DES_key_schedule k1;
+    DES_key_schedule k2;
+    int i,j; /* for xor loops */
+    int len=0;
     int res=SC_SUCCESS;
     /* mandatory check */
     if( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
@@ -987,8 +996,95 @@ static int dnie_sm_internal_encode_apdu(
     /* retrieve sm channel data */
     dnie_internal_sm_t *sm=priv->sm_handler->sm_internal;
 
-    /* TODO: write */
-    LOG_FUNC_RETURN(ctx,res);
+    /* compose new header */
+    to->cla=from->cla | 0x0C; /* mark apdu as encoded */
+    to->ins=from->ins;
+    to->p1=from->p1;
+    to->p2=from->p2;
+
+    /* allocate result apdu data buffer */
+    apdubuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
+    ccbuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
+    if (!apdubuf || !ccbuf ) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
+
+    /* fill buffer with header info */
+    *(ccbuf+len++)=to->cla;
+    *(ccbuf+len++)=to->ins;
+    *(ccbuf+len++)=to->p1;
+    *(ccbuf+len++)=to->p2;
+    dnie_sm_iso7816_padding(ccbuf,&len); /* pad header (4 bytes pad) */
+
+    /* if no data, skip data encryption step */
+    if (from->lc!=0) {
+        size_t dlen=from->datalen;
+        u8 msgbuf[SC_MAX_APDU_BUFFER_SIZE];
+        u8 cryptbuf[SC_MAX_APDU_BUFFER_SIZE];
+        /* prepare keys */
+        DES_cblock iv={0,0,0,0,0,0,0,0};
+        DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[0]), &k1);
+        DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[8]), &k2);
+        /* pad message */
+        memcpy (msgbuf,from->data,dlen);
+        dnie_sm_iso7816_padding(msgbuf,&dlen);
+        /* aply TDES + CBC with kenc and iv=(0,..,0) */
+        DES_ede3_cbc_encrypt(msgbuf,cryptbuf,dlen,&k1,&k2,&k1,&iv,DES_ENCRYPT);
+        /* compose data TLV and add to result buffer */
+        *(ccbuf+len++)=0x87; /* padding content indicator + cryptogram tag */
+        *(ccbuf+len++)=dlen+1; /* len is dlen + iso padding indicator */
+        *(ccbuf+len++)=0x01;   /* iso padding type indicator */
+        memcpy(ccbuf+len,cryptbuf,dlen);
+        len+=dlen;
+    }
+
+    /* if le byte is declared, compose and add Le TLV */
+    /* TODO: study why original driver checks for le>=256? */
+    if (from->le>0) {
+        *(ccbuf+len++)=0x97; /* TLV tag for CC protected Le */
+        *(ccbuf+len++)=0x01; /* length=1 byte */
+        *(ccbuf+len++)=from->le;
+    }
+    /* copy current data to apdu buffer (skip header and header padding) */
+    memcpy(apdubuf,ccbuf+8,len-8);
+    apdulen=len-8;
+    /* pad again ccbuffer to compute CC */
+    dnie_sm_iso7816_padding(ccbuf,&len);
+
+    /* compute MAC Cryptographic Checksum using kmac and increased SSC */
+    res=dnie_sm_increase_ssc(card,sm); /* increase send sequence counter */
+    if (res!=SC_SUCCESS) {
+    	sc_log(ctx,"Error in computing SSC");
+        free(ccbuf);
+        LOG_FUNC_RETURN(ctx,res);
+    }
+    /* set up keys for mac computing */
+    DES_set_key_unchecked((const_DES_cblock *)&(sm->kmac[0]), &k1);
+    DES_set_key_unchecked((const_DES_cblock *)&(sm->kmac[8]), &k2);
+
+    memcpy(macbuf,sm->ssc,8); /* start with computed SSC */
+    for (i=0;i<len;i+=8) { /* divide data in 8 byte blocks */
+        /* compute DES */
+        DES_ecb_encrypt((const_DES_cblock *)macbuf, (DES_cblock *)macbuf, &k1, DES_ENCRYPT);
+        /* XOR with data and repeat */
+        for (j=0;j<8;j++) macbuf[j] ^= ccbuf[i+j];
+    }
+    /* and apply 3DES to result */
+    DES_ecb2_encrypt((const_DES_cblock *)macbuf, (DES_cblock *)macbuf, &k1, &k2, DES_ENCRYPT);
+    free(ccbuf); /* ccbuf is no longer needed */
+
+    /* compose and add computed MAC TLV to result buffer */
+    *(apdubuf+apdulen++)=0x8E; /* TLV tag for MAC Cryptographic checksum */
+    *(apdubuf+apdulen++)=0x04; /* len= 4 bytes */
+    memcpy(apdubuf+apdulen,macbuf,4); /* 4 first bytes of computed mac */
+    apdulen+=4;
+
+    /* finally evaluate remaining apdu data */
+    to->le=from->le;
+    to->lc=apdulen;
+    to->data=apdubuf;
+    to->datalen=apdulen;
+
+    /* that's all folks */
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
 /************************* public functions ***************/

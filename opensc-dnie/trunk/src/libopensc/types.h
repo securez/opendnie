@@ -36,11 +36,12 @@ typedef unsigned char u8;
 #define SC_MAX_PIN_SIZE			256 /* OpenPGP card has 254 max */
 #define SC_MAX_ATR_SIZE			33
 #define SC_MAX_AID_SIZE			16
+#define SC_MAX_IIN_SIZE			10
 #define SC_MAX_OBJECT_ID_OCTETS		16
 #define SC_MAX_PATH_SIZE		16
 #define SC_MAX_PATH_STRING_SIZE		(SC_MAX_PATH_SIZE * 2 + 1)
-
 #define SC_MAX_SDO_ACLS			8
+#define SC_MAX_CRTS_IN_SE		12
 
 /* When changing this value, pay attention to the initialization of the ASN1 
  * static variables that use this macro, like, for example, 
@@ -73,6 +74,22 @@ struct sc_atr {
 	size_t len;
 };
 
+/* Issuer ID */
+struct sc_iid {
+	unsigned char value[SC_MAX_IIN_SIZE];
+	size_t len;
+};
+
+/* Discretionary ASN.1 data object */
+struct sc_ddo {
+	struct sc_aid aid;
+	struct sc_iid iid;
+	struct sc_object_id oid;
+
+	size_t len;
+	unsigned char *value;
+};
+
 #define SC_PATH_TYPE_FILE_ID		0
 #define SC_PATH_TYPE_DF_NAME		1
 #define SC_PATH_TYPE_PATH		2
@@ -96,6 +113,13 @@ typedef struct sc_path {
 	struct sc_aid aid;
 } sc_path_t;
 
+/* Control reference template */
+struct sc_crt {
+	unsigned tag;
+	unsigned usage;		/* Usage Qualifier Byte */
+	unsigned algo;		/* Algorithm ID */
+	unsigned refs[8];	/* Security Object References */
+};
 
 /* Access Control flags */
 #define SC_AC_NONE			0x00000000
@@ -152,9 +176,10 @@ typedef struct sc_acl_entry {
 	unsigned int method;	/* See SC_AC_* */
 	unsigned int key_ref;	/* SC_AC_KEY_REF_NONE or an integer */
 
+	struct sc_crt crts[SC_MAX_CRTS_IN_SE];
+
 	struct sc_acl_entry *next;
 } sc_acl_entry_t;
-
 
 /* File types */
 #define SC_FILE_TYPE_DF			0x04

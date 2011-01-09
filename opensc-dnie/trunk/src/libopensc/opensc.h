@@ -210,7 +210,7 @@ typedef struct sc_app_info {
 	char *label;
 
 	struct sc_aid aid;
-	struct sc_lv_data ddo;
+	struct sc_ddo ddo;
 
 	struct sc_path path;
 
@@ -343,12 +343,21 @@ struct sc_pin_cmd_data {
 	struct sc_apdu *apdu;		/* APDU of the PIN command */
 };
 
+/* 'Issuer Identification Number' is a part of ISO/IEC 7812 PAN definition */
+struct sc_iin {	
+	unsigned char mii;		/* industry identifier */
+	unsigned country;		/* country identifier */
+	unsigned long issuer_id;	/* issuer identifier */
+};
+
 /* structure for the card serial number (normally the ICCSN) */
 #define SC_MAX_SERIALNR		32
 
 typedef struct sc_serial_number {
-	u8 value[SC_MAX_SERIALNR];
+	unsigned char value[SC_MAX_SERIALNR];
 	size_t len;
+
+	struct sc_iin iin;
 } sc_serial_number_t;
 
 struct sc_reader_operations {
@@ -1147,6 +1156,8 @@ void sc_free_apps(sc_card_t *card);
 int sc_parse_ef_atr(sc_card_t *card);
 void sc_free_ef_atr(sc_card_t *card);
 int sc_update_dir(sc_card_t *card, sc_app_info_t *app);
+
+void sc_print_cache(struct sc_card *card);
 
 struct sc_algorithm_info * sc_card_find_rsa_alg(sc_card_t *card,
 		unsigned int key_length);

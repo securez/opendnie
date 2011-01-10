@@ -498,13 +498,13 @@ struct sc_card_operations {
 	/* Called when the card object is being freed.  finish() has to
 	 * deallocate all possible private data. */
 	int (*finish)(struct sc_card *card);
-        /* Called before invoke card_driver->ops->transmit.
-         * for performing APDU wrap(flag=0) or unwrap(flag=1)
-         * If set to NULL no wrapping process will be done
-         * Usefull on Secure Messaging APDU encode/decode
-         * Returns SC_SUCCESS or error code */
-        int (*wrap_apdu)(struct sc_card *card,
-                         struct sc_apdu *from, struct sc_apdu *to, int flag);
+	/* Called before invoke card_driver->ops->transmit.
+	 * for performing APDU wrap(flag=0) or unwrap(flag=1)
+	 * If set to NULL no wrapping process will be done
+	 * Usefull on Secure Messaging APDU encode/decode
+	 * Returns SC_SUCCESS or error code */
+	int (*wrap_apdu)(struct sc_card *card,
+			struct sc_apdu *from, struct sc_apdu *to, int flag);
 
 	/* ISO 7816-4 functions */
 

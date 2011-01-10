@@ -718,27 +718,6 @@ verify_internal_done:
 }
 
 /**
- * Increase send sequence counter SSC
- *
- * to further study: what about using bignum arithmetics?
- */
-static int dnie_sm_increase_ssc(
-    sc_card_t *card,
-    dnie_internal_sm_t *sm) {
-    int n;
-    /* preliminary checks */
-    if ( !card || !card->ctx || !sm ) return SC_ERROR_INVALID_ARGUMENTS;
-    /* comodity vars */
-    sc_context_t *ctx=card->ctx; 
-
-    LOG_FUNC_CALLED(ctx);
-    /* u8 arithmetic; exit loop if no carry */
-    for(n=7;n>=0;n--) { sm->ssc[n]++; if ( (sm->ssc[n]) != 0x00 ) break; }
-    sc_log(ctx,"Next SSC: '%s'",sc_dump_hex(sm->ssc,8));
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
-}
-
-/**
  * Create Secure channel
  * Based on Several documents:
  * "Understanding the DNIe"
@@ -938,7 +917,32 @@ csc_end:
     LOG_FUNC_RETURN(ctx,res);
 }
 
-/************************* SM internal APDU encoding ******/
+/******************* SM internal APDU encoding / decoding functions ******/
+
+/**
+ * Increase send sequence counter SSC
+ *
+ *@param card smart card info structure
+ *@param sm Secure Message handling data structure
+ *@return SC_SUCCESS if ok; else error code
+ *
+ * to further study: what about using bignum arithmetics?
+ */
+static int dnie_sm_increase_ssc(
+    sc_card_t *card,
+    dnie_internal_sm_t *sm) {
+    int n;
+    /* preliminary checks */
+    if ( !card || !card->ctx || !sm ) return SC_ERROR_INVALID_ARGUMENTS;
+    /* comodity vars */
+    sc_context_t *ctx=card->ctx; 
+
+    LOG_FUNC_CALLED(ctx);
+    /* u8 arithmetic; exit loop if no carry */
+    for(n=7;n>=0;n--) { sm->ssc[n]++; if ( (sm->ssc[n]) != 0x00 ) break; }
+    sc_log(ctx,"Next SSC: '%s'",sc_dump_hex(sm->ssc,8));
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+}
 
 /**
  * ISO 7816 padding
@@ -952,6 +956,28 @@ csc_end:
 static void dnie_sm_iso7816_padding(u8 *buffer,size_t *len) {
     *(buffer+*len++)=0x80;
     for(; (*len & 0x07)==0x00; *len++) *(buffer+*len)=0x00;
+}
+
+/**
+ * Parse and APDU Response and extract specific TLV data
+ * If Tag not found in response returns SC_SUCESS, but empty TLV data result
+ *
+ *@param card card info structure
+ *@param apdu APDU data to extract response from
+ *@param tag  TLV tag to search for
+ *@param tlv  TLV structure to store result into
+ *@return SC_SUCCESS if OK; else error code
+ */
+static int parse_apdu_response(
+   sc_card_t *card,
+   sc_apdu_t *apdu,
+   u8 tag,
+   struct sc_tlv_data *tlv 
+   ) {
+
+   /* TODO: write */
+
+   return SC_SUCCESS;
 }
 
 /**
@@ -1087,6 +1113,78 @@ static int dnie_sm_internal_encode_apdu(
     LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
+/**
+ * Decode an APDU response
+ * Calling this functions means that It's has been verified
+ * That apdu response comes in CWA TLV encoded format and needs decoding
+ * Based on section 9 of CWA-14890 and Sect 6 of iso7816-4 standards
+ * And DNIe's manual
+ *
+ *@param card card info structure
+ *@param from APDU with response to be decoded
+ *@param to Where to store apdu with decoded response
+ *@return SC_SUCCESS if ok; else error code
+ */
+static int dnie_sm_internal_decode_apdu(
+    sc_card_t *card,
+    sc_apdu_t *from,
+    sc_apdu_t *to
+    ) {
+    struct sc_tlv_data d_tlv; /* to store plain data (Tag 0x81) */
+    struct sc_tlv_data p_tlv; /* to store padded encoded data (Tag 0x87) */
+    struct sc_tlv_data m_tlv; /* to store mac CC (Tag 0x97) */
+    struct sc_tlv_data s_tlv; /* to store sw1-sw2 status (Tag 0x99) */
+    int res=SC_SUCCESS;
+    int flag=0;
+    /* mandatory check */
+    if( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    dnie_private_data_t *priv= (dnie_private_data_t *) card->drv_data;
+    LOG_FUNC_CALLED(ctx);
+    /* check remaining arguments */
+    if ((from==NULL) || (to==NULL)|| (priv==NULL)) 
+            LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+    if ( /* check for properly initialized SM status */
+         (priv->sm_handler==NULL) || 
+         (priv->sm_handler->state!=DNIE_SM_INTERNAL ) ||
+         (priv->sm_handler->sm_internal==NULL) )
+            LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
+    /* retrieve sm channel data */
+    dnie_internal_sm_t *sm=priv->sm_handler->sm_internal;
+
+    /* parse response to find TLV data */
+    parse_apdu_response(card,from,0x99,&s_tlv); /* status data (optional) */
+    parse_apdu_response(card,from,0x87,&p_tlv); /* encoded data */
+    parse_apdu_response(card,from,0x81,&d_tlv); /* plain data */
+    if (p_tlv.value && d_tlv.value) /* encoded & plain are mutually exclusive */
+       LOG_FUNC_RETURN(ctx,SC_ERROR_UNKNOWN_DATA_RECEIVED);
+    res = parse_apdu_response(card,from,0x97,&m_tlv); /* MAC data (mandatory) */
+    LOG_TEST_RET(ctx,res,"MAC CC TLV not found in response apdu");
+    /* compose buffer to evaluate mac */
+    /* TODO: write */
+    /* evaluate mac by mean of kmac and increased SendSequence Counter SSC */
+    /* TODO: write */
+    /* check evaluated mac with provided by apdu response */
+    /* TODO: write */
+    if (p_tlv.value) { /* plain data */
+        /* copy to response buffer */
+        /* TODO: write */
+    }
+    if (d_tlv.value) { /* encoded data */
+        /* decrypt by mean of kenc and iv={0,...0} */
+        /* TODO: write */
+        /* copy decrypted data to response buffer */
+        /* TODO: write */
+    }
+    /* copy SW bytes. As CWA states, don't use s_tlv, as may not be present */
+    /* TODO: write */
+    /* finally compose rest of destination apdu */
+    /* TODO: write */
+
+    /* that's all folks */
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+}
+
 /************************* public functions ***************/
 int dnie_sm_init(
         struct sc_card *card,
@@ -1137,8 +1235,8 @@ int dnie_sm_init(
             result = dnie_sm_create_secure_channel(card,handler);
             if (result!=SC_SUCCESS) goto sm_init_error;
             handler->encode = dnie_sm_internal_encode_apdu;
+            handler->decode = dnie_sm_internal_decode_apdu;
             /* TODO: write and uncomment */
-            /* handler->decode = dnie_sm_internal_decode_apdu; */
             /* handler->deinit = dmie_sm_internal_deinit; */
             break;
         case DNIE_SM_EXTERNAL:

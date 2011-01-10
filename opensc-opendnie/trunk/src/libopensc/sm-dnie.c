@@ -959,25 +959,74 @@ static void dnie_sm_iso7816_padding(u8 *buffer,size_t *len) {
 }
 
 /**
- * Parse and APDU Response and extract specific TLV data
+ * Parse and APDU Response and extract specific BER-TLV data
  * If Tag not found in response returns SC_SUCESS, but empty TLV data result
  *
+ * NOTICE that iso7816 sect 5.2.2 states that Tag length may be 1 to n bytes
+ * length. In this code we assume lenght = 1 byte
  *@param card card info structure
  *@param apdu APDU data to extract response from
  *@param tag  TLV tag to search for
  *@param tlv  TLV structure to store result into
  *@return SC_SUCCESS if OK; else error code
  */
-static int parse_apdu_response(
+static int dnie_sm_find_tlv(
    sc_card_t *card,
    sc_apdu_t *apdu,
-   u8 tag,
+   unsigned int tag,
    struct sc_tlv_data *tlv 
    ) {
+    size_t tlen=0;
+    /* preliminary checks */
+    if ( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
+    /* comodity vars */
+    sc_context_t *ctx=card->ctx; 
 
-   /* TODO: write */
-
-   return SC_SUCCESS;
+    LOG_FUNC_CALLED(ctx);
+    if (!apdu || !tlv || tag==0x00) 
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+    u8 *pt=apdu->resp;
+    u8 *last=apdu->resp+apdu->resplen;
+    /* jump from tlv to tlv till find requested tag */
+    for (;pt<last;pt+=tlen) {
+        memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
+        /* set tag. Assume tag length is 1 byte */
+        tlv->tag=*pt++;
+        /* evaluate length according iso7816 sect 5.2.2.2 */
+        if (*pt < 0x80 ) { /* tag length is in range 1..127 */
+            tlen=(size_t) *pt;
+            pt+=1;
+        } else if (*pt==0x81) { /* use an additional byte for tag length */
+            tlen=(size_t) *(pt+1);
+            pt+=2;            
+        } else if (*pt==0x82) { /* 1+2 bytes */
+            tlen=  (size_t) *(pt+1)  << 8 + 
+                   (size_t) *(pt+2);
+            pt+=3;
+        } else if (*pt==0x83) { /* 1+3 bytes */
+            tlen=  (size_t) *(pt+1)  << 16 + 
+                   (size_t) *(pt+2)  << 8  +
+                   (size_t) *(pt+3)  ;
+            pt+=4;
+        } else if (*pt==0x84) { /* 1+4 bytes */
+            tlen=  (size_t) *(pt+1)  << 24 + 
+                   (size_t) *(pt+2)  << 16 +
+                   (size_t) *(pt+3)  << 8  +
+                   (size_t) *(pt+4)  ;
+            pt+=5;
+        } else { /* incorrect tag length value */
+            sc_log(ctx,"Invalid tag length indicator: %d",(size_t)*pt);
+            LOG_FUNC_RETURN(ctx,SC_ERROR_WRONG_LENGTH);
+        }
+        if (tlv->tag!=tag) continue; /* tag not found: jump to next tlv */
+        /* tag found: fill data and return OK */
+        tlv->len=tlen;
+        tlv->value=pt;
+        LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+    }
+    /* arriving here means requested tlv not found */
+    memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
 /**
@@ -1153,12 +1202,12 @@ static int dnie_sm_internal_decode_apdu(
     dnie_internal_sm_t *sm=priv->sm_handler->sm_internal;
 
     /* parse response to find TLV data */
-    parse_apdu_response(card,from,0x99,&s_tlv); /* status data (optional) */
-    parse_apdu_response(card,from,0x87,&p_tlv); /* encoded data */
-    parse_apdu_response(card,from,0x81,&d_tlv); /* plain data */
+    dnie_sm_find_tlv(card,from,0x99,&s_tlv); /* status data (optional) */
+    dnie_sm_find_tlv(card,from,0x87,&p_tlv); /* encoded data */
+    dnie_sm_find_tlv(card,from,0x81,&d_tlv); /* plain data */
     if (p_tlv.value && d_tlv.value) /* encoded & plain are mutually exclusive */
        LOG_FUNC_RETURN(ctx,SC_ERROR_UNKNOWN_DATA_RECEIVED);
-    res = parse_apdu_response(card,from,0x97,&m_tlv); /* MAC data (mandatory) */
+    res = dnie_sm_find_tlv(card,from,0x97,&m_tlv); /* MAC data (mandatory) */
     LOG_TEST_RET(ctx,res,"MAC CC TLV not found in response apdu");
     /* compose buffer to evaluate mac */
     /* TODO: write */

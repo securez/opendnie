@@ -385,6 +385,12 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
     /* cache serial number */
     memcpy(card->serialnr.value, apdu.resp, 7*sizeof(u8));
     card->serialnr.len = 7*sizeof(u8);
+    /* TODO: fill Issuer Identification Number data with proper (ATR?) info */
+    /*
+    card->serialnr.iin.mii=;
+    card->serialnr.iin.country=;
+    card->serialnr.iin.issuer_id=;
+    */
     /* copy and return serial number */
     memcpy(serial, &card->serialnr, sizeof(*serial));
     return SC_SUCCESS;

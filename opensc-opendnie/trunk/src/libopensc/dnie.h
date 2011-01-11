@@ -38,7 +38,7 @@ typedef struct dnie_tlv_data_st {
         u8 *tlv_start;
         size_t tlv_len; 
         unsigned tag;
-        unsigned char *value;
+        unsigned char *data;
         size_t len;
 } dnie_tlv_data_t;
 

@@ -1011,7 +1011,7 @@ static int dnie_sm_find_tlv(
         if (tlv->tag!=tag) continue; /* tag not found: jump to next tlv */
         /* tag found: fill data and return OK */
         tlv->len     = tlen;
-        tlv->value   = pt;
+        tlv->data    = pt;
         tlv->tlv_len = (pt+tlen) - tlv->tlv_start;
         LOG_FUNC_RETURN(ctx,SC_SUCCESS);
     }
@@ -1172,17 +1172,26 @@ static int dnie_sm_internal_decode_apdu(
     sc_apdu_t *from,
     sc_apdu_t *to
     ) {
-    dnie_tlv_data_t d_tlv; /* to store plain data (Tag 0x81) */
-    dnie_tlv_data_t p_tlv; /* to store padded encoded data (Tag 0x87) */
+    int i,j;
+    dnie_tlv_data_t p_tlv; /* to store plain data (Tag 0x81) */
+    dnie_tlv_data_t e_tlv; /* to store padded encoded data (Tag 0x87) */
     dnie_tlv_data_t m_tlv; /* to store mac CC (Tag 0x97) */
     dnie_tlv_data_t s_tlv; /* to store sw1-sw2 status (Tag 0x99) */
+    u8 *ccbuf;      /* buffer for mac CC calculation */
+    size_t cclen;   /* ccbuf len */
+    u8 macbuf[8];   /* where to calculate mac */
+    u8 *respbuf;    /* where to store decoded response */
+    size_t resplen; /* respbuf length */
+    DES_key_schedule k1, k2;
     int res=SC_SUCCESS;
-    int flag=0;
+    char *msg=NULL;             /* to store error messages */
+
     /* mandatory check */
     if( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     dnie_private_data_t *priv= (dnie_private_data_t *) card->drv_data;
     LOG_FUNC_CALLED(ctx);
+
     /* check remaining arguments */
     if ((from==NULL) || (to==NULL)|| (priv==NULL)) 
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
@@ -1194,37 +1203,182 @@ static int dnie_sm_internal_decode_apdu(
     /* retrieve sm channel data */
     dnie_internal_sm_t *sm=priv->sm_handler->sm_internal;
 
-    /* parse response to find TLV data */
+    /* cwa14980 sect 9.3: check SW1 or SW2 for SM related errors */
+    if (from->sw1==0x69) {
+        if ( (from->sw2==0x88) || (from->sw2==0x87) ) {
+            msg="SM related errors in APDU response";
+            res=SC_ERROR_INVALID_DATA;
+            goto response_decode_end;
+        }
+    }
+
+    /* copy from_apdu to to_apdu, but preserve resp and respleng fields */
+    respbuf=to->resp;
+    resplen=to->resplen;
+    memcpy(to,from,sizeof(sc_apdu_t));
+    to->resp=respbuf;
+    to->resplen=resplen;
+
+    /* parse response to find TLV data and check results */
     dnie_sm_find_tlv(card,from,0x99,&s_tlv); /* status data (optional) */
-    dnie_sm_find_tlv(card,from,0x87,&p_tlv); /* encoded data */
-    dnie_sm_find_tlv(card,from,0x81,&d_tlv); /* plain data */
-    if (p_tlv.value && d_tlv.value) /* encoded & plain are mutually exclusive */
-       LOG_FUNC_RETURN(ctx,SC_ERROR_UNKNOWN_DATA_RECEIVED);
-    res = dnie_sm_find_tlv(card,from,0x97,&m_tlv); /* MAC data (mandatory) */
-    LOG_TEST_RET(ctx,res,"MAC CC TLV not found in response apdu");
+    dnie_sm_find_tlv(card,from,0x87,&e_tlv); /* encoded data (optional) */
+    dnie_sm_find_tlv(card,from,0x81,&p_tlv); /* plain data (optional) */
+    dnie_sm_find_tlv(card,from,0x97,&m_tlv); /* MAC data (mandatory) */
+    if (p_tlv.data && e_tlv.data) { /* encoded & plain are exclusive */
+        msg="Plain and Encoded data are mutually exclusive in apdu response";
+        res=SC_ERROR_INVALID_DATA;
+        goto response_decode_end;
+    }
+    if (!m_tlv.data) {
+        msg="No MAC TAG found in apdu response";
+        res=SC_ERROR_INVALID_DATA;
+        goto response_decode_end;
+    }
+    if (m_tlv.len != 4) {
+        msg="Invalid MAC TAG Length";
+        res=SC_ERROR_INVALID_DATA;
+        goto response_decode_end;
+    }
+
     /* compose buffer to evaluate mac */
-    /* TODO: write */
+
+    /* reserve enought space for data+status+padding */
+    ccbuf=calloc(e_tlv.tlv_len + s_tlv.tlv_len + p_tlv.tlv_len + 8,sizeof(u8));
+    if (!ccbuf) {
+        msg="Cannot allocate space for mac checking";
+        res=SC_ERROR_OUT_OF_MEMORY;
+        goto response_decode_end;
+    }
+    /* copy data into buffer */
+    cclen=0;
+    if (e_tlv.data) { /* encoded data */
+        memcpy(ccbuf,e_tlv.tlv_start,e_tlv.tlv_len);
+        cclen = e_tlv.tlv_len;
+    }
+    if (p_tlv.data) { /* plain data */
+        memcpy(ccbuf,p_tlv.tlv_start,p_tlv.tlv_len);
+        cclen = p_tlv.tlv_len;
+    }
+    if (s_tlv.data) { /* response status */
+        if (s_tlv.len!=2) {
+            msg="Invalid SW TAG length";
+            res=SC_ERROR_INVALID_DATA;
+            goto response_decode_end;
+        }
+        memcpy(ccbuf+cclen,s_tlv.tlv_start,s_tlv.tlv_len);
+        cclen += s_tlv.tlv_len;
+    }
+    /* add iso7816 padding */
+    dnie_sm_iso7816_padding(ccbuf,&cclen);
+
     /* evaluate mac by mean of kmac and increased SendSequence Counter SSC */
-    /* TODO: write */
+
+    /* increase SSC */
+    res=dnie_sm_increase_ssc(card,sm); /* increase send sequence counter */
+    if (res!=SC_SUCCESS) {
+        msg="Error in computing SSC";
+        goto response_decode_end;
+    }
+    /* set up keys for mac computing */
+    DES_set_key_unchecked((const_DES_cblock *)&(sm->kmac[0]), &k1);
+    DES_set_key_unchecked((const_DES_cblock *)&(sm->kmac[8]), &k2);
+
+    memcpy(macbuf,sm->ssc,8); /* start with computed SSC */
+    for (i=0;i<cclen;i+=8) { /* divide data in 8 byte blocks */
+        /* compute DES */
+        DES_ecb_encrypt((const_DES_cblock *)macbuf, (DES_cblock *)macbuf, &k1, DES_ENCRYPT);
+        /* XOR with data and repeat */
+        for (j=0;j<8;j++) macbuf[j] ^= ccbuf[i+j];
+    }
+    /* finally apply 3DES to result */
+    DES_ecb2_encrypt((const_DES_cblock *)macbuf, (DES_cblock *)macbuf, &k1, &k2, DES_ENCRYPT);
+
     /* check evaluated mac with provided by apdu response */
-    /* TODO: write */
-    if (p_tlv.value) { /* plain data */
-        /* copy to response buffer */
-        /* TODO: write */
+
+    res=memcmp(m_tlv.data,macbuf,4); /* check first 4 bytes */
+    if (res!=0) {
+        msg="Error in MAC CC checking: value doesn't match";
+        res=SC_ERROR_INVALID_DATA;
+        goto response_decode_end;
     }
-    if (d_tlv.value) { /* encoded data */
-        /* decrypt by mean of kenc and iv={0,...0} */
-        /* TODO: write */
-        /* copy decrypted data to response buffer */
-        /* TODO: write */
+
+    /* allocate response buffer */
+    resplen= 10 + MAX(p_tlv.len,e_tlv.len); /* estimate response buflen */
+    if (to->resp) { /* if response apdu provides buffer, try to use it */
+        if(to->resplen<resplen) {
+            msg="Provided buffer has not enought size to store response";
+            res=SC_ERROR_OUT_OF_MEMORY;
+            goto response_decode_end;
+        }
+    } else { /* buffer not provided: create and assing to response apdu */
+        to->resp=calloc(p_tlv.len,sizeof(u8));
+        if (!to->resp) {
+            msg="Cannot allocate buffer to store response";
+            res=SC_ERROR_OUT_OF_MEMORY;
+            goto response_decode_end;
+        }
     }
+    to->resplen=resplen;
+    
+    /* fill destination response apdu buffer with data */
+
+    /* if plain data, just copy TLV data into apdu response */
+    if (p_tlv.data) { /* plain data */
+        memcpy(to->resp,p_tlv.data,p_tlv.len);
+        to->resplen=p_tlv.len;
+    }
+
+    /* if encoded data, decode and store into apdu response */
+    if (e_tlv.data) { /* encoded data */
+        DES_cblock iv = {0,0,0,0,0,0,0,0};
+        /* check data len */
+        if ( (e_tlv.len<9) || ((e_tlv.len-1)%8)!=0) {
+            msg="Invalid length for Encoded data TLV";
+            res=SC_ERROR_INVALID_DATA;
+            goto response_decode_end;
+        }
+        /* first byte is padding info; check value */
+        if (e_tlv.data[0]!=0x01) {
+            msg="Encoded TLV: Invalid padding info value";
+            res=SC_ERROR_INVALID_DATA;
+            goto response_decode_end;
+        }
+        /* prepare keys to decode */
+        DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[0]), &k1);
+        DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[8]), &k2);
+        /* decrypt into response buffer
+         * by using 3DES CBC by mean of kenc and iv={0,...0} */
+        DES_ede3_cbc_encrypt(&e_tlv.data[1],to->resp,e_tlv.len-1,&k1,&k2,&k1,&iv, DES_DECRYPT);
+        to->resplen=e_tlv.len-1;
+        /* remove iso padding from response length */
+        for(; (to->resplen > 0)  && (*(to->resp+to->resplen)==0x00) ; to->resplen-- ); /* empty loop */
+        if (to->resplen==0) { /* assure some data remains available */
+            msg="Encoded TLV: Decrypt returns no data !";
+            res=SC_ERROR_INVALID_DATA;
+            goto response_decode_end;
+        }
+        if ( *(to->resp+to->resplen) != 0x80 ) { /* check padding byte */
+            msg="Decrypted TLV has no 0x80 iso padding indicator!";
+            res=SC_ERROR_INVALID_DATA;
+            goto response_decode_end;
+        }
+        /* everything ok: remove 0x80 from response length */
+        to->resplen--;
+    }
+
+    /* final steps */
+
     /* copy SW bytes. As CWA states, don't use s_tlv, as may not be present */
-    /* TODO: write */
-    /* finally compose rest of destination apdu */
-    /* TODO: write */
+    to->sw1=from->sw1;
+    to->sw2=from->sw2;
 
     /* that's all folks */
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+    res=SC_SUCCESS;
+
+response_decode_end:
+    if (ccbuf) free(ccbuf);
+    if (msg)    sc_log(ctx,msg);
+    LOG_FUNC_RETURN(ctx,res);
 }
 
 /************************* public functions ***************/

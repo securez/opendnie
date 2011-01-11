@@ -33,6 +33,15 @@
 #define DNIE_SM_EXTERNAL        0x03 /* using SSL connection to handle keys */
 
 /************************** data structures for DNIe **********************/
+
+typedef struct dnie_tlv_data_st {
+        u8 *tlv_start;
+        size_t tlv_len; 
+        unsigned tag;
+        unsigned char *value;
+        size_t len;
+} dnie_tlv_data_t;
+
 typedef struct dnie_file_cache_st {
     sc_file_t *file;
     u8 *data;

@@ -974,7 +974,7 @@ static int dnie_sm_find_tlv(
    sc_card_t *card,
    sc_apdu_t *apdu,
    unsigned int tag,
-   struct sc_tlv_data *tlv 
+   dnie_tlv_data_t *tlv 
    ) {
     size_t tlen=0;
     /* preliminary checks */
@@ -991,6 +991,7 @@ static int dnie_sm_find_tlv(
     for (;pt<last;pt+=tlen) {
         memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
         /* set tag. Assume tag length is 1 byte */
+        tlv->tlv_start=pt;
         tlv->tag=*pt++;
         /* evaluate length according iso7816 sect 5.2.2.2 */
         switch(*pt) {
@@ -1009,8 +1010,9 @@ static int dnie_sm_find_tlv(
         }
         if (tlv->tag!=tag) continue; /* tag not found: jump to next tlv */
         /* tag found: fill data and return OK */
-        tlv->len=tlen;
-        tlv->value=pt;
+        tlv->len     = tlen;
+        tlv->value   = pt;
+        tlv->tlv_len = (pt+tlen) - tlv->tlv_start;
         LOG_FUNC_RETURN(ctx,SC_SUCCESS);
     }
     /* arriving here means requested tlv not found */
@@ -1141,11 +1143,13 @@ static int dnie_sm_internal_encode_apdu(
     memcpy(apdubuf+apdulen,macbuf,4); /* 4 first bytes of computed mac */
     apdulen+=4;
 
-    /* finally evaluate remaining apdu data */
+    /* finally set remaining apdu data */
     to->le=from->le;
     to->lc=apdulen;
     to->data=apdubuf;
     to->datalen=apdulen;
+    to->resp=from->resp;
+    to->resplen=from->resplen;
 
     /* that's all folks */
     LOG_FUNC_RETURN(ctx,SC_SUCCESS);
@@ -1154,7 +1158,7 @@ static int dnie_sm_internal_encode_apdu(
 /**
  * Decode an APDU response
  * Calling this functions means that It's has been verified
- * That apdu response comes in CWA TLV encoded format and needs decoding
+ * That apdu response comes in TLV encoded format and needs decoding
  * Based on section 9 of CWA-14890 and Sect 6 of iso7816-4 standards
  * And DNIe's manual
  *
@@ -1168,10 +1172,10 @@ static int dnie_sm_internal_decode_apdu(
     sc_apdu_t *from,
     sc_apdu_t *to
     ) {
-    struct sc_tlv_data d_tlv; /* to store plain data (Tag 0x81) */
-    struct sc_tlv_data p_tlv; /* to store padded encoded data (Tag 0x87) */
-    struct sc_tlv_data m_tlv; /* to store mac CC (Tag 0x97) */
-    struct sc_tlv_data s_tlv; /* to store sw1-sw2 status (Tag 0x99) */
+    dnie_tlv_data_t d_tlv; /* to store plain data (Tag 0x81) */
+    dnie_tlv_data_t p_tlv; /* to store padded encoded data (Tag 0x87) */
+    dnie_tlv_data_t m_tlv; /* to store mac CC (Tag 0x97) */
+    dnie_tlv_data_t s_tlv; /* to store sw1-sw2 status (Tag 0x99) */
     int res=SC_SUCCESS;
     int flag=0;
     /* mandatory check */

@@ -1207,7 +1207,7 @@ static int dnie_sm_internal_decode_apdu(
     if (from->sw1==0x69) {
         if ( (from->sw2==0x88) || (from->sw2==0x87) ) {
             msg="SM related errors in APDU response";
-            res=SC_ERROR_INVALID_DATA;
+            res=SC_ERROR_INTERNAL; /* tell driver to restart SM */
             goto response_decode_end;
         }
     }

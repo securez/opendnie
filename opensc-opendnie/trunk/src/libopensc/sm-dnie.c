@@ -963,7 +963,7 @@ static void dnie_sm_iso7816_padding(u8 *buffer,size_t *len) {
  * If Tag not found in response returns SC_SUCESS, but empty TLV data result
  *
  * NOTICE that iso7816 sect 5.2.2 states that Tag length may be 1 to n bytes
- * length. In this code we assume lenght = 1 byte
+ * length. In this code we'll assume allways tag lenght = 1 byte
  *@param card card info structure
  *@param apdu APDU data to extract response from
  *@param tag  TLV tag to search for
@@ -993,30 +993,19 @@ static int dnie_sm_find_tlv(
         /* set tag. Assume tag length is 1 byte */
         tlv->tag=*pt++;
         /* evaluate length according iso7816 sect 5.2.2.2 */
-        if (*pt < 0x80 ) { /* tag length is in range 1..127 */
-            tlen=(size_t) *pt;
-            pt+=1;
-        } else if (*pt==0x81) { /* use an additional byte for tag length */
-            tlen=(size_t) *(pt+1);
-            pt+=2;            
-        } else if (*pt==0x82) { /* 1+2 bytes */
-            tlen=  (size_t) *(pt+1)  << 8 + 
-                   (size_t) *(pt+2);
-            pt+=3;
-        } else if (*pt==0x83) { /* 1+3 bytes */
-            tlen=  (size_t) *(pt+1)  << 16 + 
-                   (size_t) *(pt+2)  << 8  +
-                   (size_t) *(pt+3)  ;
-            pt+=4;
-        } else if (*pt==0x84) { /* 1+4 bytes */
-            tlen=  (size_t) *(pt+1)  << 24 + 
-                   (size_t) *(pt+2)  << 16 +
-                   (size_t) *(pt+3)  << 8  +
-                   (size_t) *(pt+4)  ;
-            pt+=5;
-        } else { /* incorrect tag length value */
-            sc_log(ctx,"Invalid tag length indicator: %d",(size_t)*pt);
-            LOG_FUNC_RETURN(ctx,SC_ERROR_WRONG_LENGTH);
+        switch(*pt) {
+            case 0x84: pt++; tlen=             (0xff & (size_t) *pt);
+            case 0x83: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
+            case 0x82: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
+            case 0x81: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
+            case 0x80: pt++; break;
+            default:
+                if (*pt<0x80) {
+                    tlen= (0xff & (size_t) *pt); pt++;
+                } else {
+                    sc_log(ctx,"Invalid tag length indicator: %d",(size_t)*pt);
+                    LOG_FUNC_RETURN(ctx,SC_ERROR_WRONG_LENGTH);
+                }
         }
         if (tlv->tag!=tag) continue; /* tag not found: jump to next tlv */
         /* tag found: fill data and return OK */

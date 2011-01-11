@@ -1059,6 +1059,7 @@ static int dnie_sm_internal_encode_apdu(
          (priv->sm_handler->state!=DNIE_SM_INTERNAL ) ||
          (priv->sm_handler->sm_internal==NULL) )
             LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
+    
     /* retrieve sm channel data */
     dnie_internal_sm_t *sm=priv->sm_handler->sm_internal;
 
@@ -1085,19 +1086,45 @@ static int dnie_sm_internal_encode_apdu(
         size_t dlen=from->datalen;
         u8 msgbuf[SC_MAX_APDU_BUFFER_SIZE];
         u8 cryptbuf[SC_MAX_APDU_BUFFER_SIZE];
+
         /* prepare keys */
         DES_cblock iv={0,0,0,0,0,0,0,0};
         DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[0]), &k1);
         DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[8]), &k2);
+
         /* pad message */
         memcpy (msgbuf,from->data,dlen);
         dnie_sm_iso7816_padding(msgbuf,&dlen);
+
         /* aply TDES + CBC with kenc and iv=(0,..,0) */
         DES_ede3_cbc_encrypt(msgbuf,cryptbuf,dlen,&k1,&k2,&k1,&iv,DES_ENCRYPT);
+
         /* compose data TLV and add to result buffer */
+        /* assume tag id is not multibyte */
         *(ccbuf+len++)=0x87; /* padding content indicator + cryptogram tag */
-        *(ccbuf+len++)=dlen+1; /* len is dlen + iso padding indicator */
-        *(ccbuf+len++)=0x01;   /* iso padding type indicator */
+        /* evaluate tag length value according iso7816-4 sect 5.2.2 */
+        if ((dlen+1)<0x80) {
+            *(ccbuf+len++)=dlen+1; /* len is dlen + iso padding indicator */
+        } else if ((dlen+1)<0x00000100) {
+            *(ccbuf+len++)=0x81;
+            *(ccbuf+len++)=0xff & (dlen+1); /* dlen +  padding indicator byte */
+        } else if ((dlen+1)<0x00010000) {
+            *(ccbuf+len++)=0x82;
+            *(ccbuf+len++)=0xff & ( (dlen+1) >> 8);
+            *(ccbuf+len++)=0xff & (dlen+1); 
+        } else if ((dlen+1)<0x01000000) {
+            *(ccbuf+len++)=0x83;
+            *(ccbuf+len++)=0xff & ( (dlen+1) >>16);
+            *(ccbuf+len++)=0xff & ( (dlen+1) >> 8);
+            *(ccbuf+len++)=0xff & (dlen+1); 
+        } else { /* do not handle tag length 0x84 */
+            LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+        }
+
+        /* add iso padding type indicator */
+        *(ccbuf+len++)=0x01;   
+
+        /* copy remaining data to buffer */
         memcpy(ccbuf+len,cryptbuf,dlen);
         len+=dlen;
     }

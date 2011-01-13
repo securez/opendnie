@@ -1,6 +1,6 @@
 /*
- * sm-dnie.c: Virtual channel for transparent sending of
- * APDU's throught secure messaging for Spanish DNIe card
+ * cwa14890.c: Implementation of Secure Messaging 
+ * according CWA-14890-1 and CWA-14890-2 standards
  * 
  * Copyright (C) 2010 Juan Antonio Martinez <jonsito@terra.es>
  *
@@ -23,7 +23,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define __SM_DNIE_C__
+#define __CWA14890_C__
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -38,105 +38,170 @@
 #include "internal.h"
 #include <openssl/x509.h>
 #include <openssl/des.h>
-#include "dnie.h"
 
-/********************* Keys and certificates as published by DGP ********/
+#include "cwa14890.h"
 
-static const u8 icc_root_ca_modulus[] = {
-    0xEA, 0xDE, 0xDA, 0x45, 0x53, 0x32, 0x94, 0x50, 0x39, 0xDA, 0xA4, 0x04,
-    0xC8, 0xEB, 0xC4, 0xD3, 0xB7, 0xF5, 0xDC, 0x86, 0x92, 0x83, 0xCD, 0xEA,
-    0x2F, 0x10, 0x1E, 0x2A, 0xB5, 0x4F, 0xB0, 0xD0, 0xB0, 0x3D, 0x8F, 0x03,
-    0x0D, 0xAF, 0x24, 0x58, 0x02, 0x82, 0x88, 0xF5, 0x4C, 0xE5, 0x52, 0xF8,
-    0xFA, 0x57, 0xAB, 0x2F, 0xB1, 0x03, 0xB1, 0x12, 0x42, 0x7E, 0x11, 0x13,
-    0x1D, 0x1D, 0x27, 0xE1, 0x0A, 0x5B, 0x50, 0x0E, 0xAA, 0xE5, 0xD9, 0x40,
-    0x30, 0x1E, 0x30, 0xEB, 0x26, 0xC3, 0xE9, 0x06, 0x6B, 0x25, 0x71, 0x56,
-    0xED, 0x63, 0x9D, 0x70, 0xCC, 0xC0, 0x90, 0xB8, 0x63, 0xAF, 0xBB, 0x3B,
-    0xFE, 0xD8, 0xC1, 0x7B, 0xE7, 0x67, 0x30, 0x34, 0xB9, 0x82, 0x3E, 0x97,
-    0x7E, 0xD6, 0x57, 0x25, 0x29, 0x27, 0xF9, 0x57, 0x5B, 0x9F, 0xFF, 0x66,
-    0x91, 0xDB, 0x64, 0xF8, 0x0B, 0x5E, 0x92, 0xCD
-};
+/*********************** utility functions ************************/
 
-static const u8 icc_root_ca_public_exponent[] = {
-   0x01, 0x00, 0x01
-};
+/**
+ * Increase send sequence counter SSC
+ *
+ *@param card smart card info structure
+ *@param sm Secure Message handling data structure
+ *@return SC_SUCCESS if ok; else error code
+ *
+ * to further study: what about using bignum arithmetics?
+ */
+static int cwa_increase_ssc(
+    sc_card_t *card,
+    cwa_sm_status_t *sm) {
+    int n;
+    /* preliminary checks */
+    if ( !card || !card->ctx || !sm ) return SC_ERROR_INVALID_ARGUMENTS;
+    /* comodity vars */
+    sc_context_t *ctx=card->ctx; 
 
-static const u8 ifd_modulus [] = {
-   0xdb, 0x2c, 0xb4, 0x1e, 0x11, 0x2b, 0xac, 0xfa, 0x2b, 0xd7, 0xc3, 0xd3,
-   0xd7, 0x96, 0x7e, 0x84, 0xfb, 0x94, 0x34, 0xfc, 0x26, 0x1f, 0x9d, 0x09,
-   0x0a, 0x89, 0x83, 0x94, 0x7d, 0xaf, 0x84, 0x88, 0xd3, 0xdf, 0x8f, 0xbd,
-   0xcc, 0x1f, 0x92, 0x49, 0x35, 0x85, 0xe1, 0x34, 0xa1, 0xb4, 0x2d, 0xe5,
-   0x19, 0xf4, 0x63, 0x24, 0x4d, 0x7e, 0xd3, 0x84, 0xe2, 0x6d, 0x51, 0x6c,
-   0xc7, 0xa4, 0xff, 0x78, 0x95, 0xb1, 0x99, 0x21, 0x40, 0x04, 0x3a, 0xac,
-   0xad, 0xfc, 0x12, 0xe8, 0x56, 0xb2, 0x02, 0x34, 0x6a, 0xf8, 0x22, 0x6b,
-   0x1a, 0x88, 0x21, 0x37, 0xdc, 0x3c, 0x5a, 0x57, 0xf0, 0xd2, 0x81, 0x5c,
-   0x1f, 0xcd, 0x4b, 0xb4, 0x6f, 0xa9, 0x15, 0x7f, 0xdf, 0xfd, 0x79, 0xec,
-   0x3a, 0x10, 0xa8, 0x24, 0xcc, 0xc1, 0xeb, 0x3c, 0xe0, 0xb6, 0xb4, 0x39,
-   0x6a, 0xe2, 0x36, 0x59, 0x00, 0x16, 0xba, 0x69
-};
+    LOG_FUNC_CALLED(ctx);
+    /* u8 arithmetic; exit loop if no carry */
+    for(n=7;n>=0;n--) { sm->ssc[n]++; if ( (sm->ssc[n]) != 0x00 ) break; }
+    sc_log(ctx,"Next SSC: '%s'",sc_dump_hex(sm->ssc,8));
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+}
 
-static const u8 ifd_public_exponent [] = {
-   0x01, 0x00, 0x01
-};
+/**
+ * ISO 7816 padding
+ * Adds an 0x80 at the end of buffer and as many zeroes to get len 
+ * multiple of 8
+ * Buffer must be long enougth to store additional bytes
+ *
+ *@param buffer where to compose data
+ *@param len pointer to buffer length
+ */
+static void cwa_iso7816_padding(u8 *buffer,size_t *len) {
+    *(buffer+*len++)=0x80;
+    for(; (*len & 0x07)==0x00; *len++) *(buffer+*len)=0x00;
+}
 
-static const u8 ifd_private_exponent [] = {
-   0x18, 0xb4, 0x4a, 0x3d, 0x15, 0x5c, 0x61, 0xeb, 0xf4, 0xe3, 0x26, 0x1c,
-   0x8b, 0xb1, 0x57, 0xe3, 0x6f, 0x63, 0xfe, 0x30, 0xe9, 0xaf, 0x28, 0x89,
-   0x2b, 0x59, 0xe2, 0xad, 0xeb, 0x18, 0xcc, 0x8c, 0x8b, 0xad, 0x28, 0x4b,
-   0x91, 0x65, 0x81, 0x9c, 0xa4, 0xde, 0xc9, 0x4a, 0xa0, 0x6b, 0x69, 0xbc,
-   0xe8, 0x17, 0x06, 0xd1, 0xc1, 0xb6, 0x68, 0xeb, 0x12, 0x86, 0x95, 0xe5,
-   0xf7, 0xfe, 0xde, 0x18, 0xa9, 0x08, 0xa3, 0x01, 0x1a, 0x64, 0x6a, 0x48,
-   0x1d, 0x3e, 0xa7, 0x1d, 0x8a, 0x38, 0x7d, 0x47, 0x46, 0x09, 0xbd, 0x57,
-   0xa8, 0x82, 0xb1, 0x82, 0xe0, 0x47, 0xde, 0x80, 0xe0, 0x4b, 0x42, 0x21,
-   0x41, 0x6b, 0xd3, 0x9d, 0xfa, 0x1f, 0xac, 0x03, 0x00, 0x64, 0x19, 0x62,
-   0xad, 0xb1, 0x09, 0xe2, 0x8c, 0xaf, 0x50, 0x06, 0x1b, 0x68, 0xc9, 0xca,
-   0xbd, 0x9b, 0x00, 0x31, 0x3c, 0x0f, 0x46, 0xed
-};
+/**
+ * compose a BER-TLV data in provided buffer 
+ * Multybyte tag id are not supported
+ * Also multibyte id 0x84 is unhandled
+ *
+ * Notice that TLV is composed starting at offset lenght from
+ * the buffer. Consecutive calls to cwa_add_tlv, appends a new
+ * TLV at the end of the buffer
+ *
+ *@param card card info structure
+ *@param tag tag id
+ *@param len data length
+ *@param value data buffer
+ *@param out pointer to dest data
+ *@param outlen length of composed tlv data
+ *@return SC_SUCCESS if ok; else error
+ */
+static int cwa_add_tlv(
+        sc_card_t *card,
+        u8 tag,
+        size_t len,
+        u8 *data,
+        u8 **out,
+        size_t *outlen) {
+    /* preliminary checks */
+    if ( !card || !card->ctx || !out || !outlen) 
+        return SC_ERROR_INVALID_ARGUMENTS;
+    /* comodity vars */
+    sc_context_t *ctx=card->ctx; 
+    LOG_FUNC_CALLED(ctx);
 
-// Intermediate CA certificate in CVC format (Card verifiable certificate)
-static const u8 C_CV_CA_CS_AUT_cert [] = {
-  0x7f, 0x21, 0x81, 0xce, 0x5f, 0x37, 0x81, 0x80, 0x3c, 0xba, 0xdc, 0x36,
-  0x84, 0xbe, 0xf3, 0x20, 0x41, 0xad, 0x15, 0x50, 0x89, 0x25, 0x8d, 0xfd,
-  0x20, 0xc6, 0x91, 0x15, 0xd7, 0x2f, 0x9c, 0x38, 0xaa, 0x99, 0xad, 0x6c,
-  0x1a, 0xed, 0xfa, 0xb2, 0xbf, 0xac, 0x90, 0x92, 0xfc, 0x70, 0xcc, 0xc0,
-  0x0c, 0xaf, 0x48, 0x2a, 0x4b, 0xe3, 0x1a, 0xfd, 0xbd, 0x3c, 0xbc, 0x8c,
-  0x83, 0x82, 0xcf, 0x06, 0xbc, 0x07, 0x19, 0xba, 0xab, 0xb5, 0x6b, 0x6e,
-  0xc8, 0x07, 0x60, 0xa4, 0xa9, 0x3f, 0xa2, 0xd7, 0xc3, 0x47, 0xf3, 0x44,
-  0x27, 0xf9, 0xff, 0x5c, 0x8d, 0xe6, 0xd6, 0x5d, 0xac, 0x95, 0xf2, 0xf1,
-  0x9d, 0xac, 0x00, 0x53, 0xdf, 0x11, 0xa5, 0x07, 0xfb, 0x62, 0x5e, 0xeb,
-  0x8d, 0xa4, 0xc0, 0x29, 0x9e, 0x4a, 0x21, 0x12, 0xab, 0x70, 0x47, 0x58,
-  0x8b, 0x8d, 0x6d, 0xa7, 0x59, 0x22, 0x14, 0xf2, 0xdb, 0xa1, 0x40, 0xc7,
-  0xd1, 0x22, 0x57, 0x9b, 0x5f, 0x38, 0x3d, 0x22, 0x53, 0xc8, 0xb9, 0xcb,
-  0x5b, 0xc3, 0x54, 0x3a, 0x55, 0x66, 0x0b, 0xda, 0x80, 0x94, 0x6a, 0xfb,
-  0x05, 0x25, 0xe8, 0xe5, 0x58, 0x6b, 0x4e, 0x63, 0xe8, 0x92, 0x41, 0x49,
-  0x78, 0x36, 0xd8, 0xd3, 0xab, 0x08, 0x8c, 0xd4, 0x4c, 0x21, 0x4d, 0x6a,
-  0xc8, 0x56, 0xe2, 0xa0, 0x07, 0xf4, 0x4f, 0x83, 0x74, 0x33, 0x37, 0x37,
-  0x1a, 0xdd, 0x8e, 0x03, 0x00, 0x01, 0x00, 0x01, 0x42, 0x08, 0x65, 0x73,
-  0x52, 0x44, 0x49, 0x60, 0x00, 0x06
-};
+    /* assume tag id is not multibyte */
+    *(*out+*outlen++)=tag;
+    /* evaluate tag length value according iso7816-4 sect 5.2.2 */
+    if (len<0x80) {
+        *(*out+*outlen++)=len; 
+    } else if (len<0x00000100) {
+        *(*out+*outlen++)=0x81;
+        *(*out+*outlen++)=0xff & len; 
+    } else if (len<0x00010000) {
+        *(*out+*outlen++)=0x82;
+        *(*out+*outlen++)=0xff & (len>> 8);
+        *(*out+*outlen++)=0xff & len;
+    } else if (len<0x01000000) {
+        *(*out+*outlen++)=0x83;
+        *(*out+*outlen++)=0xff & (len>>16);
+        *(*out+*outlen++)=0xff & (len>> 8);
+        *(*out+*outlen++)=0xff & len;
+    } else { /* do not handle tag length 0x84 */
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+    }
+    /* copy remaining data to buffer */
+    if (len!=0) memcpy(*out+*outlen,data,len);
+    *outlen+=len;
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+}
 
-// Terminal (IFD) certificate in CVC format (PK.IFD.AUT)
-static const u8 C_CV_IFDuser_AUT_cert [] = {
-  0x7f, 0x21, 0x81, 0xcd, 0x5f, 0x37, 0x81, 0x80, 0x82, 0x5b, 0x69, 0xc6,
-  0x45, 0x1e, 0x5f, 0x51, 0x70, 0x74, 0x38, 0x5f, 0x2f, 0x17, 0xd6, 0x4d,
-  0xfe, 0x2e, 0x68, 0x56, 0x75, 0x67, 0x09, 0x4b, 0x57, 0xf3, 0xc5, 0x78,
-  0xe8, 0x30, 0xe4, 0x25, 0x57, 0x2d, 0xe8, 0x28, 0xfa, 0xf4, 0xde, 0x1b,
-  0x01, 0xc3, 0x94, 0xe3, 0x45, 0xc2, 0xfb, 0x06, 0x29, 0xa3, 0x93, 0x49,
-  0x2f, 0x94, 0xf5, 0x70, 0xb0, 0x0b, 0x1d, 0x67, 0x77, 0x29, 0xf7, 0x55,
-  0xd1, 0x07, 0x02, 0x2b, 0xb0, 0xa1, 0x16, 0xe1, 0xd7, 0xd7, 0x65, 0x9d,
-  0xb5, 0xc4, 0xac, 0x0d, 0xde, 0xab, 0x07, 0xff, 0x04, 0x5f, 0x37, 0xb5,
-  0xda, 0xf1, 0x73, 0x2b, 0x54, 0xea, 0xb2, 0x38, 0xa2, 0xce, 0x17, 0xc9,
-  0x79, 0x41, 0x87, 0x75, 0x9c, 0xea, 0x9f, 0x92, 0xa1, 0x78, 0x05, 0xa2,
-  0x7c, 0x10, 0x15, 0xec, 0x56, 0xcc, 0x7e, 0x47, 0x1a, 0x48, 0x8e, 0x6f,
-  0x1b, 0x91, 0xf7, 0xaa, 0x5f, 0x38, 0x3c, 0xad, 0xfc, 0x12, 0xe8, 0x56,
-  0xb2, 0x02, 0x34, 0x6a, 0xf8, 0x22, 0x6b, 0x1a, 0x88, 0x21, 0x37, 0xdc,
-  0x3c, 0x5a, 0x57, 0xf0, 0xd2, 0x81, 0x5c, 0x1f, 0xcd, 0x4b, 0xb4, 0x6f,
-  0xa9, 0x15, 0x7f, 0xdf, 0xfd, 0x79, 0xec, 0x3a, 0x10, 0xa8, 0x24, 0xcc,
-  0xc1, 0xeb, 0x3c, 0xe0, 0xb6, 0xb4, 0x39, 0x6a, 0xe2, 0x36, 0x59, 0x00,
-  0x16, 0xba, 0x69, 0x00, 0x01, 0x00, 0x01, 0x42, 0x08, 0x65, 0x73, 0x53,
-  0x44, 0x49, 0x60, 0x00, 0x06
-};
+/**
+ * Parse and APDU Response and extract specific BER-TLV data
+ * If Tag not found in response returns SC_SUCESS, but empty TLV data result
+ *
+ * NOTICE that iso7816 sect 5.2.2 states that Tag length may be 1 to n bytes
+ * length. In this code we'll assume allways tag lenght = 1 byte
+ *@param card card info structure
+ *@param apdu APDU data to extract response from
+ *@param tag  TLV tag to search for
+ *@param tlv  TLV structure to store result into
+ *@return SC_SUCCESS if OK; else error code
+ */
+static int cwa_find_tlv(
+   sc_card_t *card,
+   sc_apdu_t *apdu,
+   unsigned int tag,
+   cwa_tlv_t *tlv 
+   ) {
+    size_t tlen=0;
+    /* preliminary checks */
+    if ( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
+    /* comodity vars */
+    sc_context_t *ctx=card->ctx; 
 
-/*********************** Internal authentication routines *******************/
+    LOG_FUNC_CALLED(ctx);
+    if (!apdu || !tlv || tag==0x00) 
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+    u8 *pt=apdu->resp;
+    u8 *last=apdu->resp+apdu->resplen;
+    /* jump from tlv to tlv till find requested tag */
+    for (;pt<last;pt+=tlen) {
+        memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
+        /* set tag. Assume tag length is 1 byte */
+        tlv->tlv_start=pt;
+        tlv->tag=*pt++;
+        /* evaluate length according iso7816 sect 5.2.2.2 */
+        switch(*pt) {
+            case 0x84: pt++; tlen=             (0xff & (size_t) *pt);
+            case 0x83: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
+            case 0x82: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
+            case 0x81: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
+            case 0x80: pt++; break;
+            default:
+                if (*pt<0x80) {
+                    tlen= (0xff & (size_t) *pt); pt++;
+                } else {
+                    sc_log(ctx,"Invalid tag length indicator: %d",(size_t)*pt);
+                    LOG_FUNC_RETURN(ctx,SC_ERROR_WRONG_LENGTH);
+                }
+        }
+        if (tlv->tag!=tag) continue; /* tag not found: jump to next tlv */
+        /* tag found: fill data and return OK */
+        tlv->len     = tlen;
+        tlv->data    = pt;
+        tlv->tlv_len = (pt+tlen) - tlv->tlv_start;
+        LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+    }
+    /* arriving here means requested tlv not found */
+    memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+}
+
+/*********************** authentication routines *******************/
 
 /**
  * Routine to verify certificates provided by card
@@ -149,8 +214,9 @@ static const u8 C_CV_IFDuser_AUT_cert [] = {
  *@param icc_ca icc certificate from card
  *@return SC_SUCCESS if verification is ok; else error code
  */
-static int dnie_sm_verify_icc_certificates(
+static int cwa_verify_icc_certificates(
        sc_card_t *card,
+       cwa_provider_t *provider,
        X509 *sub_ca_cert,
        X509 *icc_cert
     ) {
@@ -158,27 +224,17 @@ static int dnie_sm_verify_icc_certificates(
     int res=SC_SUCCESS;
     EVP_PKEY *root_ca_key=NULL;
     EVP_PKEY *sub_ca_key=NULL;
-    RSA *root_ca_rsa=NULL;
     /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( (card!=NULL) || (card->ctx!=NULL) || (!provider ) )
+        return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     if (!sub_ca_cert || !icc_cert ) /* check received arguments */
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
 
-    /* compose root_ca_public key with data provided by Dnie Manual */
-    root_ca_key= EVP_PKEY_new(); 
-    root_ca_rsa = RSA_new();
-    if ( !root_ca_key || !root_ca_rsa ) 
-        LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
-    root_ca_rsa->n=BN_bin2bn(icc_root_ca_modulus,
-                             sizeof(icc_root_ca_modulus),
-                             root_ca_rsa->n);
-    root_ca_rsa->e=BN_bin2bn(icc_root_ca_public_exponent,
-                             sizeof(icc_root_ca_public_exponent),
-                             root_ca_rsa->e);
-    res=EVP_PKEY_assign_RSA(root_ca_key,root_ca_rsa);
-    if (!res) {
+    /* retrieve root ca pkey from provider */
+    res=provider->cwa_get_root_CA_PUBKEY(card,&root_ca_key);
+    if (res!=SC_SUCCESS) {
         msg="Cannot compose root CA public key";
         res=SC_ERROR_INTERNAL;
         goto verify_icc_certificates_end;
@@ -206,7 +262,7 @@ static int dnie_sm_verify_icc_certificates(
     /* arriving here means certificate verification success */
     res=SC_SUCCESS;
 verify_icc_certificates_end:
-    if (root_ca_key) EVP_PKEY_free(root_ca_key); /*implies root_ca_rsa free()*/
+    if (root_ca_key) EVP_PKEY_free(root_ca_key); 
     if (sub_ca_key) EVP_PKEY_free(sub_ca_key);
     if (res!=SC_SUCCESS) sc_log(ctx,msg);
     LOG_FUNC_RETURN(ctx,res);
@@ -220,7 +276,7 @@ verify_icc_certificates_end:
  *@param len  length of CVC certificate
  *@return SC_SUCCESS if ok; else error code
  */
-static int dnie_sm_verify_cvc_certificate(
+static int cwa_verify_cvc_certificate(
         sc_card_t *card,
         const u8 *cert,
         size_t len
@@ -259,7 +315,7 @@ static int dnie_sm_verify_cvc_certificate(
  *@param length size of buffer
  *@return SC_SUCCESS if ok; else error code
  */
-static int dnie_sm_set_security_env(
+static int cwa_set_security_env(
         sc_card_t *card,
         u8 p1,
         u8 p2,
@@ -297,9 +353,9 @@ static int dnie_sm_set_security_env(
  *@param datalen length of data to send
  *@return SC_SUCCESS if OK: else error code
  */
-static int dnie_sm_internal_auth( 
+static int cwa_internal_auth( 
         sc_card_t *card,
-        dnie_internal_sm_t *sm,
+        cwa_sm_status_t *sm,
         u8 *data,
         size_t datalen) {
     sc_apdu_t apdu;
@@ -338,15 +394,15 @@ static int dnie_sm_internal_auth(
  *@param icc_pubkey public key of card
  *@param ifd_privkey private RSA key of ifd
  *@param serial card serial number
- *@param sm pointer to dnie_sm_internal_t data
+ *@param sm pointer to cwa_internal_t data
  *@return SC_SUCCESS if ok; else errorcode
  */
-static int dnie_sm_prepare_external_auth(
+static int cwa_prepare_external_auth(
         sc_card_t *card,
         RSA *icc_pubkey,
         RSA *ifd_privkey,
         sc_serial_number_t *serial,
-        dnie_internal_sm_t *sm
+        cwa_sm_status_t *sm
     ) {
     /* we have to compose following message:
     data = E[PK.ICC.AUT](SIGMIN)
@@ -456,7 +512,7 @@ static int dnie_sm_prepare_external_auth(
         goto prepare_external_auth_end;
     }
 
-    /* process done: copy result into sm_internal buffer and return success */
+    /* process done: copy result into cwa_internal buffer and return success */
     memcpy(sm->sig,buf1,len1);
     res=SC_SUCCESS;
 
@@ -479,7 +535,7 @@ prepare_external_auth_end:
  *@param datalen signature length (128)
  *@return SC_SUCCESS if OK: else error code
  */
-static int dnie_sm_external_auth( sc_card_t *card, dnie_internal_sm_t *sm) {
+static int cwa_external_auth( sc_card_t *card, cwa_sm_status_t *sm) {
     sc_apdu_t apdu;
     int result=SC_SUCCESS;
     /* safety check */
@@ -506,12 +562,12 @@ static int dnie_sm_external_auth( sc_card_t *card, dnie_internal_sm_t *sm) {
 /**
  * SM creation of session keys
  *@param card pointer to sc_card_t data
- *@param sm pointer to dnie_sm_internal_t data
+ *@param sm pointer to cwa_internal_t data
  *@return SC_SUCCESS if ok; else error code
  */
-static int dnie_sm_compute_session_keys(
+static int cwa_compute_session_keys(
         sc_card_t *card,
-        dnie_internal_sm_t *sm ) {
+        cwa_sm_status_t *sm ) {
 
     char *msg=NULL;
     int n=0;
@@ -570,7 +626,7 @@ compute_session_keys_end:
  * Compare signature for internal auth procedure
  * returns SC_SUCCESS or error code
  */
-static int dnie_sm_compare_signature(
+static int cwa_compare_signature(
         u8 *data,
         size_t dlen,
         u8 *ifd_data
@@ -605,13 +661,13 @@ compare_signature_end:
  *@param sm secure messaging internal data
  *@return SC_SUCCESS if ok; else error code
  */
-static int dnie_sm_verify_internal_auth(
+static int cwa_verify_internal_auth(
         sc_card_t *card,
 	RSA *icc_pubkey,
         RSA *ifd_privkey,
         u8 *ifdbuf,
         size_t ifdlen,
-        dnie_internal_sm_t *sm
+        cwa_sm_status_t *sm
     ) {
     int res=SC_SUCCESS;
     char *msg;
@@ -662,7 +718,7 @@ static int dnie_sm_verify_internal_auth(
     /* evaluate DS[SK.ICC.AUTH](SIG) trying to decrypt with icc pubk */
     len3=RSA_public_encrypt(len1,buf1,buf3,icc_pubkey,RSA_NO_PADDING);
     if (len3<=0) goto verify_nicc_sig; /* evaluate N.ICC-SIG and retry */
-    res=dnie_sm_compare_signature(buf2,len2,ifdbuf);
+    res=cwa_compare_signature(buf2,len2,ifdbuf);
     if (res==SC_SUCCESS) goto verify_internal_ok;
 
 verify_nicc_sig: 
@@ -697,7 +753,7 @@ verify_nicc_sig:
         res=SC_ERROR_INVALID_DATA;
         goto verify_internal_done;
     }
-    res=dnie_sm_compare_signature(buf3,len3,ifdbuf);
+    res=cwa_compare_signature(buf3,len3,ifdbuf);
     if (res!=SC_SUCCESS) {
         msg="Verify Signature: cannot get valid SIG data";
         res=SC_ERROR_INVALID_DATA;
@@ -723,10 +779,14 @@ verify_internal_done:
  * "Understanding the DNIe"
  * "Manual de comandos del DNIe"
  * ISO7816-4 and CWA14890-{1,2}
+ *@param card card info structure
+ *@param provider cwa14890 info provider
+ *@return SC_SUCCESS if OK; else error code
  */
-static int dnie_sm_create_secure_channel(
-                sc_card_t *card, 
-                dnie_sm_handler_t *handler) {
+int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
+    u8 *cert;
+    size_t certlen;
+
     int res=SC_SUCCESS;
     char *msg="Success";
 
@@ -734,22 +794,26 @@ static int dnie_sm_create_secure_channel(
 
     /* data to get and parse certificates */
     X509 *icc_cert,*ca_cert;
-    RSA *icc_pubkey=NULL;
-    RSA *ifd_privkey=NULL;
+    EVP_PKEY *icc_pubkey=NULL;
+    EVP_PKEY *ifd_privkey=NULL;
 
     /* data to read certificates from card */
     sc_file_t *file=NULL;
     sc_path_t *path;
     u8 *buffer=NULL;
     size_t bufferlen=0;
+    char *certpath;
+
+    /* buffer to compose TLV messages */
+    u8 *tlv=NULL;
+    size_t tlvlen=0;
 
     /* preliminary checks */
-    if ( !card || !card->ctx || !handler || !handler->sm_internal ) 
-         return SC_ERROR_INVALID_ARGUMENTS;
+    if ( !card || !card->ctx || !provider ) return SC_ERROR_INVALID_ARGUMENTS;
 
     /* comodity vars */
     sc_context_t *ctx=card->ctx; 
-    dnie_internal_sm_t *sm=handler->sm_internal;
+    cwa_sm_status_t *sm=&(provider->status);
 
     LOG_FUNC_CALLED(ctx);
     /* malloc required structures */
@@ -766,17 +830,25 @@ static int dnie_sm_create_secure_channel(
     sc_reset(card,0); 
 
     /* Retrieve Card serial Number */
-    res=sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, serial);
+    res=provider->cwa_get_sn_icc(card,&serial);
     if (res!=SC_SUCCESS) { msg="Cannot get DNIe serialnr"; goto csc_end; }
     /* 
      * Manual says that we must read intermediate CA cert , Componente cert
      * And verify certificate chain
      */
 
-    /* Read Intermediate CA from card File:3F006020 */
-    sc_format_path("3F006020",path);
-    res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
-    if (res!=SC_SUCCESS) { msg="Cannot get intermediate CA cert"; goto csc_end; }
+    /* Read Intermediate CA from card */
+    res=provider->cwa_get_icc_intermediateCA_path(card,&certpath);
+    if (res!=SC_SUCCESS) { 
+        msg="Cannot get ICC intermediate CA path from provider";
+        goto csc_end;
+    }
+    sc_format_path(certpath,path);
+    res=read_file(card,path,&file,&buffer,&bufferlen);
+    if (res!=SC_SUCCESS) { 
+        msg="Cannot get intermediate CA cert"; 
+        goto csc_end;
+    }
     ca_cert= d2i_X509(NULL,(const unsigned char **)buffer,bufferlen);
     if (ca_cert==NULL) { /* received data is not a certificate */
         res=SC_ERROR_OBJECT_NOT_VALID;
@@ -785,9 +857,14 @@ static int dnie_sm_create_secure_channel(
     }
     if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
 
-    /* Read Card certificate File:3F00601F */
-    sc_format_path("3F00601F",path);
-    res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
+    /* Read ICC certificate from card */ 
+    res=provider->cwa_get_icc_cert_path(card,&certpath);
+    if (res!=SC_SUCCESS) { 
+        msg="Cannot get ICC certificate path from provider";
+        goto csc_end;
+    }
+    sc_format_path(certpath,path);
+    res=read_file(card,path,&file,&buffer,&bufferlen);
     if (res!=SC_SUCCESS) { msg="Cannot get Component cert"; goto csc_end; }
     icc_cert= d2i_X509(NULL,(const unsigned char **) buffer,bufferlen);
     if (icc_cert==NULL) { /* received data is not a certificate */
@@ -800,7 +877,7 @@ static int dnie_sm_create_secure_channel(
     /* Verify icc Card certificate chain */
     /* Notice that Official driver skips this step 
      * and simply verifies that icc_cert is a valid certificate */
-    res=dnie_sm_verify_icc_certificates(card,ca_cert,icc_cert);
+    res=cwa_verify_icc_certificates(card,provider,ca_cert,icc_cert);
     if (res!=SC_SUCCESS) {
         res=SC_ERROR_OBJECT_NOT_VALID;
         msg="Icc Certificates verification failed";
@@ -808,37 +885,63 @@ static int dnie_sm_create_secure_channel(
     }
 
     /* Extract public key from ICC certificate */
-    EVP_PKEY *pk=X509_get_pubkey(icc_cert);
-    icc_pubkey=pk->pkey.rsa;
+    icc_pubkey=X509_get_pubkey(icc_cert);
 
-    /* Select Root CA (key reference 0x020F according manual)
-     * in card for ifd certificate verification */
-    u8 root_ca_ref[] = {
-        /* T */ 0x83,
-        /* L */ 0x02,
-        /* V */ 0x02,0x0F
-    };
-    res=dnie_sm_set_security_env(card,0x81,0xB6,root_ca_ref,sizeof(root_ca_ref));
-    if (res!=SC_SUCCESS) { msg="Select Root CA failed"; goto csc_end; }
+    /* Select Root CA in card for ifd certificate verification */
+    res=provider->cwa_get_rootCA_pubkey_ref(card,&buffer,&bufferlen);
+    if (res!=SC_SUCCESS) { 
+        msg="Cannot get Root CA key reference from provider";
+        goto csc_end;
+    }
+    tlvlen=0;
+    tlv=calloc(10+bufferlen,sizeof(u8));
+    if (!tlv) { msg="calloc error"; res=SC_ERROR_OUT_OF_MEMORY; goto csc_end; }
+    res =cwa_compose_tlv(card,0x83,bufferlen,buffer,&tlv,&tlvlen);
+    if (res!=SC_SUCCESS) {
+        msg="Cannot compose tlv for setting Root CA key reference";
+        goto csc_end;
+    }
+    res=cwa_set_security_env(card,0x81,0xB6,tlv,tlvlen);
+    if (res!=SC_SUCCESS) { msg="Select Root CA key ref failed"; goto csc_end; }
 
     /* Send IFD intermediate CA in CVC format C_CV_CA */
-    res=dnie_sm_verify_cvc_certificate(card,C_CV_CA_CS_AUT_cert,sizeof(C_CV_CA_CS_AUT_cert));
+    res=provider->cwa_get_cvc_ca_cert(card,&cert,&certlen);
+    if (res!=SC_SUCCESS) { 
+        msg="Get CVC CA cert from provider failed";
+        goto csc_end;
+    }
+    res=cwa_verify_cvc_certificate(card,cert,certlen);
     if (res!=SC_SUCCESS) { msg="Verify CVC CA failed"; goto csc_end; }
 
-    /* select public key of sent certificate */
-    u8 cvc_ca_ref[] = {
-        /* T */ 0x83,
-        /* L */ 0x08,
-        /* V */ 0x65,0x73,0x53,0x44,0x49,0x60,0x00,0x06
-    };
-    res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ca_ref,sizeof(cvc_ca_ref));
+    /* select public key reference for sent IFD intermediate CA certificate */
+    res=provider->cwa_get_intermediateCA_pubkey_ref(card,&buffer,&bufferlen);
+    if (res!=SC_SUCCESS) { 
+        msg="Cannot get intermediate CA key reference from provider";
+        goto csc_end;
+    }
+    tlvlen=0;
+    free(tlv);
+    tlv=calloc(10+bufferlen,sizeof(u8));
+    if (!tlv) { msg="calloc error"; res=SC_ERROR_OUT_OF_MEMORY; goto csc_end; }
+    res =cwa_compose_tlv(card,0x83,bufferlen,buffer,&tlv,&tlvlen);
+    if (res!=SC_SUCCESS) {
+        msg="Cannot compose tlv for setting intermeditate CA key reference";
+        goto csc_end;
+    }
+    res=cwa_set_security_env(card,0x81,0xB6,tlv,tlvlen);
     if (res!=SC_SUCCESS) { msg="Select CVC CA pubk failed"; goto csc_end; }
 
     /* Send IFD certiticate in CVC format C_CV_IFD */
-    res=dnie_sm_verify_cvc_certificate(card,C_CV_IFDuser_AUT_cert,sizeof(C_CV_IFDuser_AUT_cert));
+    res=provider->cwa_get_cvc_ifd_cert(card,&cert,&certlen);
+    if (res!=SC_SUCCESS) { 
+        msg="Get CVC IFD cert from provider failed";
+        goto csc_end;
+    }
+    res=cwa_verify_cvc_certificate(card,cert,certlen);
     if (res!=SC_SUCCESS) { msg="Verify CVC IFD failed"; goto csc_end; }
 
     /* select public key of ifd certificate and icc private key */ 
+
     u8 cvc_ifd_ref[] = {
         /* T */ 0x83,
         /* L */ 0x0C,
@@ -847,36 +950,71 @@ static int dnie_sm_create_secure_channel(
         /* L */ 0x02,
         /* V */ 0x02,0x1f
     };
-    res=dnie_sm_set_security_env(card,0x81,0xB6,cvc_ifd_ref,sizeof(cvc_ifd_ref));
+    res=provider->cwa_get_ifd_pubkey_ref(card,&buffer,&bufferlen);
+    if (res!=SC_SUCCESS) { 
+        msg="Cannot get ifd public key reference from provider";
+        goto csc_end;
+    }
+    tlvlen=0;
+    free(tlv);
+    tlv=calloc(10+bufferlen,sizeof(u8));
+    if (!tlv) { msg="calloc error"; res=SC_ERROR_OUT_OF_MEMORY; goto csc_end; }
+    res =cwa_compose_tlv(card,0x83,bufferlen,buffer,&tlv,&tlvlen);
+    if (res!=SC_SUCCESS) {
+        msg="Cannot compose tlv for setting ifd pubkey reference";
+        goto csc_end;
+    }
+    res=provider->cwa_get_icc_privkey_ref(card,&buffer,&bufferlen);
+    if (res!=SC_SUCCESS) { 
+        msg="Cannot get icc private key reference from provider";
+        goto csc_end;
+    }
+    /* add this tlv to old one; do not call calloc */
+    res =cwa_compose_tlv(card,0x84,bufferlen,buffer,&tlv,&tlvlen);
+    if (res!=SC_SUCCESS) {
+        msg="Cannot compose tlv for setting ifd pubkey reference";
+        goto csc_end;
+    }
+
+    res=cwa_set_security_env(card,0x81,0xB6,tlv,tlvlen);
     if (res!=SC_SUCCESS) { msg="Select CVC IFD pubk failed"; goto csc_end; }
 
     /* Internal (Card) authentication (let the card verify sent ifd certs) 
      SN.IFD equals 8 lsb bytes of ifd.pubk ref according cwa14890 sec 8.4.1 */
-    u8 rndbuf[16] = {
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, /* RND.IFD (reserve 8 bytes) */
-        0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01  /* SN.IFD */
-    };
-    RAND_bytes(sm->rndifd,8); /* generate 8 random bytes */
-    memcpy(rndbuf,sm->rndifd,8); /* insert into rndbuf */
-    res=dnie_sm_internal_auth(card,sm,rndbuf,sizeof(rndbuf));
-    if (res!=SC_SUCCESS) { msg="Internal auth cmd failed"; goto csc_end; }
 
-    /* compose ifd_private key with data provided in Annex 3 of DNIe Manual */
-    ifd_privkey = RSA_new(); /* create RSA struct */
-    res=(ifd_privkey)?SC_SUCCESS:SC_ERROR_OUT_OF_MEMORY;
-    if (res!=SC_SUCCESS) { msg="Evaluate RSA ifd priv key failed"; goto csc_end; }
-    ifd_privkey->n =
-        BN_bin2bn(ifd_modulus,sizeof(ifd_modulus),ifd_privkey->n);
-    ifd_privkey->e = 
-        BN_bin2bn(ifd_public_exponent,sizeof(ifd_public_exponent),ifd_privkey->e);
-    ifd_privkey->d = 
-        BN_bin2bn(ifd_private_exponent,sizeof(ifd_private_exponent),ifd_privkey->d);
+    res=provider->cwa_get_sn_ifd(card,&buffer,&bufferlen);
+    if (res!=SC_SUCCESS) { 
+        msg="Cannot get ifd serial number from provider";
+        goto csc_end;
+    }
+    u8 *rndbuf=calloc(8 /*RND.IFD*/+ 8 /*SN.IFD*/ , sizeof(u8) );
+    if (!rndbuf) {
+        msg="Cannot calloc for RND.IFD+SN.IFD";
+        res=SC_ERROR_OUT_OF_MEMORY;
+        goto csc_end;
+    }
+    RAND_bytes(sm->rndifd,8); /* generate 8 random bytes */
+    memcpy(rndbuf,sm->rndifd,8); /* insert RND.IFD into rndbuf */
+    memcpy(rndbuf+8,buffer,8); /* insert SN.IFD into rndbuf */
+    res=cwa_internal_auth(card,sm,rndbuf,sizeof(rndbuf));
+    if (res!=SC_SUCCESS) { 
+        msg="Internal auth cmd failed"; 
+        goto csc_end;
+    }
+
+    /* retrieve ifd private key from provider */
+    res=provider->cwa_get_ifd_PRIVKEY(card,&ifd_privkey);
+    if (res!=SC_SUCCESS) {
+        msg="Cannot retrieve IFD private key from provider";
+        res=SC_ERROR_INTERNAL;
+        goto csc_end;
+    }
     
     /* verify received signature */
-    res=dnie_sm_verify_internal_auth(
+    res=cwa_verify_internal_auth(
         card,
-	icc_pubkey,     /* evaluated icc public key */
-        ifd_privkey,    /* evaluated from DGP's Manual Annex 3 Data */
+	icc_pubkey->pkey.rsa,     /* evaluated icc public key */
+        ifd_privkey->pkey.rsa,    /* evaluated from DGP's Manual Annex 3 Data */
         rndbuf,         /* RND.IFD || SN.IFD */
         sizeof(rndbuf), /* rndbuf length; should be 16 */
         sm              /* sm data */
@@ -888,21 +1026,21 @@ static int dnie_sm_create_secure_channel(
     if (res!=SC_SUCCESS) { msg="Get Challenge failed"; goto csc_end; }
 
     /* compose signature data for external auth */
-    res=dnie_sm_prepare_external_auth(
+    res=cwa_prepare_external_auth(
         card,
-        icc_pubkey,
-        ifd_privkey,
+        icc_pubkey->pkey.rsa,
+        ifd_privkey->pkey.rsa,
         serial,
         sm
     );
     if (res!=SC_SUCCESS) { msg="Prepare external auth failed"; goto csc_end; }
 
     /* External (IFD)  authentication */
-    res=dnie_sm_external_auth(card,sm);
+    res=cwa_external_auth(card,sm);
     if (res!=SC_SUCCESS) { msg="External auth cmd failed"; goto csc_end; }
 
     /* Session key generation */
-    res=dnie_sm_compute_session_keys(card,sm);
+    res=cwa_compute_session_keys(card,sm);
     if (res!=SC_SUCCESS) { msg="Session Key generation failed"; goto csc_end; }
 
     /* arriving here means ok: cleanup */
@@ -911,114 +1049,13 @@ csc_end:
     if (serial)  { memset(serial,0,sizeof(sc_serial_number_t)); free(serial); }
     if (path)    { memset(path,0,sizeof(sc_path_t)); free(path); } 
     if (buffer)      free(buffer); /* no need to memset */
-    if (icc_pubkey)  RSA_free(icc_pubkey);
-    if (ifd_privkey) RSA_free(ifd_privkey);
+    if (icc_pubkey)  EVP_PKEY_free(icc_pubkey);
+    if (ifd_privkey) EVP_PKEY_free(ifd_privkey);
     if (res!=SC_SUCCESS) sc_log(ctx,msg);
     LOG_FUNC_RETURN(ctx,res);
 }
 
 /******************* SM internal APDU encoding / decoding functions ******/
-
-/**
- * Increase send sequence counter SSC
- *
- *@param card smart card info structure
- *@param sm Secure Message handling data structure
- *@return SC_SUCCESS if ok; else error code
- *
- * to further study: what about using bignum arithmetics?
- */
-static int dnie_sm_increase_ssc(
-    sc_card_t *card,
-    dnie_internal_sm_t *sm) {
-    int n;
-    /* preliminary checks */
-    if ( !card || !card->ctx || !sm ) return SC_ERROR_INVALID_ARGUMENTS;
-    /* comodity vars */
-    sc_context_t *ctx=card->ctx; 
-
-    LOG_FUNC_CALLED(ctx);
-    /* u8 arithmetic; exit loop if no carry */
-    for(n=7;n>=0;n--) { sm->ssc[n]++; if ( (sm->ssc[n]) != 0x00 ) break; }
-    sc_log(ctx,"Next SSC: '%s'",sc_dump_hex(sm->ssc,8));
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
-}
-
-/**
- * ISO 7816 padding
- * Adds an 0x80 at the end of buffer and as many zeroes to get len 
- * multiple of 8
- * Buffer must be long enougth to store additional bytes
- *
- *@param buffer where to compose data
- *@param len pointer to buffer length
- */
-static void dnie_sm_iso7816_padding(u8 *buffer,size_t *len) {
-    *(buffer+*len++)=0x80;
-    for(; (*len & 0x07)==0x00; *len++) *(buffer+*len)=0x00;
-}
-
-/**
- * Parse and APDU Response and extract specific BER-TLV data
- * If Tag not found in response returns SC_SUCESS, but empty TLV data result
- *
- * NOTICE that iso7816 sect 5.2.2 states that Tag length may be 1 to n bytes
- * length. In this code we'll assume allways tag lenght = 1 byte
- *@param card card info structure
- *@param apdu APDU data to extract response from
- *@param tag  TLV tag to search for
- *@param tlv  TLV structure to store result into
- *@return SC_SUCCESS if OK; else error code
- */
-static int dnie_sm_find_tlv(
-   sc_card_t *card,
-   sc_apdu_t *apdu,
-   unsigned int tag,
-   dnie_tlv_data_t *tlv 
-   ) {
-    size_t tlen=0;
-    /* preliminary checks */
-    if ( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
-    /* comodity vars */
-    sc_context_t *ctx=card->ctx; 
-
-    LOG_FUNC_CALLED(ctx);
-    if (!apdu || !tlv || tag==0x00) 
-        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
-    u8 *pt=apdu->resp;
-    u8 *last=apdu->resp+apdu->resplen;
-    /* jump from tlv to tlv till find requested tag */
-    for (;pt<last;pt+=tlen) {
-        memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
-        /* set tag. Assume tag length is 1 byte */
-        tlv->tlv_start=pt;
-        tlv->tag=*pt++;
-        /* evaluate length according iso7816 sect 5.2.2.2 */
-        switch(*pt) {
-            case 0x84: pt++; tlen=             (0xff & (size_t) *pt);
-            case 0x83: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
-            case 0x82: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
-            case 0x81: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
-            case 0x80: pt++; break;
-            default:
-                if (*pt<0x80) {
-                    tlen= (0xff & (size_t) *pt); pt++;
-                } else {
-                    sc_log(ctx,"Invalid tag length indicator: %d",(size_t)*pt);
-                    LOG_FUNC_RETURN(ctx,SC_ERROR_WRONG_LENGTH);
-                }
-        }
-        if (tlv->tag!=tag) continue; /* tag not found: jump to next tlv */
-        /* tag found: fill data and return OK */
-        tlv->len     = tlen;
-        tlv->data    = pt;
-        tlv->tlv_len = (pt+tlen) - tlv->tlv_start;
-        LOG_FUNC_RETURN(ctx,SC_SUCCESS);
-    }
-    /* arriving here means requested tlv not found */
-    memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
-}
 
 /**
  * Encode an APDU
@@ -1028,12 +1065,14 @@ static int dnie_sm_find_tlv(
  * And DNIe's manual
  *
  *@param card card info structure
+ *@param sm Secure Messaging state information
  *@param from APDU to be encoded
  *@param to Where to store encoded apdu
  *@return SC_SUCCESS if ok; else error code
  */
-static int dnie_sm_internal_encode_apdu(
+int cwa_encode_secure_tx(
     sc_card_t *card,
+    cwa_sm_status_t *sm,
     sc_apdu_t *from,
     sc_apdu_t *to
     ) {
@@ -1049,19 +1088,11 @@ static int dnie_sm_internal_encode_apdu(
     /* mandatory check */
     if( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    dnie_private_data_t *priv= (dnie_private_data_t *) card->drv_data;
     LOG_FUNC_CALLED(ctx);
     /* check remaining arguments */
-    if ((from==NULL) || (to==NULL)|| (priv==NULL)) 
+    if ((from==NULL) || (to==NULL)|| (sm==NULL)) 
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
-    if ( /* check for properly initialized SM status */
-         (priv->sm_handler==NULL) || 
-         (priv->sm_handler->state!=DNIE_SM_INTERNAL ) ||
-         (priv->sm_handler->sm_internal==NULL) )
-            LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
-    
-    /* retrieve sm channel data */
-    dnie_internal_sm_t *sm=priv->sm_handler->sm_internal;
+    if (sm->state != CWA_SM_ACTIVE) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
 
     /* compose new header */
     to->cla=from->cla | 0x0C; /* mark apdu as encoded */
@@ -1079,7 +1110,7 @@ static int dnie_sm_internal_encode_apdu(
     *(ccbuf+len++)=to->ins;
     *(ccbuf+len++)=to->p1;
     *(ccbuf+len++)=to->p2;
-    dnie_sm_iso7816_padding(ccbuf,&len); /* pad header (4 bytes pad) */
+    cwa_iso7816_padding(ccbuf,&len); /* pad header (4 bytes pad) */
 
     /* if no data, skip data encryption step */
     if (from->lc!=0) {
@@ -1094,7 +1125,7 @@ static int dnie_sm_internal_encode_apdu(
 
         /* pad message */
         memcpy (msgbuf,from->data,dlen);
-        dnie_sm_iso7816_padding(msgbuf,&dlen);
+        cwa_iso7816_padding(msgbuf,&dlen);
 
         /* aply TDES + CBC with kenc and iv=(0,..,0) */
         DES_ede3_cbc_encrypt(msgbuf,cryptbuf,dlen,&k1,&k2,&k1,&iv,DES_ENCRYPT);
@@ -1140,10 +1171,10 @@ static int dnie_sm_internal_encode_apdu(
     memcpy(apdubuf,ccbuf+8,len-8);
     apdulen=len-8;
     /* pad again ccbuffer to compute CC */
-    dnie_sm_iso7816_padding(ccbuf,&len);
+    cwa_iso7816_padding(ccbuf,&len);
 
     /* compute MAC Cryptographic Checksum using kmac and increased SSC */
-    res=dnie_sm_increase_ssc(card,sm); /* increase send sequence counter */
+    res=cwa_increase_ssc(card,sm); /* increase send sequence counter */
     if (res!=SC_SUCCESS) {
     	sc_log(ctx,"Error in computing SSC");
         free(ccbuf);
@@ -1190,20 +1221,22 @@ static int dnie_sm_internal_encode_apdu(
  * And DNIe's manual
  *
  *@param card card info structure
+ *@param sm Secure Messaging state information
  *@param from APDU with response to be decoded
  *@param to Where to store apdu with decoded response
  *@return SC_SUCCESS if ok; else error code
  */
-static int dnie_sm_internal_decode_apdu(
+int cwa_decode_secure_rx(
     sc_card_t *card,
+    cwa_sm_status_t *sm,
     sc_apdu_t *from,
     sc_apdu_t *to
     ) {
     int i,j;
-    dnie_tlv_data_t p_tlv; /* to store plain data (Tag 0x81) */
-    dnie_tlv_data_t e_tlv; /* to store padded encoded data (Tag 0x87) */
-    dnie_tlv_data_t m_tlv; /* to store mac CC (Tag 0x97) */
-    dnie_tlv_data_t s_tlv; /* to store sw1-sw2 status (Tag 0x99) */
+    cwa_tlv_t p_tlv; /* to store plain data (Tag 0x81) */
+    cwa_tlv_t e_tlv; /* to store padded encoded data (Tag 0x87) */
+    cwa_tlv_t m_tlv; /* to store mac CC (Tag 0x97) */
+    cwa_tlv_t s_tlv; /* to store sw1-sw2 status (Tag 0x99) */
     u8 *ccbuf;      /* buffer for mac CC calculation */
     size_t cclen;   /* ccbuf len */
     u8 macbuf[8];   /* where to calculate mac */
@@ -1216,19 +1249,12 @@ static int dnie_sm_internal_decode_apdu(
     /* mandatory check */
     if( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
-    dnie_private_data_t *priv= (dnie_private_data_t *) card->drv_data;
     LOG_FUNC_CALLED(ctx);
 
     /* check remaining arguments */
-    if ((from==NULL) || (to==NULL)|| (priv==NULL)) 
+    if ((from==NULL) || (to==NULL)|| (sm==NULL)) 
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
-    if ( /* check for properly initialized SM status */
-         (priv->sm_handler==NULL) || 
-         (priv->sm_handler->state!=DNIE_SM_INTERNAL ) ||
-         (priv->sm_handler->sm_internal==NULL) )
-            LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
-    /* retrieve sm channel data */
-    dnie_internal_sm_t *sm=priv->sm_handler->sm_internal;
+    if ( sm->state != CWA_SM_ACTIVE ) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
 
     /* cwa14890 sect 9.3: check SW1 or SW2 for SM related errors */
     if (from->sw1==0x69) {
@@ -1247,10 +1273,10 @@ static int dnie_sm_internal_decode_apdu(
     to->resplen=resplen;
 
     /* parse response to find TLV data and check results */
-    dnie_sm_find_tlv(card,from,0x99,&s_tlv); /* status data (optional) */
-    dnie_sm_find_tlv(card,from,0x87,&e_tlv); /* encoded data (optional) */
-    dnie_sm_find_tlv(card,from,0x81,&p_tlv); /* plain data (optional) */
-    dnie_sm_find_tlv(card,from,0x97,&m_tlv); /* MAC data (mandatory) */
+    cwa_find_tlv(card,from,0x99,&s_tlv); /* status data (optional) */
+    cwa_find_tlv(card,from,0x87,&e_tlv); /* encoded data (optional) */
+    cwa_find_tlv(card,from,0x81,&p_tlv); /* plain data (optional) */
+    cwa_find_tlv(card,from,0x97,&m_tlv); /* MAC data (mandatory) */
     if (p_tlv.data && e_tlv.data) { /* encoded & plain are exclusive */
         msg="Plain and Encoded data are mutually exclusive in apdu response";
         res=SC_ERROR_INVALID_DATA;
@@ -1296,12 +1322,12 @@ static int dnie_sm_internal_decode_apdu(
         cclen += s_tlv.tlv_len;
     }
     /* add iso7816 padding */
-    dnie_sm_iso7816_padding(ccbuf,&cclen);
+    cwa_iso7816_padding(ccbuf,&cclen);
 
     /* evaluate mac by mean of kmac and increased SendSequence Counter SSC */
 
     /* increase SSC */
-    res=dnie_sm_increase_ssc(card,sm); /* increase send sequence counter */
+    res=cwa_increase_ssc(card,sm); /* increase send sequence counter */
     if (res!=SC_SUCCESS) {
         msg="Error in computing SSC";
         goto response_decode_end;
@@ -1408,155 +1434,221 @@ response_decode_end:
     LOG_FUNC_RETURN(ctx,res);
 }
 
-/************************* public functions ***************/
-int dnie_sm_init(
-        struct sc_card *card,
-        dnie_sm_handler_t **sm_handler,
-        int final_state) {
-    dnie_sm_handler_t *handler;
-    int result;
-    if( (card==NULL) || (card->ctx==NULL) || (sm_handler==NULL))
-        return SC_ERROR_INVALID_ARGUMENTS;
-    sc_context_t *ctx=card->ctx;
-    LOG_FUNC_CALLED(ctx);
-    if (*sm_handler==NULL) {
-        /* not initialized yet: time to do */
-        handler=(dnie_sm_handler_t *) calloc(1,sizeof( dnie_sm_handler_t ));
-        if (handler==NULL) return SC_ERROR_OUT_OF_MEMORY;
-        handler->sm_internal=(dnie_internal_sm_t *) 
-            calloc(1,sizeof( dnie_internal_sm_t ));
-        if (handler->sm_internal==NULL) return SC_ERROR_OUT_OF_MEMORY;
-        handler->state=DNIE_SM_NONE;
-        handler->deinit=NULL;
-        handler->encode=NULL;
-        handler->decode=NULL;
-        *sm_handler=(void *) &handler; /* mark pointer as initialized */
-    } else {
-        /* already initialized: take pointer from parameters */
-        handler=(dnie_sm_handler_t *) *sm_handler;
-    }
-    if (handler->state==final_state) {
-        /* already done */
-        LOG_FUNC_RETURN(ctx,SC_SUCCESS);
-    }
-    /* call de-init if required*/
-    if ( handler->deinit!=NULL) {
-        result=handler->deinit(card);
-        LOG_TEST_RET(ctx,result,"SM Deinit() failed");
-    }
-    /* now initialize to requested state */
-    switch(final_state) {
-        case DNIE_SM_NONE: 
-            handler->deinit = NULL;
-            handler->encode = NULL;
-            handler->encode = NULL;
-            break;
-        case DNIE_SM_INPROGRESS: /* work in progress; (what about locks?) */
-            LOG_FUNC_RETURN(ctx,SC_ERROR_NOT_ALLOWED);
-        case DNIE_SM_INTERNAL:
-            handler->state=DNIE_SM_INPROGRESS;
-            result = dnie_sm_create_secure_channel(card,handler);
-            if (result!=SC_SUCCESS) goto sm_init_error;
-            handler->encode = dnie_sm_internal_encode_apdu;
-            handler->decode = dnie_sm_internal_decode_apdu;
-            /* TODO: write and uncomment */
-            /* handler->deinit = dmie_sm_internal_deinit; */
-            break;
-        case DNIE_SM_EXTERNAL:
-            /* TODO: support for remote (SSL) APDU handling */ 
-            LOG_FUNC_RETURN(ctx,SC_ERROR_NOT_SUPPORTED);
-        default:
-            LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
-    }
-    /* arriving here means success */
-    handler->state=final_state;
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+/********************* default provider for cwa14890 ****************/
 
-sm_init_error:
-    /* error in init: back into non-sm mode */
-    handler->state=DNIE_SM_NONE;
-    handler->deinit = NULL;
-    handler->encode = NULL;
-    handler->encode = NULL;
-    LOG_FUNC_RETURN(ctx,result);
+/* pre and post operations */
+static int default_create_pre_ops(sc_card_t *card, cwa_sm_status_t *sm) {
+    return SC_SUCCESS;
 }
+
+static int default_create_post_ops(sc_card_t *card, cwa_sm_status_t *sm) {
+    return SC_SUCCESS;
+}
+
+static int default_get_root_ca_pubkey( sc_card_t *card, EVP_PKEY **root_ca_key) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* retrieve CVC intermediate CA certificate and length */
+static int default_get_cvc_ca_cert(sc_card_t *card, u8 **cert, size_t *length) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* retrieve CVC IFD certificate and length */
+static int default_get_cvc_ifd_cert(sc_card_t *card, u8 **cert, size_t *length) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+static int default_get_ifd_privkey( sc_card_t *card, EVP_PKEY **ifd_privkey) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* get ICC intermediate CA  path */
+static int default_get_icc_intermediate_ca_path(sc_card_t *card, char **path){
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* get ICC certificate path */
+static int default_get_icc_cert_path(sc_card_t *card, char **path){
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* Retrieve key reference for Root CA to validate CVC intermediate CA certs */
+static int default_get_root_ca_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* Retrieve key reference for intermediate CA to validate IFD certs */
+static int default_get_intermediate_ca_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* Retrieve key reference for IFD certificate */
+static int default_get_ifd_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* Retrieve key reference for ICC privkey */
+static int default_get_icc_privkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* Retrieve SN.IFD */
+static int default_get_sn_ifd(sc_card_t *card, u8 **buf, size_t *len) {
+    return SC_ERROR_NOT_SUPPORTED;
+}
+
+/* Retrieve SN.ICC */
+static int default_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
+   return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, *serial);
+}
+
+/************** operations related with APDU encoding ******************/
+
+/* pre and post operations */
+static int default_encode_pre_ops( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu) {
+    return SC_SUCCESS;
+}
+static int default_encode_post_ops( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu) {
+    return SC_SUCCESS;
+}
+
+/************** operations related APDU response decoding **************/
+
+/* pre and post operations */
+static int default_decode_pre_ops( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu) {
+    return SC_SUCCESS;
+}
+static int default_decode_post_ops( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu) {
+    return SC_SUCCESS;
+}
+
+static cwa_provider_t default_cwa_provider = {
+
+    /************ data related with SM operations *************************/
+    {
+         CWA_SM_NONE, /* state */
+         {   /* KICC */
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+         },
+         {   /* KIFD */
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+         },
+         {   /* RND.ICC */
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+         },
+         {   /* RND.IFD */
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+         },
+         {   /* SigBuf*/
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+         },
+         {   /* Kenc */
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+         },
+         {   /* Kmac */
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+         },
+         {   /* SSC Send Sequence counter */
+             0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+         }
+    },
+
+    /************ operations related with secure channel creation *********/
+
+    /* pre and post operations */
+    default_create_pre_ops,
+    default_create_post_ops,
+
+    /* Get ICC intermediate CA  path */
+    default_get_icc_intermediate_ca_path,
+    /* Get ICC certificate path */
+    default_get_icc_cert_path,
+
+    /* Obtain RSA public key from RootCA*/
+    default_get_root_ca_pubkey,
+    /* Obtain RSA IFD private key */
+    default_get_ifd_privkey,
+
+    /* Retrieve CVC intermediate CA certificate and length */
+    default_get_cvc_ca_cert,
+    /* Retrieve CVC IFD certificate and length */
+    default_get_cvc_ifd_cert,
+
+    /* Get public key references for Root CA to validate intermediate CA cert */
+    default_get_root_ca_pubkey_ref,
+
+    /* Get public key reference for IFD intermediate CA certificate */
+    default_get_intermediate_ca_pubkey_ref,
+
+    /* Get public key reference for IFD CVC certificate */
+    default_get_ifd_pubkey_ref,
+
+    /* Get ICC private key reference */
+    default_get_icc_privkey_ref,
+
+    /* Get IFD Serial Number */
+    default_get_sn_ifd,
+
+    /* Get ICC Serial Number */
+    default_get_sn_icc,
+
+    /************** operations related with APDU encoding ******************/
+
+    /* pre and post operations */
+    default_encode_pre_ops,
+    default_encode_post_ops,
+
+    /************** operations related APDU response decoding **************/
+
+    /* pre and post operations */
+    default_decode_pre_ops,
+    default_decode_post_ops,
+};
 
 /**
- * See if apdu needs to be encoded/decoded
- *@param card card structure declaration
- *@param apdu apdu to check
- *@param flag 0:encode 1:decode
- *@return err code (<0) 0:no wrap needed 1:wrap needed
+ *Get a copy of default cwa provider 
+ *@param card pointer to card info structure
+ *@return copy of default provider or null on error
  */
-static int dnie_sm_need_wrap(struct sc_card *card,
-                      struct sc_apdu *apdu,
-                      int flag
-                     ) {
-    switch (flag) {
-      case 0: /* encode */
-    	/* according iso7816-4 sec 5.1.1 
-    	check CLA byte to see if apdu is encoded */
-    	if ( (apdu->cla & 0x0C)==0) return 0; /* already encoded */
-    	/* GET Response command should not to be encoded */
-    	if ( apdu->ins == 0xC0 ) return 0;
-        /* arriving here means encoding needed */
-    	return 1;
-      case 1: /* decode */
-        if (apdu->resplen==0) return 0; /* response has only sw1 sw2 */
-        /* acording to cwa-14890-1 sec 9.2 */
-        switch (apdu->resp[0]) {
-            case 0x81: /* plain value (to be protected by CC) */
-            case 0x87: /* padding-content + cryptogram */
-            case 0x8E: /* cryptographic checksum (MAC) */
-            case 0x97: /* Le (to be protected by CC ) */
-            case 0x99: /* processing status (SW1-SW2 protected by mac) */
-               return 1;
-            default:   /* else assume unencrypted */
-               /* TODO: revise correctness */
-               return 0;
-        }
-      default: return SC_ERROR_INTERNAL;
-    } 
-}
-
-int dnie_sm_wrap_apdu(struct sc_card *card,/* card data */
-                      dnie_sm_handler_t *sm_handler, /* sm_handler */
-                      struct sc_apdu *from,/* apdu to be parsed */
-                      struct sc_apdu *to,  /* apdu to store result */
-                      int flag             /* 0:SM encode 1:SM decode */
-                      ) {
-    int result=SC_SUCCESS;
-    dnie_sm_handler_t *handler=(dnie_sm_handler_t *) sm_handler;
-    if ( (card==NULL) || (handler==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
-    if ( (from==NULL) || (to==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+cwa_provider_t *get_default_cwa_provider(sc_card_t *card) {
+    if( !card || !card->ctx) return NULL;
     LOG_FUNC_CALLED(card->ctx);
-    switch (handler->state) {
-      case DNIE_SM_NONE:
-      case DNIE_SM_INPROGRESS:
-         /* just copy structure data */
-         *to=*from; /* implicit memcpy() */
-         LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
-      case DNIE_SM_INTERNAL:
-      case DNIE_SM_EXTERNAL:
-         result=dnie_sm_need_wrap(card,from,flag);
-         if (result<0) goto dnie_wrap_apdu_end; /* ERROR */
-         if (result==0) { /* no wrap */
-             *to=*from; 
-             result=SC_SUCCESS; 
-             goto dnie_wrap_apdu_end;
-         } 
-         if (flag==0) result=handler->encode(card,from,to); /* wrap */
-         else         result=handler->decode(card,from,to); /* unwrap */
-         break;
-      default:
-         LOG_FUNC_RETURN(card->ctx,SC_ERROR_INTERNAL);
+    cwa_provider_t *res=calloc(1,sizeof(cwa_provider_t));
+    if (!res) {
+        sc_log(card->ctx,"Cannot allocate space for cwa_provider");
+        return NULL;
     }
-dnie_wrap_apdu_end:
-    LOG_FUNC_RETURN(card->ctx,result);
+    memcpy(res,&default_cwa_provider,sizeof(cwa_provider_t));
+    return res;
 }
 
-/* end of secure_messaging.c */
-#undef __SM_DNIE_C__
+
+/* end of cwa14890.c */
+#undef __CWA14890_C__
 
 #endif /* ENABLE_OPENSSL */
 

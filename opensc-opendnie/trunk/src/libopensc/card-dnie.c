@@ -435,7 +435,7 @@ static int dnie_init(struct sc_card *card){
     if (result!=SC_SUCCESS) goto dnie_init_error;
 
     /* initialize SM to none */
-    result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_NONE);
+    result=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_NONE);
     if (result!=SC_SUCCESS) goto dnie_init_error;
     card->drv_data=&dnie_priv;
      
@@ -451,7 +451,7 @@ static int dnie_init(struct sc_card *card){
     _sc_card_add_rsa_alg(card,1024,algoflags,0);
     _sc_card_add_rsa_alg(card,2048,algoflags,0);
     
-    result=SC_SUCCESS;
+
 dnie_init_error:
     LOG_FUNC_RETURN(card->ctx,result);
 }
@@ -462,7 +462,7 @@ static int dnie_finish(struct sc_card *card) {
     int result=SC_SUCCESS;
     LOG_FUNC_CALLED(card->ctx);
     /* disable sm channel if stablished */
-    dnie_sm_init(card, &dnie_priv.sm_handler, DNIE_SM_NONE);
+    dnie_sm_init(card, &dnie_priv.sm_handler, CWA_SM_NONE);
     /* free any cached data */
     dnie_file_cache_t *pt=dnie_priv.cache_top;
     while(pt!=NULL) {
@@ -486,7 +486,7 @@ static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *from,sc_apdu_t *to,int fla
         return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
     if (dnie_priv.sm_handler==NULL) { /* not initialized yet: time to do */
-        res=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_NONE);
+        res=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_NONE);
         if (res!=SC_SUCCESS) LOG_FUNC_RETURN(card->ctx,res);
     }
     /* encode/decode apdu */
@@ -613,7 +613,7 @@ static int dnie_logout(struct sc_card *card){
     if ( (card==NULL) || (card->ctx==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
     /* disable and free any sm channel related data */
-    int result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_NONE);
+    int result=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_NONE);
     /* TODO: _logout() see comments.txt on what to do here */
     LOG_FUNC_RETURN(card->ctx, result);
 }
@@ -737,7 +737,7 @@ static int dnie_decipher(struct sc_card *card,
       LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     /* make sure that Secure Channel is on */
-    result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
+    result=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_ACTIVE);
     LOG_TEST_RET(card->ctx,result,"decipher(); Cannot establish SM");
 
     /* Official driver uses an undocumented proprietary APDU
@@ -792,7 +792,7 @@ static int dnie_compute_signature(struct sc_card *card,
       LOG_FUNC_RETURN(card->ctx,SC_ERROR_BUFFER_TOO_SMALL);
 
     /* ensure that secure channel is stablished */
-    result=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
+    result=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_ACTIVE);
     LOG_TEST_RET(card->ctx,result,"decipher(); Cannot establish SM");
     /* (Requested by DGP): on signature operation, ask user consent */
     if (dnie_priv.rsa_key_ref==0x02) { /* TODO: revise key ID handling */
@@ -1046,7 +1046,7 @@ static int dnie_pin_cmd(struct sc_card * card,
     }
 
     /* ensure that secure channel is established */
-    res=dnie_sm_init(card,&dnie_priv.sm_handler,DNIE_SM_INTERNAL);
+    res=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_ACTIVE);
     LOG_TEST_RET(card->ctx,res,"Establish SM failed");
 
     /* what about pinpad support? */

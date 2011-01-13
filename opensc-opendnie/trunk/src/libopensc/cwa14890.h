@@ -109,7 +109,7 @@ typedef struct cwa_provider_st {
     int (*cwa_get_cvc_ifd_cert)(sc_card_t *card, u8 **cert, size_t *lenght);
 
     /* Get public key references for Root CA to validate intermediate CA cert */
-    int (*cwa_get_rootCA_pubkey_ref)(sc_card_t *card, u8 **buf, size_t *len);
+    int (*cwa_get_root_ca_pubkey_ref)(sc_card_t *card, u8 **buf, size_t *len);
 
     /* Get public key reference for IFD intermediate CA certificate */
     int (*cwa_get_intermediate_ca_pubkey_ref)(sc_card_t *card, u8 **buf, size_t *len);
@@ -193,6 +193,13 @@ extern int cwa_encode_secure_tx(
     sc_apdu_t *from, 
     sc_apdu_t *to
     );
+
+/**
+ * Gets a default cwa_provider structure
+ *@param card pointer to card information
+ *@return default cwa_provider data, or null on error
+ */
+extern cwa_provider_t *cwa_get_default_provider(sc_card_t *card);
 
 #endif /* ENABLE_OPENSSL */
 

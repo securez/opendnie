@@ -233,7 +233,7 @@ static int cwa_verify_icc_certificates(
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
 
     /* retrieve root ca pkey from provider */
-    res=provider->cwa_get_root_CA_PUBKEY(card,&root_ca_key);
+    res=provider->cwa_get_root_ca_pubkey(card,&root_ca_key);
     if (res!=SC_SUCCESS) {
         msg="Cannot compose root CA public key";
         res=SC_ERROR_INTERNAL;
@@ -838,7 +838,7 @@ int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
      */
 
     /* Read Intermediate CA from card */
-    res=provider->cwa_get_icc_intermediateCA_path(card,&certpath);
+    res=provider->cwa_get_icc_intermediate_ca_path(card,&certpath);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get ICC intermediate CA path from provider";
         goto csc_end;
@@ -888,7 +888,7 @@ int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
     icc_pubkey=X509_get_pubkey(icc_cert);
 
     /* Select Root CA in card for ifd certificate verification */
-    res=provider->cwa_get_rootCA_pubkey_ref(card,&buffer,&bufferlen);
+    res=provider->cwa_get_root_ca_pubkey_ref(card,&buffer,&bufferlen);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get Root CA key reference from provider";
         goto csc_end;
@@ -914,7 +914,7 @@ int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
     if (res!=SC_SUCCESS) { msg="Verify CVC CA failed"; goto csc_end; }
 
     /* select public key reference for sent IFD intermediate CA certificate */
-    res=provider->cwa_get_intermediateCA_pubkey_ref(card,&buffer,&bufferlen);
+    res=provider->cwa_get_intermediate_ca_pubkey_ref(card,&buffer,&bufferlen);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get intermediate CA key reference from provider";
         goto csc_end;
@@ -1003,7 +1003,7 @@ int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
     }
 
     /* retrieve ifd private key from provider */
-    res=provider->cwa_get_ifd_PRIVKEY(card,&ifd_privkey);
+    res=provider->cwa_get_ifd_privkey(card,&ifd_privkey);
     if (res!=SC_SUCCESS) {
         msg="Cannot retrieve IFD private key from provider";
         res=SC_ERROR_INTERNAL;
@@ -1634,7 +1634,7 @@ static cwa_provider_t default_cwa_provider = {
  *@param card pointer to card info structure
  *@return copy of default provider or null on error
  */
-cwa_provider_t *get_default_cwa_provider(sc_card_t *card) {
+cwa_provider_t *cwa_get_default_provider(sc_card_t *card) {
     if( !card || !card->ctx) return NULL;
     LOG_FUNC_CALLED(card->ctx);
     cwa_provider_t *res=calloc(1,sizeof(cwa_provider_t));

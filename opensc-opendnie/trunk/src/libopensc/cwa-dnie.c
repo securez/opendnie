@@ -150,7 +150,7 @@ static u8 sn_ifd[] = { 0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01 };
 
 /************ implementation of cwa provider methods **************/
 
-static int cwa_get_root_CA_PKEY( sc_card_t *card, EVP_PKEY **root_ca_key) {
+static int dnie_get_root_ca_pubkey( sc_card_t *card, EVP_PKEY **root_ca_key) {
     LOG_FUNC_CALLED(card->ctx);
 
     /* compose root_ca_public key with data provided by Dnie Manual */
@@ -176,7 +176,7 @@ static int cwa_get_root_CA_PKEY( sc_card_t *card, EVP_PKEY **root_ca_key) {
 }
 
 /* retrieve CVC intermediate CA certificate and length */
-static int cwa_get_cvc_ca_cert(sc_card_t *card, u8 **cert, size_t *length) {
+static int dnie_get_cvc_ca_cert(sc_card_t *card, u8 **cert, size_t *length) {
     LOG_FUNC_CALLED(card->ctx);
     *cert=C_CV_CA_CS_AUT_cert;
     *length=sizeof(C_CV_CA_CS_AUT_cert);
@@ -184,14 +184,14 @@ static int cwa_get_cvc_ca_cert(sc_card_t *card, u8 **cert, size_t *length) {
 }
 
 /* retrieve CVC IFD certificate and length */
-static int cwa_get_cvc_ifd_cert(sc_card_t *card, u8 **cert, size_t *length) {
+static int dnie_get_cvc_ifd_cert(sc_card_t *card, u8 **cert, size_t *length) {
     LOG_FUNC_CALLED(card->ctx);
     *cert=C_CV_IFDUser_AUT_cert;
     *length=sizeof(C_CV_IFDUser_AUT_cert);
     LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
 }
 
-static int cwa_get_ifd_PRIVKEY( sc_card_t *card, EVP_PKEY **ifd_privkey) {
+static int dnie_get_ifd_privkey( sc_card_t *card, EVP_PKEY **ifd_privkey) {
 
     LOG_FUNC_CALLED(card->ctx);
 
@@ -218,55 +218,144 @@ static int cwa_get_ifd_PRIVKEY( sc_card_t *card, EVP_PKEY **ifd_privkey) {
 }
 
 /* get ICC intermediate CA  path */
-static int cwa_get_icc_intermediateCA_path(sc_card_t *card, char **path){
+static int dnie_get_icc_intermediate_ca_path(sc_card_t *card, char **path){
     *path="3F006020";
     return SC_SUCCESS;
 }
 
 /* get ICC certificate path */
-static int cwa_get_icc_cert_path(sc_card_t *card, char **path){
+static int dnie_get_icc_cert_path(sc_card_t *card, char **path){
     *path="3F00601F";
     return SC_SUCCESS;
 }
 
 /* Retrieve key reference for Root CA to validate CVC intermediate CA certs */
-static int cwa_get_rootCA_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
+static int dnie_get_root_ca_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
    *buf= root_ca_keyref;
    *len= sizeof(root_ca_keyref);
    return SC_SUCCESS;
 }
 
 /* Retrieve key reference for intermediate CA to validate IFD certs */
-static int cwa_get_intermediateCA_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
+static int dnie_get_intermediate_ca_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
    *buf= cvc_ifd_keyref;
    *len= sizeof(cvc_ifd_keyref);
    return SC_SUCCESS;
 }
 
 /* Retrieve key reference for IFD certificate */
-static int cwa_get_ifd_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
+static int dnie_get_ifd_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
    *buf= cvc_ifd_keyref;
    *len= sizeof(cvc_ifd_keyref);
    return SC_SUCCESS;
 }
 
 /* Retrieve key reference for ICC privkey */
-static int cwa_get_icc_privkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
+static int dnie_get_icc_privkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
    *buf= icc_priv_keyref;
    *len= sizeof(icc_priv_keyref);
    return SC_SUCCESS;
 }
 
 /* Retrieve SN.IFD */
-static int cwa_get_sn_ifd(sc_card_t *card, u8 **buf, size_t *len) {
+static int dnie_get_sn_ifd(sc_card_t *card, u8 **buf, size_t *len) {
    *buf= sn_ifd;
    *len= sizeof(sn_ifd);
    return SC_SUCCESS;
 }
 
 /* Retrieve SN.ICC */
-static int cwa_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
+static int dnie_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
    return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, *serial);
+}
+
+/* 
+ * DNIe needs to get icc serial number at the begin of the sm creation
+ * (to avoid breaking key references) so get it an store into serialnr 
+ * cache here.
+ *
+ * In this way if get_sn_icc is called(), we make sure that no APDU
+ * command is to be sent to card, just retrieve it from cache 
+ */
+/* pre secure channel creator initialization routine */
+static int dnie_create_pre_ops(sc_card_t *card, cwa_sm_status_t *sm){
+    sc_serial_number_t serial;
+    return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, &serial);
+}
+
+/* 
+ * DNIe stores some certificates in compressed format.
+ * As these certificates are allways retrieved when SM is on,
+ * the best way to detect and unencrypt certificates in a
+ * transparent way is after an apdu decode operation
+ *
+ * In this way no need for any kind of file cache, just call
+ * read_binary() and SM code will do the trick :-)
+ */
+static int dnie_decode_post_ops( 
+        sc_card_t *card, 
+        cwa_sm_status_t *sm, 
+        sc_apdu_t *apdu) {
+
+        /* TODO: write */
+        return SC_SUCCESS;
+}
+
+cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card) {
+
+    cwa_provider_t *res=cwa_get_default_provider(card);
+    if (!res) return NULL;
+
+    /* set up proper data */
+
+    /* pre and post operations */
+    res->cwa_create_pre_ops = dnie_create_pre_ops;
+    res->cwa_create_post_ops = NULL; 
+
+    /* Get ICC intermediate CA  path */
+    res->cwa_get_icc_intermediate_ca_path = dnie_get_icc_intermediate_ca_path;
+    /* Get ICC certificate path */
+    res->cwa_get_icc_cert_path = dnie_get_icc_cert_path;
+
+    /* Obtain RSA public key from RootCA*/
+    res->cwa_get_root_ca_pubkey = dnie_get_root_ca_pubkey;
+    /* Obtain RSA IFD private key */
+    res->cwa_get_ifd_privkey = dnie_get_ifd_privkey;
+
+    /* Retrieve CVC intermediate CA certificate and length */
+    res->cwa_get_cvc_ca_cert = dnie_get_cvc_ca_cert;
+    /* Retrieve CVC IFD certificate and length */
+    res->cwa_get_cvc_ifd_cert = dnie_get_cvc_ifd_cert;
+
+    /* Get public key references for Root CA to validate intermediate CA cert */
+    res->cwa_get_root_ca_pubkey_ref = dnie_get_root_ca_pubkey_ref;
+
+    /* Get public key reference for IFD intermediate CA certificate */
+    res->cwa_get_intermediate_ca_pubkey_ref = dnie_get_intermediate_ca_pubkey_ref;
+
+    /* Get public key reference for IFD CVC certificate */
+    res->cwa_get_ifd_pubkey_ref = dnie_get_ifd_pubkey_ref;
+
+    /* Get ICC private key reference */
+    res->cwa_get_icc_privkey_ref = dnie_get_icc_privkey_ref;
+
+    /* Get IFD Serial Number */
+    res->cwa_get_sn_ifd = dnie_get_sn_ifd;
+
+    /* Get ICC Serial Number */
+    res->cwa_get_sn_icc = dnie_get_sn_icc;
+
+    /************** operations related with APDU encoding ******************/
+
+    /* pre and post operations */
+    res->cwa_encode_pre_ops = NULL;
+    res->cwa_encode_post_ops = NULL;
+
+    /************** operations related APDU response decoding **************/
+
+    /* pre and post operations */
+    res->cwa_decode_pre_ops = NULL;
+    res->cwa_decode_post_ops = dnie_decode_post_ops;
 }
 
 #endif /* HAVE_OPENSSL */

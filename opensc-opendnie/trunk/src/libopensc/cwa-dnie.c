@@ -314,7 +314,7 @@ static int dnie_decode_post_ops(
     compressed=le2ulong(apdu->resp);
     uncompressed=le2ulong(apdu->resp+4);
     if (compressed!=apdu->resplen-8) return SC_SUCCESS;/* not compressed */
-    if (uncompressed>compressed) return SC_SUCCESS; /* not compressed */
+    if (uncompressed<compressed) return SC_SUCCESS; /* not compressed */
     upt=calloc(uncompressed,sizeof(u8));
     if(!upt)return SC_ERROR_OUT_OF_MEMORY;
     res=sc_decompress(upt,(size_t *)uncompressed,

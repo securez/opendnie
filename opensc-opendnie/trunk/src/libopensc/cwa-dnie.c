@@ -325,6 +325,7 @@ static int dnie_decode_post_ops(
         return SC_SUCCESS; /* assume that still may not need uncompression */
     }
     /* copy uncompressed data and len into apdu response */
+    free(apdu->resp); /* no longer needed */
     apdu->resp=upt;
     apdu->resplen=uncompressed;
 #endif

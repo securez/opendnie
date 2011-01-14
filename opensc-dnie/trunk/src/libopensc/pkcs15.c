@@ -370,7 +370,6 @@ static int parse_ddo(struct sc_pkcs15_card *p15card, const u8 * buf, size_t bufl
 	}
 	if (asn1_ddo[5].flags & SC_ASN1_PRESENT) {
 		sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DDO.AID '%s'", sc_dump_hex(aid.value, aid.len));
-		sc_debug(ctx, SC_LOG_DEBUG_ASN1, "p15card.app '%p'", p15card->app);
 		memcpy(&p15card->app->ddo.aid, &aid, sizeof(struct sc_aid));
 	}
 
@@ -675,10 +674,10 @@ void sc_pkcs15_card_clear(sc_pkcs15_card_t *p15card)
 	}
 }
 
-const sc_app_info_t * sc_find_app(sc_card_t *card, struct sc_aid *aid)
+struct sc_app_info * sc_find_app(struct sc_card *card, struct sc_aid *aid)
 {
 	int ii;
-	
+
 	if (card->app_count <= 0)
 		return NULL;
 
@@ -2076,3 +2075,62 @@ int sc_pkcs15_allocate_object_content(struct sc_pkcs15_object *obj,
 
 	return SC_SUCCESS;
 }
+
+struct sc_supported_algo_info *
+sc_pkcs15_get_supported_algo(struct sc_pkcs15_card *p15card,
+		unsigned operation, unsigned mechanism)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_supported_algo_info *info = NULL;
+	int ii;
+	
+	for (ii=0;ii<SC_MAX_SUPPORTED_ALGORITHMS && p15card->tokeninfo->supported_algos[ii].reference; ii++)
+		if ((p15card->tokeninfo->supported_algos[ii].operations & operation) 
+				&& (p15card->tokeninfo->supported_algos[ii].mechanism == mechanism))
+			break;
+	
+	if (ii < SC_MAX_SUPPORTED_ALGORITHMS && p15card->tokeninfo->supported_algos[ii].reference)   {
+        	info = &p15card->tokeninfo->supported_algos[ii];
+        	sc_log(ctx, "found supported algorithm (ref:%X,mech:%X,ops:%X,algo_ref:%X)", 
+				info->reference, info->mechanism, info->operations, info->algo_ref); 
+	}
+	
+	return info;
+}
+
+
+int 
+sc_pkcs15_add_supported_algo_ref(struct sc_pkcs15_object *obj, 
+		struct sc_supported_algo_info *algo)
+{
+	int *algo_refs = NULL;
+	int ii;
+
+	if (!algo)
+		return SC_SUCCESS;
+
+	switch (obj->type) {
+	case SC_PKCS15_TYPE_PRKEY_RSA:
+		algo_refs = ((struct sc_pkcs15_prkey_info *)obj->data)->algo_refs;
+		break;
+	case SC_PKCS15_TYPE_PUBKEY_RSA:
+		algo_refs = ((struct sc_pkcs15_pubkey_info *)obj->data)->algo_refs;
+		break;
+	}
+	if (!algo_refs)
+		return SC_ERROR_NOT_SUPPORTED;
+
+	for (ii=0;ii<SC_MAX_SUPPORTED_ALGORITHMS && *(algo_refs + ii);ii++)
+		if (*(algo_refs + ii) == algo->reference)
+			return SC_SUCCESS;
+
+	for (ii=0;ii<SC_MAX_SUPPORTED_ALGORITHMS;ii++)   {
+		if (*(algo_refs + ii) == 0)   {
+			*(algo_refs + ii) = algo->reference;
+			return SC_SUCCESS;
+		}
+	}
+
+	return SC_ERROR_TOO_MANY_OBJECTS;
+}
+

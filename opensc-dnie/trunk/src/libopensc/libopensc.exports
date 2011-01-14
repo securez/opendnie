@@ -287,3 +287,4 @@ sc_pkcs15init_verify_secret
 sc_pkcs15init_sanity_check
 sc_card_find_rsa_alg
 sc_print_cache
+sc_find_app

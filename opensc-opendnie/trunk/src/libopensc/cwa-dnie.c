@@ -35,6 +35,7 @@
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
+#include "compression.h"
 
 #include "dnie.h"
 #include "cwa14890.h"
@@ -283,6 +284,13 @@ static int dnie_create_pre_ops(sc_card_t *card, cwa_sm_status_t *sm){
     return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, &serial);
 }
 
+/* convert little-endian data into unsigned long */
+static unsigned long le2ulong(u8 *pt) {
+   unsigned long res=0;
+   res = pt[0] + pt[1]<<8 + pt[2]<<16 + pt[3]<<24;
+   return res;
+}
+
 /* 
  * DNIe stores some certificates in compressed format.
  * As these certificates are allways retrieved when SM is on,
@@ -293,12 +301,35 @@ static int dnie_create_pre_ops(sc_card_t *card, cwa_sm_status_t *sm){
  * read_binary() and SM code will do the trick :-)
  */
 static int dnie_decode_post_ops( 
-        sc_card_t *card, 
-        cwa_sm_status_t *sm, 
-        sc_apdu_t *apdu) {
+    sc_card_t *card, 
+    cwa_sm_status_t *sm, 
+    sc_apdu_t *apdu) {
 
-        /* TODO: write */
-        return SC_SUCCESS;
+#ifdef ENABLE_ZLIB
+    unsigned long compressed;
+    unsigned long uncompressed;
+    int res;
+    u8 *upt;
+    if (apdu->resplen<8) return SC_SUCCESS; /* no compression posible */
+    compressed=le2ulong(apdu->resp);
+    uncompressed=le2ulong(apdu->resp+4);
+    if (compressed!=apdu->resplen-8) return SC_SUCCESS;/* not compressed */
+    if (uncompressed>compressed) return SC_SUCCESS; /* not compressed */
+    upt=calloc(uncompressed,sizeof(u8));
+    if(!upt)return SC_ERROR_OUT_OF_MEMORY;
+    res=sc_decompress(upt,(size_t *)uncompressed,
+                      apdu->resp+8,compressed,
+                      COMPRESSION_ZLIB);
+    if (res!=SC_SUCCESS) {
+        sc_log(card->ctx,"Uncompression failed");
+        return SC_SUCCESS; /* assume that still may not need uncompression */
+    }
+    /* copy uncompressed data and len into apdu response */
+    apdu->resp=upt;
+    apdu->resplen=uncompressed;
+#endif
+
+    return SC_SUCCESS;
 }
 
 cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card) {

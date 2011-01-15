@@ -95,8 +95,8 @@ typedef struct cwa_provider_st {
     /************ operations related with secure channel creation *********/
 
     /* pre and post operations */
-    int (*cwa_create_pre_ops)(sc_card_t *card, cwa_sm_status_t *sm);
-    int (*cwa_create_post_ops)(sc_card_t *card, cwa_sm_status_t *sm);
+    int (*cwa_create_pre_ops)(sc_card_t *card, struct cwa_provider_st *provider);
+    int (*cwa_create_post_ops)(sc_card_t *card, struct cwa_provider_st *provider);
 
     /* Get ICC intermediate CA  certificate */
     int (*cwa_get_icc_intermediate_ca_cert)(sc_card_t *card, X509 **cert);
@@ -134,14 +134,14 @@ typedef struct cwa_provider_st {
     /************** operations related with APDU encoding ******************/
 
     /* pre and post operations */
-    int (*cwa_encode_pre_ops)( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu);
-    int (*cwa_encode_post_ops)( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu);
+    int (*cwa_encode_pre_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *apdu);
+    int (*cwa_encode_post_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *apdu);
 
     /************** operations related APDU response decoding **************/
 
     /* pre and post operations */
-    int (*cwa_decode_pre_ops)( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu);
-    int (*cwa_decode_post_ops)( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu);
+    int (*cwa_decode_pre_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *apdu);
+    int (*cwa_decode_post_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *apdu);
 } cwa_provider_t;
 
 /************************** external function prototypes ******************/
@@ -176,7 +176,7 @@ extern int cwa_create_secure_channel(
  */
 extern int cwa_decode_response( 
     sc_card_t *card, 
-    cwa_sm_status_t *sm,
+    cwa_provider_t *provider,
     sc_apdu_t *apdu
     );
 
@@ -194,7 +194,7 @@ extern int cwa_decode_response(
  */
 extern int cwa_encode_apdu( 
     sc_card_t *card, 
-    cwa_sm_status_t *sm,
+    cwa_provider_t *provider,
     sc_apdu_t *apdu
     );
 

@@ -843,6 +843,15 @@ int cwa_create_secure_channel(
         LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
     }
 
+    /* call provider pre-operation method */
+    if (provider->cwa_create_pre_ops) {
+        res=provider->cwa_create_pre_ops(card,provider);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Create SM: provider pre_ops() failed");
+            goto csc_end;
+        }
+    }
+
     /* reset card (warm reset, do not unpower card) */
     sc_reset(card,0); 
 
@@ -936,14 +945,6 @@ int cwa_create_secure_channel(
 
     /* select public key of ifd certificate and icc private key */ 
 
-    u8 cvc_ifd_ref[] = {
-        /* T */ 0x83,
-        /* L */ 0x0C,
-        /* V */ 0x00,0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01,
-        /* T */ 0x84,
-        /* L */ 0x02,
-        /* V */ 0x02,0x1f
-    };
     res=provider->cwa_get_ifd_pubkey_ref(card,&buffer,&bufferlen);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get ifd public key reference from provider";
@@ -1037,6 +1038,15 @@ int cwa_create_secure_channel(
     res=cwa_compute_session_keys(card,sm);
     if (res!=SC_SUCCESS) { msg="Session Key generation failed"; goto csc_end; }
 
+    /* call provider post-operation method */
+    if (provider->cwa_create_post_ops) {
+        res=provider->cwa_create_post_ops(card,provider);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Create SM: provider post_ops() failed");
+            goto csc_end;
+        }
+    }
+
     /* arriving here means ok: cleanup */
     res=SC_SUCCESS;
 csc_end:
@@ -1064,7 +1074,7 @@ csc_end:
  */
 int cwa_encode_apdu(
     sc_card_t *card,
-    cwa_sm_status_t *sm,
+    cwa_provider_t *provider,
     sc_apdu_t *apdu
     ) {
     u8 *apdubuf; /* to store resulting apdu */
@@ -1077,14 +1087,24 @@ int cwa_encode_apdu(
     int len=0;
     int res=SC_SUCCESS;
     /* mandatory check */
-    if( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx || !provider) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
+    cwa_sm_status_t *sm=&(provider->status);
+
     LOG_FUNC_CALLED(ctx);
     /* check remaining arguments */
     if ((apdu==NULL) || (sm==NULL)) 
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     if (sm->state != CWA_SM_ACTIVE) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
 
+    /* call provider pre-operation method */
+    if (provider->cwa_encode_pre_ops) {
+        res=provider->cwa_encode_pre_ops(card,provider,apdu);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Encode APDU: provider pre_ops() failed");
+            LOG_FUNC_RETURN(ctx,res);
+        }
+    }
 
     /* allocate result apdu data buffer */
     apdubuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
@@ -1193,6 +1213,15 @@ int cwa_encode_apdu(
     apdu->data=apdubuf;
     apdu->datalen=apdulen;
 
+    /* call provider post-operation method */
+    if (provider->cwa_encode_post_ops) {
+        res=provider->cwa_encode_post_ops(card,provider,apdu);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Encode APDU: provider post_ops() failed");
+            LOG_FUNC_RETURN(ctx,res);
+        }
+    }
+
     /* that's all folks */
     LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
@@ -1211,7 +1240,7 @@ int cwa_encode_apdu(
  */
 int cwa_decode_response(
     sc_card_t *card,
-    cwa_sm_status_t *sm,
+    cwa_provider_t *provider,
     sc_apdu_t *apdu
     ) {
     int i,j;
@@ -1229,8 +1258,10 @@ int cwa_decode_response(
     char *msg=NULL;             /* to store error messages */
 
     /* mandatory check */
-    if( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx || !provider ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
+    cwa_sm_status_t *sm=&(provider->status);
+
     LOG_FUNC_CALLED(ctx);
 
     /* check remaining arguments */
@@ -1244,6 +1275,15 @@ int cwa_decode_response(
             msg="SM related errors in APDU response";
             res=SC_ERROR_INTERNAL; /* tell driver to restart SM */
             goto response_decode_end;
+        }
+    }
+    
+    /* call provider pre-operation method */
+    if (provider->cwa_decode_pre_ops) {
+        res=provider->cwa_decode_pre_ops(card,provider,apdu);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Decode APDU: provider pre_ops() failed");
+            LOG_FUNC_RETURN(ctx,res);
         }
     }
 
@@ -1390,11 +1430,18 @@ int cwa_decode_response(
             res=SC_ERROR_INVALID_DATA;
             goto response_decode_end;
         }
-        /* everything ok: remove 0x80 from response length */
+        /* everything ok: remove ending 0x80 from response */
         apdu->resplen--;
     }
 
-    /* final steps */
+    /* call provider post-operation method */
+    if (provider->cwa_decode_post_ops) {
+        res=provider->cwa_decode_post_ops(card,provider,apdu);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Decode APDU: provider post_ops() failed");
+            LOG_FUNC_RETURN(ctx,res);
+        }
+    }
 
     /* that's all folks */
     res=SC_SUCCESS;
@@ -1408,11 +1455,11 @@ response_decode_end:
 /********************* default provider for cwa14890 ****************/
 
 /* pre and post operations */
-static int default_create_pre_ops(sc_card_t *card, cwa_sm_status_t *sm) {
+static int default_create_pre_ops(sc_card_t *card, cwa_provider_t *provider) {
     return SC_SUCCESS;
 }
 
-static int default_create_post_ops(sc_card_t *card, cwa_sm_status_t *sm) {
+static int default_create_post_ops(sc_card_t *card, cwa_provider_t *provider) {
     return SC_SUCCESS;
 }
 
@@ -1477,20 +1524,20 @@ static int default_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
 /************** operations related with APDU encoding ******************/
 
 /* pre and post operations */
-static int default_encode_pre_ops( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu) {
+static int default_encode_pre_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *apdu) {
     return SC_SUCCESS;
 }
-static int default_encode_post_ops( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu) {
+static int default_encode_post_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *apdu) {
     return SC_SUCCESS;
 }
 
 /************** operations related APDU response decoding **************/
 
 /* pre and post operations */
-static int default_decode_pre_ops( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu) {
+static int default_decode_pre_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *apdu) {
     return SC_SUCCESS;
 }
-static int default_decode_post_ops( sc_card_t *card, cwa_sm_status_t *sm, sc_apdu_t *apdu) {
+static int default_decode_post_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *apdu) {
     return SC_SUCCESS;
 }
 

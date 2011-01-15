@@ -29,9 +29,14 @@
 #ifdef ENABLE_OPENSSL 
 
 /* Secure Messaging state indicator */
-#define CWA_SM_NONE       0x00 /* no SM channel defined */
+#define CWA_SM_NONE       0x00 /* No SM channel defined */
 #define CWA_SM_INPROGRESS 0x01 /* SM channel is being created: don't use */
 #define CWA_SM_ACTIVE     0x02 /* SM channel is active */
+
+/* Flags for setting SM status */
+#define CWA_SM_OFF        0x00 /* Disable SM channel */
+#define CWA_SM_COLD       0x01 /* force creation of a new SM channel */
+#define CWA_SM_WARM       0x02 /* Create new SM channel only if state is NONE */
 
 /*************** data structures for CWA14890 SM handling **************/
 
@@ -93,10 +98,10 @@ typedef struct cwa_provider_st {
     int (*cwa_create_pre_ops)(sc_card_t *card, cwa_sm_status_t *sm);
     int (*cwa_create_post_ops)(sc_card_t *card, cwa_sm_status_t *sm);
 
-    /* Get ICC intermediate CA  path */
-    int (*cwa_get_icc_intermediate_ca_path)(sc_card_t *card, char **path);
-    /* Get ICC certificate path */
-    int (*cwa_get_icc_cert_path)(sc_card_t *card, char **path);
+    /* Get ICC intermediate CA  certificate */
+    int (*cwa_get_icc_intermediate_ca_cert)(sc_card_t *card, X509 **cert);
+    /* Get ICC certificate */
+    int (*cwa_get_icc_cert)(sc_card_t *card, X509 **cert);
 
     /* Obtain RSA public key from RootCA*/
     int (*cwa_get_root_ca_pubkey) (sc_card_t *card,EVP_PKEY **key);
@@ -149,11 +154,13 @@ typedef struct cwa_provider_st {
  * ISO7816-4 and CWA14890-{1,2}
  *@param card card info structure
  *@param provider pointer to cwa provider
+ *@param flag Requested SM final state (OFF,COLD,WARM)
  *@return SC_SUCCESS if OK; else error code
  */
 extern int cwa_create_secure_channel(
     sc_card_t *card,
-    cwa_provider_t *provider
+    cwa_provider_t *provider,
+    int flag
     );
 
 /**
@@ -164,15 +171,13 @@ extern int cwa_create_secure_channel(
  * And DNIe's manual
  *
  *@param card card info structure
- *@param from APDU with response to be decoded
- *@param to Where to store apdu with decoded response
+ *@param apdu APDU with response to be decoded
  *@return SC_SUCCESS if ok; else error code
  */
-extern int cwa_decode_secure_rx( 
+extern int cwa_decode_response( 
     sc_card_t *card, 
     cwa_sm_status_t *sm,
-    sc_apdu_t *from, 
-    sc_apdu_t *to
+    sc_apdu_t *apdu
     );
 
 /**
@@ -183,15 +188,14 @@ extern int cwa_decode_secure_rx(
  * And DNIe's manual
  *
  *@param card card info structure
- *@param from APDU to be encoded
+ *@param apdu APDU to be encoded
  *@param to Where to store encoded apdu
  *@return SC_SUCCESS if ok; else error code
  */
-extern int cwa_encode_secure_tx( 
+extern int cwa_encode_apdu( 
     sc_card_t *card, 
     cwa_sm_status_t *sm,
-    sc_apdu_t *from, 
-    sc_apdu_t *to
+    sc_apdu_t *apdu
     );
 
 /**

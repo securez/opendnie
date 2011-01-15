@@ -781,9 +781,13 @@ verify_internal_done:
  * ISO7816-4 and CWA14890-{1,2}
  *@param card card info structure
  *@param provider cwa14890 info provider
+ *@param flag requested init method ( OFF, COLD, WARM )
  *@return SC_SUCCESS if OK; else error code
  */
-int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
+int cwa_create_secure_channel( 
+        sc_card_t *card,
+        cwa_provider_t *provider,
+        int flag ) {
     u8 *cert;
     size_t certlen;
 
@@ -793,19 +797,16 @@ int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
     sc_serial_number_t *serial;
 
     /* data to get and parse certificates */
-    X509 *icc_cert,*ca_cert;
+    X509 *icc_cert=NULL;
+    X509 *ca_cert=NULL;
     EVP_PKEY *icc_pubkey=NULL;
     EVP_PKEY *ifd_privkey=NULL;
 
-    /* data to read certificates from card */
-    sc_file_t *file=NULL;
-    sc_path_t *path;
-    u8 *buffer=NULL;
-    size_t bufferlen=0;
-    char *certpath;
-
-    /* buffer to compose TLV messages */
-    u8 *tlv=NULL;
+    
+    /* several buffer and buffer pointers */
+    u8 *buffer;
+    size_t bufferlen;
+    u8 *tlv=NULL; /* buffer to compose TLV messages */
     size_t tlvlen=0;
 
     /* preliminary checks */
@@ -816,15 +817,31 @@ int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
     cwa_sm_status_t *sm=&(provider->status);
 
     LOG_FUNC_CALLED(ctx);
-    /* malloc required structures */
-    serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
-    path= (sc_path_t *) calloc(1,sizeof(sc_path_t));
-    if ( (serial==NULL) || (path==NULL) )
-        LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
 
     /* ensure that our card is a DNIe */
     if (card->type!=SC_CARD_TYPE_DNIE_USER)
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_CARD);
+
+    /* check requested initialization method */
+    switch (flag) {
+        case CWA_SM_OFF: /* disable SM */
+            provider->status.state=CWA_SM_NONE; /* just mark channel inactive */
+            return SC_SUCCESS;
+        case CWA_SM_WARM: /* only initialize if not already done */
+            if (provider->status.state!=CWA_SM_NONE); return SC_SUCCESS;
+        case CWA_SM_COLD: /* force sm initialization process */
+            break;
+        default:
+            sc_log(ctx,"Invalid provided SM initialization flag");
+            LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+    }
+
+    /* malloc required structures */
+    serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
+    if (serial==NULL) {
+        sc_log(ctx,"Cannot allocate space for serial_nr data");
+        LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
+    }
 
     /* reset card (warm reset, do not unpower card) */
     sc_reset(card,0); 
@@ -838,41 +855,18 @@ int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
      */
 
     /* Read Intermediate CA from card */
-    res=provider->cwa_get_icc_intermediate_ca_path(card,&certpath);
+    res=provider->cwa_get_icc_intermediate_ca_cert(card,&ca_cert);
     if (res!=SC_SUCCESS) { 
-        msg="Cannot get ICC intermediate CA path from provider";
+        msg="Cannot get ICC intermediate CA certificate from provider";
         goto csc_end;
     }
-    sc_format_path(certpath,path);
-    res=read_file(card,path,&file,&buffer,&bufferlen);
-    if (res!=SC_SUCCESS) { 
-        msg="Cannot get intermediate CA cert"; 
-        goto csc_end;
-    }
-    ca_cert= d2i_X509(NULL,(const unsigned char **)buffer,bufferlen);
-    if (ca_cert==NULL) { /* received data is not a certificate */
-        res=SC_ERROR_OBJECT_NOT_VALID;
-        msg="Readed data is not a certificate";
-        goto csc_end;
-    }
-    if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
 
     /* Read ICC certificate from card */ 
-    res=provider->cwa_get_icc_cert_path(card,&certpath);
+    res=provider->cwa_get_icc_cert(card,&icc_cert);
     if (res!=SC_SUCCESS) { 
-        msg="Cannot get ICC certificate path from provider";
+        msg="Cannot get ICC certificate from provider";
         goto csc_end;
     }
-    sc_format_path(certpath,path);
-    res=read_file(card,path,&file,&buffer,&bufferlen);
-    if (res!=SC_SUCCESS) { msg="Cannot get Component cert"; goto csc_end; }
-    icc_cert= d2i_X509(NULL,(const unsigned char **) buffer,bufferlen);
-    if (icc_cert==NULL) { /* received data is not a certificate */
-        res=SC_ERROR_OBJECT_NOT_VALID;
-        msg="Readed data is not a certificate";
-        goto csc_end;
-    }
-    if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
 
     /* Verify icc Card certificate chain */
     /* Notice that Official driver skips this step 
@@ -1047,7 +1041,6 @@ int cwa_create_secure_channel( sc_card_t *card, cwa_provider_t *provider ) {
     res=SC_SUCCESS;
 csc_end:
     if (serial)  { memset(serial,0,sizeof(sc_serial_number_t)); free(serial); }
-    if (path)    { memset(path,0,sizeof(sc_path_t)); free(path); } 
     if (buffer)      free(buffer); /* no need to memset */
     if (icc_pubkey)  EVP_PKEY_free(icc_pubkey);
     if (ifd_privkey) EVP_PKEY_free(ifd_privkey);
@@ -1066,15 +1059,13 @@ csc_end:
  *
  *@param card card info structure
  *@param sm Secure Messaging state information
- *@param from APDU to be encoded
- *@param to Where to store encoded apdu
+ *@param apdu APDU to be encoded
  *@return SC_SUCCESS if ok; else error code
  */
-int cwa_encode_secure_tx(
+int cwa_encode_apdu(
     sc_card_t *card,
     cwa_sm_status_t *sm,
-    sc_apdu_t *from,
-    sc_apdu_t *to
+    sc_apdu_t *apdu
     ) {
     u8 *apdubuf; /* to store resulting apdu */
     size_t apdulen;
@@ -1090,15 +1081,10 @@ int cwa_encode_secure_tx(
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     /* check remaining arguments */
-    if ((from==NULL) || (to==NULL)|| (sm==NULL)) 
+    if ((apdu==NULL) || (sm==NULL)) 
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     if (sm->state != CWA_SM_ACTIVE) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
 
-    /* compose new header */
-    to->cla=from->cla | 0x0C; /* mark apdu as encoded */
-    to->ins=from->ins;
-    to->p1=from->p1;
-    to->p2=from->p2;
 
     /* allocate result apdu data buffer */
     apdubuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
@@ -1106,15 +1092,15 @@ int cwa_encode_secure_tx(
     if (!apdubuf || !ccbuf ) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
 
     /* fill buffer with header info */
-    *(ccbuf+len++)=to->cla;
-    *(ccbuf+len++)=to->ins;
-    *(ccbuf+len++)=to->p1;
-    *(ccbuf+len++)=to->p2;
+    *(ccbuf+len++)=apdu->cla;
+    *(ccbuf+len++)=apdu->ins;
+    *(ccbuf+len++)=apdu->p1;
+    *(ccbuf+len++)=apdu->p2;
     cwa_iso7816_padding(ccbuf,&len); /* pad header (4 bytes pad) */
 
     /* if no data, skip data encryption step */
-    if (from->lc!=0) {
-        size_t dlen=from->datalen;
+    if (apdu->lc!=0) {
+        size_t dlen=apdu->datalen;
         u8 msgbuf[SC_MAX_APDU_BUFFER_SIZE];
         u8 cryptbuf[SC_MAX_APDU_BUFFER_SIZE];
 
@@ -1124,7 +1110,7 @@ int cwa_encode_secure_tx(
         DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[8]), &k2);
 
         /* pad message */
-        memcpy (msgbuf,from->data,dlen);
+        memcpy (msgbuf,apdu->data,dlen);
         cwa_iso7816_padding(msgbuf,&dlen);
 
         /* aply TDES + CBC with kenc and iv=(0,..,0) */
@@ -1162,10 +1148,10 @@ int cwa_encode_secure_tx(
 
     /* if le byte is declared, compose and add Le TLV */
     /* TODO: study why original driver checks for le>=256? */
-    if (from->le>0) {
+    if (apdu->le>0) {
         *(ccbuf+len++)=0x97; /* TLV tag for CC protected Le */
         *(ccbuf+len++)=0x01; /* length=1 byte */
-        *(ccbuf+len++)=from->le;
+        *(ccbuf+len++)=apdu->le;
     }
     /* copy current data to apdu buffer (skip header and header padding) */
     memcpy(apdubuf,ccbuf+8,len-8);
@@ -1201,13 +1187,11 @@ int cwa_encode_secure_tx(
     memcpy(apdubuf+apdulen,macbuf,4); /* 4 first bytes of computed mac */
     apdulen+=4;
 
-    /* finally set remaining apdu data */
-    to->le=from->le;
-    to->lc=apdulen;
-    to->data=apdubuf;
-    to->datalen=apdulen;
-    to->resp=from->resp;
-    to->resplen=from->resplen;
+    /* rewrite resulting header */
+    apdu->cla |= 0x0C; /* mark apdu as encoded */
+    apdu->lc=apdulen;
+    apdu->data=apdubuf;
+    apdu->datalen=apdulen;
 
     /* that's all folks */
     LOG_FUNC_RETURN(ctx,SC_SUCCESS);
@@ -1222,15 +1206,13 @@ int cwa_encode_secure_tx(
  *
  *@param card card info structure
  *@param sm Secure Messaging state information
- *@param from APDU with response to be decoded
- *@param to Where to store apdu with decoded response
+ *@param apdu APDU with response to be decoded
  *@return SC_SUCCESS if ok; else error code
  */
-int cwa_decode_secure_rx(
+int cwa_decode_response(
     sc_card_t *card,
     cwa_sm_status_t *sm,
-    sc_apdu_t *from,
-    sc_apdu_t *to
+    sc_apdu_t *apdu
     ) {
     int i,j;
     cwa_tlv_t p_tlv; /* to store plain data (Tag 0x81) */
@@ -1252,31 +1234,24 @@ int cwa_decode_secure_rx(
     LOG_FUNC_CALLED(ctx);
 
     /* check remaining arguments */
-    if ((from==NULL) || (to==NULL)|| (sm==NULL)) 
+    if ((apdu==NULL) || (sm==NULL)) 
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     if ( sm->state != CWA_SM_ACTIVE ) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
 
     /* cwa14890 sect 9.3: check SW1 or SW2 for SM related errors */
-    if (from->sw1==0x69) {
-        if ( (from->sw2==0x88) || (from->sw2==0x87) ) {
+    if (apdu->sw1==0x69) {
+        if ( (apdu->sw2==0x88) || (apdu->sw2==0x87) ) {
             msg="SM related errors in APDU response";
             res=SC_ERROR_INTERNAL; /* tell driver to restart SM */
             goto response_decode_end;
         }
     }
 
-    /* copy from_apdu to to_apdu, but preserve resp and respleng fields */
-    respbuf=to->resp;
-    resplen=to->resplen;
-    memcpy(to,from,sizeof(sc_apdu_t));
-    to->resp=respbuf;
-    to->resplen=resplen;
-
     /* parse response to find TLV data and check results */
-    cwa_find_tlv(card,from,0x99,&s_tlv); /* status data (optional) */
-    cwa_find_tlv(card,from,0x87,&e_tlv); /* encoded data (optional) */
-    cwa_find_tlv(card,from,0x81,&p_tlv); /* plain data (optional) */
-    cwa_find_tlv(card,from,0x97,&m_tlv); /* MAC data (mandatory) */
+    cwa_find_tlv(card,apdu,0x99,&s_tlv); /* status data (optional) */
+    cwa_find_tlv(card,apdu,0x87,&e_tlv); /* encoded data (optional) */
+    cwa_find_tlv(card,apdu,0x81,&p_tlv); /* plain data (optional) */
+    cwa_find_tlv(card,apdu,0x97,&m_tlv); /* MAC data (mandatory) */
     if (p_tlv.data && e_tlv.data) { /* encoded & plain are exclusive */
         msg="Plain and Encoded data are mutually exclusive in apdu response";
         res=SC_ERROR_INVALID_DATA;
@@ -1357,28 +1332,28 @@ int cwa_decode_secure_rx(
 
     /* allocate response buffer */
     resplen= 10 + MAX(p_tlv.len,e_tlv.len); /* estimate response buflen */
-    if (to->resp) { /* if response apdu provides buffer, try to use it */
-        if(to->resplen<resplen) {
+    if (apdu->resp) { /* if response apdu provides buffer, try to use it */
+        if(apdu->resplen<resplen) {
             msg="Provided buffer has not enought size to store response";
             res=SC_ERROR_OUT_OF_MEMORY;
             goto response_decode_end;
         }
     } else { /* buffer not provided: create and assing to response apdu */
-        to->resp=calloc(p_tlv.len,sizeof(u8));
-        if (!to->resp) {
+        apdu->resp=calloc(p_tlv.len,sizeof(u8));
+        if (!apdu->resp) {
             msg="Cannot allocate buffer to store response";
             res=SC_ERROR_OUT_OF_MEMORY;
             goto response_decode_end;
         }
     }
-    to->resplen=resplen;
+    apdu->resplen=resplen;
     
     /* fill destination response apdu buffer with data */
 
     /* if plain data, just copy TLV data into apdu response */
     if (p_tlv.data) { /* plain data */
-        memcpy(to->resp,p_tlv.data,p_tlv.len);
-        to->resplen=p_tlv.len;
+        memcpy(apdu->resp,p_tlv.data,p_tlv.len);
+        apdu->resplen=p_tlv.len;
     }
 
     /* if encoded data, decode and store into apdu response */
@@ -1401,29 +1376,25 @@ int cwa_decode_secure_rx(
         DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[8]), &k2);
         /* decrypt into response buffer
          * by using 3DES CBC by mean of kenc and iv={0,...0} */
-        DES_ede3_cbc_encrypt(&e_tlv.data[1],to->resp,e_tlv.len-1,&k1,&k2,&k1,&iv, DES_DECRYPT);
-        to->resplen=e_tlv.len-1;
+        DES_ede3_cbc_encrypt(&e_tlv.data[1],apdu->resp,e_tlv.len-1,&k1,&k2,&k1,&iv, DES_DECRYPT);
+        apdu->resplen=e_tlv.len-1;
         /* remove iso padding from response length */
-        for(; (to->resplen > 0)  && (*(to->resp+to->resplen)==0x00) ; to->resplen-- ); /* empty loop */
-        if (to->resplen==0) { /* assure some data remains available */
+        for(; (apdu->resplen > 0)  && (*(apdu->resp+apdu->resplen)==0x00) ; apdu->resplen-- ); /* empty loop */
+        if (apdu->resplen==0) { /* assure some data remains available */
             msg="Encoded TLV: Decrypt returns no data !";
             res=SC_ERROR_INVALID_DATA;
             goto response_decode_end;
         }
-        if ( *(to->resp+to->resplen) != 0x80 ) { /* check padding byte */
+        if ( *(apdu->resp+apdu->resplen) != 0x80 ) { /* check padding byte */
             msg="Decrypted TLV has no 0x80 iso padding indicator!";
             res=SC_ERROR_INVALID_DATA;
             goto response_decode_end;
         }
         /* everything ok: remove 0x80 from response length */
-        to->resplen--;
+        apdu->resplen--;
     }
 
     /* final steps */
-
-    /* copy SW bytes. As CWA states, don't use s_tlv, as may not be present */
-    to->sw1=from->sw1;
-    to->sw2=from->sw2;
 
     /* that's all folks */
     res=SC_SUCCESS;
@@ -1464,12 +1435,12 @@ static int default_get_ifd_privkey( sc_card_t *card, EVP_PKEY **ifd_privkey) {
 }
 
 /* get ICC intermediate CA  path */
-static int default_get_icc_intermediate_ca_path(sc_card_t *card, char **path){
+static int default_get_icc_intermediate_ca_cert(sc_card_t *card, X509 **cert){
     return SC_ERROR_NOT_SUPPORTED;
 }
 
 /* get ICC certificate path */
-static int default_get_icc_cert_path(sc_card_t *card, char **path){
+static int default_get_icc_cert(sc_card_t *card, X509 **cert){
     return SC_ERROR_NOT_SUPPORTED;
 }
 
@@ -1584,9 +1555,9 @@ static cwa_provider_t default_cwa_provider = {
     default_create_post_ops,
 
     /* Get ICC intermediate CA  path */
-    default_get_icc_intermediate_ca_path,
+    default_get_icc_intermediate_ca_cert,
     /* Get ICC certificate path */
-    default_get_icc_cert_path,
+    default_get_icc_cert,
 
     /* Obtain RSA public key from RootCA*/
     default_get_root_ca_pubkey,

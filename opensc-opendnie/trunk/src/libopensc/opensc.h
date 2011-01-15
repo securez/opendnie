@@ -499,8 +499,7 @@ struct sc_card_operations {
 	 * If set to NULL no wrapping process will be done
 	 * Usefull on Secure Messaging APDU encode/decode
 	 * Returns SC_SUCCESS or error code */
-	int (*wrap_apdu)(struct sc_card *card,
-			struct sc_apdu *from, struct sc_apdu *to, int flag);
+	int (*wrap_apdu)(struct sc_card *card, struct sc_apdu *apdu, int flag);
 
 	/* ISO 7816-4 functions */
 

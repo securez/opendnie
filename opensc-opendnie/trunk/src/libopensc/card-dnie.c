@@ -35,11 +35,6 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 
-#include "opensc.h"
-#include "cardctl.h"
-#include "internal.h"
-#include "dnie.h"
-
 #ifdef HAVE_LIBASSUAN
 # include <assuan.h>
 /* check for libassuan version */
@@ -51,6 +46,22 @@
 #  define _gpg_error(t) assuan_strerror( (AssuanError) (t) )
 # endif
 #endif
+
+#include "opensc.h"
+#include "cardctl.h"
+#include "internal.h"
+
+#include "cwa14890.h"
+
+typedef struct dnie_private_data_st {
+    char *user_consent_app;
+    int user_consent_enabled;
+    sc_serial_number_t *serialnumber;
+    cwa_provider_t *provider;
+    int rsa_key_ref;   /* key id being used in sec operation */
+} dnie_private_data_t;
+
+extern cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card);
 
 #define DNIE_CHIP_NAME "DNIe: Spanish eID card"
 #define DNIE_CHIP_SHORTNAME "dnie"
@@ -260,78 +271,6 @@ exit:
 }
 #endif
 
-/**
- * Select a file from card, process fci and if path is not A DF
- * read data and store into cache
- * This is done by mean of iso_select_file() and iso_read_binary()
- * If path stands for a DNIe certificate, test for uncompress data
- *@param card pointer to sc_card data
- *@param path pathfile
- *@param file pointer to resulting file descriptor
- *@param buffer pointer to buffer where to store file contents
- *@param length length of buffer data
- *@return SC_SUCCESS if ok; else error code
- */
-int dnie_read_file(
-        sc_card_t *card,
-        const sc_path_t *path,
-        sc_file_t **file,
-        u8 **buffer,
-        size_t *length
-        ) {
-    u8 *data;
-    int res = SC_SUCCESS;
-    if( (card==NULL) || (card->ctx==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
-    sc_context_t *ctx= card->ctx;
-    LOG_FUNC_CALLED(card->ctx);
-    if (!buffer || !length || !path ) /* check received arguments */
-        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
-    /* try to adquire lock on card */
-    res=sc_lock(card);
-    LOG_TEST_RET(ctx, res, "sc_lock() failed");
-    /* select file by mean of iso7816 ops */
-    res=iso_ops->select_file(card,path,file);
-    if (res!=SC_SUCCESS) goto dnie_read_file_err;
-    /* iso's select file calls if needed process_fci, so arriving here
-     * we have file structure filled.
-     */
-    if ((*file)->type==SC_FILE_TYPE_DF) {
-        /* just a DF, no need to read_binary() */
-        *buffer=NULL;
-        *length=0;
-        res=SC_SUCCESS;
-        goto dnie_read_file_end;
-    }
-    /* reserve enought space to read data from card*/
-    if((*file)->size <= 0) {
-        res = SC_ERROR_FILE_TOO_SMALL;
-        goto dnie_read_file_err;
-    }
-    data=calloc((*file)->size,sizeof(u8));
-    if (data==NULL) {
-        res = SC_ERROR_OUT_OF_MEMORY;
-        goto dnie_read_file_err;
-    }
-    /* call iso7816 read_binary() to retrieve data */
-    res=iso_ops->read_binary(card,0,data,(*file)->size,0L);
-    if (res<0) { /* read_binary returns number of bytes readed */
-        res = SC_ERROR_CARD_CMD_FAILED;
-        goto dnie_read_file_err;
-    }
-    *buffer=data;
-    *length=res;
-    /* now check if needed to uncompress data */
-    /* TODO: dnie_read_file() check if uncompress data is required */
-    /* arriving here means success */
-    res=SC_SUCCESS;
-    goto dnie_read_file_end;
-dnie_read_file_err:
-    if (*file) sc_file_free(*file);
-dnie_read_file_end:
-    sc_unlock(card);
-    LOG_FUNC_RETURN(ctx,res);
-}
-
 /************************** cardctl defined operations *******************/
 
 /* 
@@ -434,9 +373,19 @@ static int dnie_init(struct sc_card *card){
     result=dnie_get_environment(card->ctx,&dnie_priv);
     if (result!=SC_SUCCESS) goto dnie_init_error;
 
-    /* initialize SM to none */
-    result=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_NONE);
+    /* initialize cwa-dnie provider */
+    cwa_provider_t *p=dnie_get_cwa_provider(card);
+    if(!p) {
+        sc_log(card->ctx,"Error in initialize cwa-dnie provider");
+        result=SC_ERROR_OUT_OF_MEMORY;
+        goto dnie_init_error;
+    }
+    /* initialize SM state to NONE */
+    result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
     if (result!=SC_SUCCESS) goto dnie_init_error;
+
+    /* store private data into card driver structure */
+    dnie_priv.provider=p;
     card->drv_data=&dnie_priv;
      
     /* set up flags according documentation */
@@ -461,17 +410,10 @@ dnie_init_error:
 static int dnie_finish(struct sc_card *card) {
     int result=SC_SUCCESS;
     LOG_FUNC_CALLED(card->ctx);
+
     /* disable sm channel if stablished */
-    dnie_sm_init(card, &dnie_priv.sm_handler, CWA_SM_NONE);
-    /* free any cached data */
-    dnie_file_cache_t *pt=dnie_priv.cache_top;
-    while(pt!=NULL) {
-        dnie_file_cache_t *next=pt->next;
-	if (!pt->file) sc_file_free(pt->file);
-        if (!pt->data) free(pt->data);
-        free(pt);
-        pt=next;
-    }
+    cwa_create_secure_channel(card, dnie_priv.provider,CWA_SM_OFF);
+
     LOG_FUNC_RETURN(card->ctx,result);
 }
 
@@ -480,84 +422,21 @@ static int dnie_finish(struct sc_card *card) {
  * If set to NULL no wrapping process will be done
  * Usefull on Secure Messaging APDU encode/decode
  * Returns SC_SUCCESS or error code */
-static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *from,sc_apdu_t *to,int flag) {
+static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu,int flag) {
     int res=SC_SUCCESS;
-    if( (card==NULL) || (card->ctx==NULL) || (from==NULL) || (to==NULL) )
+    if( (card==NULL) || (card->ctx==NULL) || (apdu==NULL) )
         return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
-    if (dnie_priv.sm_handler==NULL) { /* not initialized yet: time to do */
-        res=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_NONE);
-        if (res!=SC_SUCCESS) LOG_FUNC_RETURN(card->ctx,res);
-    }
+    cwa_provider_t *provider=dnie_priv.provider;
+    if (provider->status.state==CWA_SM_NONE) return SC_SUCCESS;
     /* encode/decode apdu */
-    res=dnie_sm_wrap_apdu(card,dnie_priv.sm_handler,from,to,flag);
+    if (flag==0) 
+         res=cwa_encode_apdu(card,&provider->status,apdu);
+    else res=cwa_decode_response(card,&provider->status,apdu);
     LOG_FUNC_RETURN(card->ctx,res);
 }
 
 /* ISO 7816-4 functions */
-
-static int dnie_read_binary(struct sc_card *card, 
-                       unsigned int idx,
-                       u8 * buf,
-                       size_t count,
-                       unsigned long flags){
-    int result=SC_SUCCESS;
-    LOG_FUNC_CALLED(card->ctx);
-    /* TODO: dnie_read_binary: detect and use cache */
-    /* data is not cached: use std iso function */
-    result=iso_ops->read_binary(card,idx,buf,count, flags);
-    LOG_FUNC_RETURN(card->ctx, result);
-}
-
-/* select_file: Does the equivalent of SELECT FILE command specified
- *   in ISO7816-4. Stores information about the selected file to
- *   <file>, if not NULL. */
-static int dnie_select_file(struct sc_card *card,
-                       const struct sc_path *path,
-                       struct sc_file **file_out){
-    int result=SC_SUCCESS;
-    LOG_FUNC_CALLED(card->ctx);
-    /* Manual says that some special paths store data in compressed
-     * format. So trap those paths, and perform file_read() & uncompress.
-     * in that way next read_binary call will use catched data */
-    /* find file in cache */
-    dnie_file_cache_t *pt=dnie_priv.cache_top;
-    for (; pt!=NULL; pt=pt->next) {
-        if (!sc_compare_path(path,&(pt->file->path))) continue;
-        /* file found in cache */
-        dnie_priv.cache_pt=pt;
-        *file_out=pt->file;
-        LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
-    }
-    /* arriving here means file is not in cache: read and store */
-    /* create a new cache entry */
-    dnie_file_cache_t *cache=
-        (dnie_file_cache_t *)calloc(1,sizeof(dnie_file_cache_t));
-    if (cache==NULL) {
-        result=SC_ERROR_OUT_OF_MEMORY;
-        goto select_file_error;
-    }
-    /* allocate a new file entry */
-    cache->file=sc_file_new();
-    if (cache->file==NULL) {
-        result=SC_ERROR_OUT_OF_MEMORY;
-        goto select_file_error;
-    } 
-    /* do file read */
-    result=dnie_read_file(card,path,&cache->file,&cache->data,&cache->datalen);
-    if (result!=SC_SUCCESS) goto select_file_error;
-    /* add entry at the begining of cache list */
-    cache->next=dnie_priv.cache_top;
-    dnie_priv.cache_top=cache;
-    dnie_priv.cache_pt=cache;
-    /* and set up return values */
-    *file_out=cache->file;
-    LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
-select_file_error:
-    if (cache && cache->file) sc_file_free(cache->file);
-    if (cache) free(cache);
-    LOG_FUNC_RETURN(card->ctx,result);
-}
 
 /* Get challenge: retrieve 8 random bytes for any further use
  * (eg perform an external authenticate command)
@@ -613,7 +492,7 @@ static int dnie_logout(struct sc_card *card){
     if ( (card==NULL) || (card->ctx==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
     /* disable and free any sm channel related data */
-    int result=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_NONE);
+    int result=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_OFF);
     /* TODO: _logout() see comments.txt on what to do here */
     LOG_FUNC_RETURN(card->ctx, result);
 }
@@ -737,7 +616,7 @@ static int dnie_decipher(struct sc_card *card,
       LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     /* make sure that Secure Channel is on */
-    result=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_ACTIVE);
+    result=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_WARM);
     LOG_TEST_RET(card->ctx,result,"decipher(); Cannot establish SM");
 
     /* Official driver uses an undocumented proprietary APDU
@@ -792,7 +671,7 @@ static int dnie_compute_signature(struct sc_card *card,
       LOG_FUNC_RETURN(card->ctx,SC_ERROR_BUFFER_TOO_SMALL);
 
     /* ensure that secure channel is stablished */
-    result=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_ACTIVE);
+    result=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_WARM);
     LOG_TEST_RET(card->ctx,result,"decipher(); Cannot establish SM");
     /* (Requested by DGP): on signature operation, ask user consent */
     if (dnie_priv.rsa_key_ref==0x02) { /* TODO: revise key ID handling */
@@ -1045,8 +924,8 @@ static int dnie_pin_cmd(struct sc_card * card,
         LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_CARD);
     }
 
-    /* ensure that secure channel is established */
-    res=dnie_sm_init(card,&dnie_priv.sm_handler,CWA_SM_ACTIVE);
+    /* ensure that secure channel is established from reset */
+    res=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_COLD);
     LOG_TEST_RET(card->ctx,res,"Establish SM failed");
 
     /* what about pinpad support? */
@@ -1138,7 +1017,7 @@ static sc_card_driver_t *get_dnie_driver(void) {
     dnie_ops.wrap_apdu             = dnie_wrap_apdu;
 
     /* iso7816-4 functions */
-    dnie_ops.read_binary           = dnie_read_binary;
+    /* dnie_ops.read_binary */
     /* dnie_ops.write_binary */
     /* dnie_ops.update_binary */
     /* dnie_ops.erase_binary */
@@ -1146,7 +1025,7 @@ static sc_card_driver_t *get_dnie_driver(void) {
     /* dnie_ops.write_record */
     /* dnie_ops.append_record */
     /* dnie_ops.update_record */
-    dnie_ops.select_file           = dnie_select_file;
+    /* dnie_ops.select_file */
     /* dnie_ops.get_response */
     dnie_ops.get_challenge         = dnie_get_challenge;
 

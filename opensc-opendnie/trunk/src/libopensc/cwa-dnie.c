@@ -37,7 +37,6 @@
 #include "internal.h"
 #include "compression.h"
 
-#include "dnie.h"
 #include "cwa14890.h"
 
 #include <openssl/x509.h>
@@ -149,6 +148,113 @@ static u8 icc_priv_keyref[] = { 0x02, 0x1f };
 
 static u8 sn_ifd[] = { 0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01 };
 
+/************ internal functions **********************************/
+
+/**
+ * Select a file from card, process fci and read data
+ * This is done by mean of iso_select_file() and iso_read_binary()
+ *@param card pointer to sc_card data
+ *@param path pathfile
+ *@param file pointer to resulting file descriptor
+ *@param buffer pointer to buffer where to store file contents
+ *@param length length of buffer data
+ *@return SC_SUCCESS if ok; else error code
+ */
+int dnie_read_file(
+        sc_card_t *card,
+        const sc_path_t *path,
+        sc_file_t **file,
+        u8 **buffer,
+        size_t *length
+        ) {
+    u8 *data;
+    int res = SC_SUCCESS;
+    if( (card==NULL) || (card->ctx==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx= card->ctx;
+    LOG_FUNC_CALLED(card->ctx);
+    if (!buffer || !length || !path ) /* check received arguments */
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+    /* try to adquire lock on card */
+    res=sc_lock(card);
+    LOG_TEST_RET(ctx, res, "sc_lock() failed");
+    /* select file by mean of iso7816 ops */
+    res=card->ops->select_file(card,path,file);
+    if (res!=SC_SUCCESS) goto dnie_read_file_err;
+    /* iso's select file calls if needed process_fci, so arriving here
+     * we have file structure filled.
+     */
+    if ((*file)->type==SC_FILE_TYPE_DF) {
+        /* just a DF, no need to read_binary() */
+        *buffer=NULL;
+        *length=0;
+        res=SC_SUCCESS;
+        goto dnie_read_file_end;
+    }
+    /* reserve enought space to read data from card*/
+    if((*file)->size <= 0) {
+        res = SC_ERROR_FILE_TOO_SMALL;
+        goto dnie_read_file_err;
+    }
+    data=calloc((*file)->size,sizeof(u8));
+    if (data==NULL) {
+        res = SC_ERROR_OUT_OF_MEMORY;
+        goto dnie_read_file_err;
+    }
+    /* call iso7816 read_binary() to retrieve data */
+    res=card->ops->read_binary(card,0,data,(*file)->size,0L);
+    if (res<0) { /* read_binary returns number of bytes readed */
+        res = SC_ERROR_CARD_CMD_FAILED;
+        goto dnie_read_file_err;
+    }
+    *buffer=data;
+    *length=res;
+    /* now check if needed to uncompress data */
+    /* TODO: dnie_read_file() check if uncompress data is required */
+    /* arriving here means success */
+    res=SC_SUCCESS;
+    goto dnie_read_file_end;
+dnie_read_file_err:
+    if (*file) sc_file_free(*file);
+dnie_read_file_end:
+    sc_unlock(card);
+    LOG_FUNC_RETURN(ctx,res);
+}
+
+static int dnie_read_certificate(sc_card_t *card, char *certpath, X509 **cert) {
+    sc_file_t *file=NULL;
+    sc_path_t *path=NULL;
+    u8 *buffer=NULL;
+    char *msg=NULL;
+    size_t bufferlen=0;
+    int res=SC_SUCCESS;
+   
+    LOG_FUNC_CALLED(card->ctx);
+    path= (sc_path_t *) calloc(1,sizeof(sc_path_t));
+    if (!path) {
+        msg="Cannot allocate path data for cert read";
+        res=SC_ERROR_OUT_OF_MEMORY;
+        goto read_cert_end;
+    }
+    sc_format_path(certpath,path);
+    res=dnie_read_file(card,path,&file,&buffer,&bufferlen);
+    if (res!=SC_SUCCESS) {
+        msg="Cannot get intermediate CA cert";
+        goto read_cert_end;
+    }
+    *cert= d2i_X509(NULL,(const unsigned char **)buffer,bufferlen);
+    if (*cert==NULL) { /* received data is not a certificate */
+        res=SC_ERROR_OBJECT_NOT_VALID;
+        msg="Readed data is not a certificate";
+        goto read_cert_end;
+    }
+    res=SC_SUCCESS;
+
+read_cert_end:
+    if (file) { sc_file_free(file); file=NULL;buffer=NULL; bufferlen=0; }
+    if (msg) sc_log(card->ctx,msg);
+    LOG_FUNC_RETURN(card->ctx,res);
+}
+
 /************ implementation of cwa provider methods **************/
 
 static int dnie_get_root_ca_pubkey( sc_card_t *card, EVP_PKEY **root_ca_key) {
@@ -219,15 +325,13 @@ static int dnie_get_ifd_privkey( sc_card_t *card, EVP_PKEY **ifd_privkey) {
 }
 
 /* get ICC intermediate CA  path */
-static int dnie_get_icc_intermediate_ca_path(sc_card_t *card, char **path){
-    *path="3F006020";
-    return SC_SUCCESS;
+static int dnie_get_icc_intermediate_ca_cert(sc_card_t *card, X509 **cert){
+    return dnie_read_certificate(card,"3F006020",cert);
 }
 
 /* get ICC certificate path */
-static int dnie_get_icc_cert_path(sc_card_t *card, char **path){
-    *path="3F00601F";
-    return SC_SUCCESS;
+static int dnie_get_icc_cert(sc_card_t *card, X509 **cert){
+    return dnie_read_certificate(card,"3F00601F",cert);
 }
 
 /* Retrieve key reference for Root CA to validate CVC intermediate CA certs */
@@ -345,9 +449,9 @@ cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card) {
     res->cwa_create_post_ops = NULL; 
 
     /* Get ICC intermediate CA  path */
-    res->cwa_get_icc_intermediate_ca_path = dnie_get_icc_intermediate_ca_path;
+    res->cwa_get_icc_intermediate_ca_cert = dnie_get_icc_intermediate_ca_cert;
     /* Get ICC certificate path */
-    res->cwa_get_icc_cert_path = dnie_get_icc_cert_path;
+    res->cwa_get_icc_cert = dnie_get_icc_cert;
 
     /* Obtain RSA public key from RootCA*/
     res->cwa_get_root_ca_pubkey = dnie_get_root_ca_pubkey;
@@ -388,6 +492,8 @@ cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card) {
     /* pre and post operations */
     res->cwa_decode_pre_ops = NULL;
     res->cwa_decode_post_ops = dnie_decode_post_ops;
+
+    return res;
 }
 
 #endif /* HAVE_OPENSSL */

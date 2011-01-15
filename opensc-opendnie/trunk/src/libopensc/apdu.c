@@ -383,18 +383,17 @@ static int do_wrap_and_transmit(sc_card_t *card, sc_apdu_t *apdu) {
                 /* no wrap needed, just call reader driver */
                 r=card->reader->ops->transmit(card->reader,apdu);
         } else {
-                sc_apdu_t wrapped_apdu;
                 /* wrap apdu */
-                r= card->ops->wrap_apdu(card,apdu,&wrapped_apdu,0);
+                r= card->ops->wrap_apdu(card,apdu,0);
                 SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,r,"wrap() apdu error");
                 /* check wrapped apdu */
-                r= sc_check_apdu(card,&wrapped_apdu);
+                r= sc_check_apdu(card,apdu);
                 SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,r,"Wrapped apdu is invalid");
                 /* transmit wrapped apdu */
-                r = card->reader->ops->transmit(card->reader, &wrapped_apdu);
+                r = card->reader->ops->transmit(card->reader, apdu);
                 SC_TEST_RET(ctx,SC_LOG_DEBUG_NORMAL,r,"Unable to transmit wrapped apdu");
                 /* unwrap apdu */
-                r= card->ops->wrap_apdu(card,&wrapped_apdu,apdu,1);
+                r= card->ops->wrap_apdu(card,apdu,1);
         }
         return r;
 }

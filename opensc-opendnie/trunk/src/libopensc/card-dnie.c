@@ -347,7 +347,7 @@ static int dnie_match_card(struct sc_card *card){
     int result=0;
     LOG_FUNC_CALLED(card->ctx);
     int matched=_sc_match_atr(card,dnie_atrs,&card->type);
-    result=(matched>=0)? SC_SUCCESS:SC_ERROR_NO_CARD_SUPPORT;
+    result=(matched>=0)? 1:0;
     LOG_FUNC_RETURN(card->ctx,result);
 }
 

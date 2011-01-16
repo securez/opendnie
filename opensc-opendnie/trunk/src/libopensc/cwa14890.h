@@ -38,6 +38,13 @@
 #define CWA_SM_COLD       0x01 /* force creation of a new SM channel */
 #define CWA_SM_WARM       0x02 /* Create new SM channel only if state is NONE */
 
+/* TAGS for encoded APDU's */
+#define CWA_SM_PLAIN_TAG  0x81 /* Pplain value (to be protected by CC) */
+#define CWA_SM_CRYPTO_TAG 0x87 /* Padding-content + cryptogram */
+#define CWA_SM_MAC_TAG    0x8E /* Cryptographic checksum (MAC) */
+#define CWA_SM_LE_TAG     0x97 /* Le (to be protected by CC ) */
+#define CWA_SM_STATUS_TAG 0x99 /* Processing status (SW1-SW2 mac protected ) */
+
 /*************** data structures for CWA14890 SM handling **************/
 
 #include "libopensc/types.h"

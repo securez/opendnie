@@ -1097,6 +1097,10 @@ int cwa_encode_apdu(
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     if (sm->state != CWA_SM_ACTIVE) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
 
+    /* check if APDU is already encoded */
+    if ((apdu->cla & 0x0C)==0) return SC_SUCCESS; /* already encoded */
+    if (apdu->ins == 0xC0) return SC_SUCCESS; /* dont encode GET Response cmd */
+ 
     /* call provider pre-operation method */
     if (provider->cwa_encode_pre_ops) {
         res=provider->cwa_encode_pre_ops(card,provider,apdu);
@@ -1277,7 +1281,19 @@ int cwa_decode_response(
             goto response_decode_end;
         }
     }
-    
+
+    /* checks if apdu response needs decoding by checking tags in response*/
+    switch (apdu->resp[0]) {
+        case CWA_SM_PLAIN_TAG: 
+        case CWA_SM_CRYPTO_TAG: 
+        case CWA_SM_MAC_TAG: 
+        case CWA_SM_LE_TAG: 
+        case CWA_SM_STATUS_TAG: break; /* cwa tags found: continue decoding */
+        default:   /* else apdu response seems not to be cwa encoded */
+           sc_log(card->ctx,"APDU Response seems not to be cwa encoded");
+           return SC_SUCCESS; /* let process continue */
+    }
+
     /* call provider pre-operation method */
     if (provider->cwa_decode_pre_ops) {
         res=provider->cwa_decode_pre_ops(card,provider,apdu);
@@ -1663,7 +1679,6 @@ cwa_provider_t *cwa_get_default_provider(sc_card_t *card) {
     memcpy(res,&default_cwa_provider,sizeof(cwa_provider_t));
     return res;
 }
-
 
 /* end of cwa14890.c */
 #undef __CWA14890_C__

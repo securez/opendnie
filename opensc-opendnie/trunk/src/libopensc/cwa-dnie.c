@@ -383,7 +383,7 @@ static int dnie_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
  * command is to be sent to card, just retrieve it from cache 
  */
 /* pre secure channel creator initialization routine */
-static int dnie_create_pre_ops(sc_card_t *card, cwa_sm_status_t *sm){
+static int dnie_create_pre_ops(sc_card_t *card, cwa_provider_t *provider){
     sc_serial_number_t serial;
     return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, &serial);
 }
@@ -406,7 +406,7 @@ static unsigned long le2ulong(u8 *pt) {
  */
 static int dnie_decode_post_ops( 
     sc_card_t *card, 
-    cwa_sm_status_t *sm, 
+    cwa_provider_t *provider, 
     sc_apdu_t *apdu) {
 
 #ifdef ENABLE_ZLIB

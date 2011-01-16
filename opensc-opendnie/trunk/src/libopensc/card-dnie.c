@@ -430,9 +430,8 @@ static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu,int flag) {
     cwa_provider_t *provider=dnie_priv.provider;
     if (provider->status.state==CWA_SM_NONE) return SC_SUCCESS;
     /* encode/decode apdu */
-    if (flag==0) 
-         res=cwa_encode_apdu(card,&provider->status,apdu);
-    else res=cwa_decode_response(card,&provider->status,apdu);
+    if (flag==0) res = cwa_encode_apdu(card,provider,apdu);
+    else         res = cwa_decode_response(card,provider,apdu);
     LOG_FUNC_RETURN(card->ctx,res);
 }
 

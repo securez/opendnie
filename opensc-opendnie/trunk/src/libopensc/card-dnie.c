@@ -65,6 +65,7 @@ extern cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card);
 
 #define DNIE_CHIP_NAME "DNIe: Spanish eID card"
 #define DNIE_CHIP_SHORTNAME "dnie"
+#define DNIE_MF_NAME "Master.File"
 
 /* default user consent program (if required) */
 #define USER_CONSENT_CMD "/usr/bin/pinentry"
@@ -436,6 +437,126 @@ static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu,int flag) {
 }
 
 /* ISO 7816-4 functions */
+
+/* select_file: Does the equivalent of SELECT FILE command specified
+ *   in ISO7816-4. Stores information about the selected file to
+ *   <file>, if not NULL. */
+static int dnie_select_file(struct sc_card *card,
+                       const struct sc_path *in_path,
+                       struct sc_file **file_out){
+
+    u8 buf[SC_MAX_APDU_BUFFER_SIZE];
+    u8 pathbuf[SC_MAX_PATH_SIZE], *path = pathbuf;
+    int pathlen;
+
+    sc_file_t *file = NULL;
+    int res=SC_SUCCESS;
+    sc_apdu_t apdu;
+
+    if ( !card || !card->ctx || !in_path) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+
+    LOG_FUNC_CALLED(ctx);
+
+    memcpy(path, in_path->value, in_path->len);
+    pathlen = in_path->len;
+    sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0xA4, 0, 0);
+
+    /* SELECT file in DNIe is a bit tricky: 
+     * - only handles file types 
+     * SC_PATH_TYPE_FILE_ID and SC_PATH_TYPE_DF_NAME
+     * - Also MF must be addressed by their Name, not their ID
+     * So some magic is needed:
+     * - split SC_PATH_TYPE_PATH into several calls to each 2-byte data
+     * (take care on initial 3F00 to be named as 'Master.File')
+     * - other file types are marked as unssupported
+     *
+     * Also, Response always handle a proprietary FCI info, so
+     * need to handle it manually via dnie_process_fci()
+     *
+     * (Again manual is so obscure: only talks about APDUs
+     * 00 A4 00 00 xx / 00 A4 04 00 xx works. I've discovered that
+     * the other P1 values fails by mean of trial and error )
+     */
+    switch (in_path->type) {
+        case SC_PATH_TYPE_FILE_ID:
+            /* pathlen must be of len=2 */
+            if (pathlen != 2) LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+            apdu.p1 = 0;
+            break;
+        case SC_PATH_TYPE_DF_NAME:
+            apdu.p1 = 4;
+            break;
+        case SC_PATH_TYPE_PATH:
+            if ((pathlen%2)!=0) LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+            /* convert to SC_PATH_TYPE_FILE_ID */
+	    while(pathlen>0) {
+                sc_path_t tmpp;
+                if (pathlen >= 2 && memcmp(path, "\x3F\x00", 2) == 0) {
+                    /* if MF, use their name as path */
+                    tmpp.type = SC_PATH_TYPE_DF_NAME;
+                    strcpy((char *)tmpp.value, DNIE_MF_NAME);
+                    tmpp.len = sizeof(DNIE_MF_NAME) - 1;
+                } else {
+                    /* else use 2-byte file id */
+                    tmpp.type = SC_PATH_TYPE_FILE_ID;
+                    tmpp.value[0] = path[0];
+                    tmpp.value[1] = path[1];
+                    tmpp.len = 2;
+                }
+                /* recursively call to select_file */
+                res=card->ops->select_file(card,&tmpp,file_out);
+                LOG_TEST_RET(ctx,res,"SC_PATH_TYPE_PATH select_file() failed");
+                pathlen-=2;
+                path+=2;
+            }
+            LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+            break;
+        case SC_PATH_TYPE_FROM_CURRENT:
+        case SC_PATH_TYPE_PARENT:
+            LOG_FUNC_RETURN(ctx, SC_ERROR_NO_CARD_SUPPORT);
+        default:
+            LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+            break;
+    }
+    /* Arriving here means need to compose and send apdu */
+    apdu.p2 = 0;            /* first record, return FCI */
+    apdu.lc = pathlen;
+    apdu.data = path;
+    apdu.datalen = pathlen;
+
+    if (file_out != NULL) {
+        apdu.resp = buf;
+        apdu.resplen = sizeof(buf);
+        apdu.le = card->max_recv_size > 0 ? card->max_recv_size : 256;
+    } else {
+        apdu.cse = (apdu.lc == 0) ? SC_APDU_CASE_1 : SC_APDU_CASE_3_SHORT;
+    }
+    res = sc_transmit_apdu(card, &apdu);
+    LOG_TEST_RET(ctx,res, "SelectFile() APDU transmit failed");
+    if (file_out == NULL) {
+        if (apdu.sw1 == 0x61) SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_VERBOSE, 0);
+        SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_VERBOSE, sc_check_sw(card, apdu.sw1, apdu.sw2));
+    }
+
+    /* analyze response. if FCI, try to parse */
+    res = sc_check_sw(card, apdu.sw1, apdu.sw2);
+    LOG_TEST_RET(ctx,res,"SelectFile() check_sw failed");
+    if (apdu.resplen < 2) LOG_FUNC_RETURN(ctx,SC_ERROR_UNKNOWN_DATA_RECEIVED);
+    if (apdu.resp[0]==0x00) /* proprietary coding */
+       LOG_FUNC_RETURN(ctx,SC_ERROR_UNKNOWN_DATA_RECEIVED);
+
+    /* finally process FCI response */
+    file = sc_file_new();
+    if (file == NULL) LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+    if (!card->ops->process_fci) { /* hey! DNIe MUST have process_fci */
+        if (file) sc_file_free(file);
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
+    }
+    res=card->ops->process_fci(card, file, apdu.resp+2, apdu.resp[1]);
+    *file_out=file;
+    LOG_FUNC_RETURN(ctx,res);
+}
 
 /* Get challenge: retrieve 8 random bytes for any further use
  * (eg perform an external authenticate command)
@@ -1024,7 +1145,7 @@ static sc_card_driver_t *get_dnie_driver(void) {
     /* dnie_ops.write_record */
     /* dnie_ops.append_record */
     /* dnie_ops.update_record */
-    /* dnie_ops.select_file */
+    dnie_ops.select_file           = dnie_select_file;
     /* dnie_ops.get_response */
     dnie_ops.get_challenge         = dnie_get_challenge;
 

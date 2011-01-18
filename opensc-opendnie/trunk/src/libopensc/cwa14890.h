@@ -115,6 +115,19 @@ typedef struct cwa_provider_st {
     /* Obtain RSA IFD private key */
     int (*cwa_get_ifd_privkey) (sc_card_t *card,EVP_PKEY **key);
 
+    /* TODO:
+     * CVC handling routines should be grouped in just retrieve CVC
+     * certificate. The key reference, as stated by CWA should be
+     * extracted from CVC...
+     *
+     * But to do this, an special OpenSSL with PACE extensions is
+     * needed. In the meantime, let's use binary buffers to get
+     * CVC and key references, until an CV_CERT hancling API 
+     * become available in standard OpenSSL
+     *
+     *@see http://openpace.sourceforge.net
+     */
+
     /* Retrieve CVC intermediate CA certificate and length */
     int (*cwa_get_cvc_ca_cert)(sc_card_t *card, u8 **cert, size_t *lenght);
     /* Retrieve CVC IFD certificate and length */
@@ -130,8 +143,8 @@ typedef struct cwa_provider_st {
     int (*cwa_get_ifd_pubkey_ref)(sc_card_t *card, u8 **buf, size_t *len);
     
     /* Get ICC private key reference */
-    int (*cwa_get_icc_privkey_ref)(sc_card_t *card, u8 **buf, size_t *len);
-    
+    int (*cwa_get_icc_privkey_ref)(sc_card_t *card, u8 **buf, size_t *len);  
+ 
     /* Get IFD Serial Number */
     int (*cwa_get_sn_ifd)(sc_card_t *card, u8 **buf, size_t *len);
 

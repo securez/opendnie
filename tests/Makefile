@@ -3,7 +3,7 @@ all: pinentry_test hex2bin
 PINENTRY = /usr/bin/pinentry
 
 INCLUDES = -I/usr/include/libassuan2
-LIBS = -lassuan
+LIBS = -lassuan -lgpg-error
 
 TARGETS = pinentry_test hex2bin
 SRCS = pinentry_test.c hex2bin.c

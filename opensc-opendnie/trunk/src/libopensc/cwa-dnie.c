@@ -385,6 +385,12 @@ static int dnie_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
 /* pre secure channel creator initialization routine */
 static int dnie_create_pre_ops(sc_card_t *card, cwa_provider_t *provider){
     sc_serial_number_t serial;
+
+    /* make sure that this cwa provider is used with a working DNIe card */
+    if (card->type!=SC_CARD_TYPE_DNIE_USER)
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_CARD);
+
+    /* ensure that Card Serial Number is properly cached */
     return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, &serial);
 }
 

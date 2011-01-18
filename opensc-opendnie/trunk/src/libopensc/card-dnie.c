@@ -482,13 +482,16 @@ static int dnie_select_file(struct sc_card *card,
         case SC_PATH_TYPE_FILE_ID:
             /* pathlen must be of len=2 */
             if (pathlen != 2) LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+            sc_log(ctx,"select_file(ID): %s",sc_dump_hex(path,pathlen));
             apdu.p1 = 0;
             break;
         case SC_PATH_TYPE_DF_NAME:
+            sc_log(ctx,"select_file(NAME): %s",sc_dump_hex(path,pathlen));
             apdu.p1 = 4;
             break;
         case SC_PATH_TYPE_PATH:
             if ((pathlen%2)!=0) LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+            sc_log(ctx,"select_file(PATH): %s",sc_dump_hex(path,pathlen));
             /* convert to SC_PATH_TYPE_FILE_ID */
 	    while(pathlen>0) {
                 sc_path_t tmpp;
@@ -506,7 +509,7 @@ static int dnie_select_file(struct sc_card *card,
                 }
                 /* recursively call to select_file */
                 res=card->ops->select_file(card,&tmpp,file_out);
-                LOG_TEST_RET(ctx,res,"SC_PATH_TYPE_PATH select_file() failed");
+                LOG_TEST_RET(ctx,res,"select_file(PATH) failed");
                 pathlen-=2;
                 path+=2;
             }

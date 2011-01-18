@@ -99,7 +99,7 @@ static void cwa_iso7816_padding(u8 *buffer,size_t *len) {
  *@param outlen length of composed tlv data
  *@return SC_SUCCESS if ok; else error
  */
-static int cwa_add_tlv(
+static int cwa_compose_tlv(
         sc_card_t *card,
         u8 tag,
         size_t len,
@@ -818,32 +818,27 @@ int cwa_create_secure_channel(
 
     LOG_FUNC_CALLED(ctx);
 
-    /* ensure that our card is a DNIe */
-    if (card->type!=SC_CARD_TYPE_DNIE_USER)
-        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_CARD);
-
     /* check requested initialization method */
     switch (flag) {
         case CWA_SM_OFF: /* disable SM */
             provider->status.state=CWA_SM_NONE; /* just mark channel inactive */
-            return SC_SUCCESS;
+            sc_log(ctx,"Setting CWA SM status to none");
+            LOG_FUNC_RETURN(ctx,SC_SUCCESS);
         case CWA_SM_WARM: /* only initialize if not already done */
-            if (provider->status.state!=CWA_SM_NONE); return SC_SUCCESS;
+            if (provider->status.state!=CWA_SM_NONE) {
+                sc_log(ctx,"Warm CWA SM requested: already in SM state");
+                LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+            }
         case CWA_SM_COLD: /* force sm initialization process */
+            sc_log(ctx,"CWA SM initialization requested");
             break;
         default:
             sc_log(ctx,"Invalid provided SM initialization flag");
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
 
-    /* malloc required structures */
-    serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
-    if (serial==NULL) {
-        sc_log(ctx,"Cannot allocate space for serial_nr data");
-        LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
-    }
-
     /* call provider pre-operation method */
+    sc_log(ctx,"CreateSecureChannel pre-operations");
     if (provider->cwa_create_pre_ops) {
         res=provider->cwa_create_pre_ops(card,provider);
         if (res!=SC_SUCCESS) {
@@ -853,24 +848,39 @@ int cwa_create_secure_channel(
     }
 
     /* reset card (warm reset, do not unpower card) */
+    sc_log(ctx,"Resseting card");
     sc_reset(card,0); 
 
     /* Retrieve Card serial Number */
+    sc_log(ctx,"Retrieving ICC Serial Number");
+    serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
+    if (!serial) {
+        sc_log(ctx,"Cannot allocate space for serial_nr data");
+        LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
+    }
     res=provider->cwa_get_sn_icc(card,&serial);
-    if (res!=SC_SUCCESS) { msg="Cannot get DNIe serialnr"; goto csc_end; }
+    if (res!=SC_SUCCESS) { msg="CWA Cannot get ICC serialnr"; goto csc_end; }
+
     /* 
-     * Manual says that we must read intermediate CA cert , Componente cert
-     * And verify certificate chain
-     */
+    * Notice that this code inverts ICC and IFD certificate standard
+    * checking sequence.
+    */
 
     /* Read Intermediate CA from card */
-    res=provider->cwa_get_icc_intermediate_ca_cert(card,&ca_cert);
-    if (res!=SC_SUCCESS) { 
-        msg="Cannot get ICC intermediate CA certificate from provider";
-        goto csc_end;
+    if (!provider->cwa_get_icc_intermediate_ca_cert) {
+        sc_log(ctx,"Step 8.4.1.6: Skip Retrieveing ICC intermediate CA");
+        ca_cert=NULL;
+    } else {
+        sc_log(ctx,"Step 8.4.1.7: Retrieving ICC intermediate CA");
+        res=provider->cwa_get_icc_intermediate_ca_cert(card,&ca_cert);
+        if (res!=SC_SUCCESS) { 
+            msg="Cannot get ICC intermediate CA certificate from provider";
+            goto csc_end;
+        }
     }
 
     /* Read ICC certificate from card */ 
+    sc_log(ctx,"Step 8.4.1.8: Retrieve ICC certificate");
     res=provider->cwa_get_icc_cert(card,&icc_cert);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get ICC certificate from provider";
@@ -878,19 +888,25 @@ int cwa_create_secure_channel(
     }
 
     /* Verify icc Card certificate chain */
-    /* Notice that Official driver skips this step 
-     * and simply verifies that icc_cert is a valid certificate */
-    res=cwa_verify_icc_certificates(card,provider,ca_cert,icc_cert);
-    if (res!=SC_SUCCESS) {
-        res=SC_ERROR_OBJECT_NOT_VALID;
-        msg="Icc Certificates verification failed";
-        goto csc_end;
+    /* Notice that Some implementations doesn't verify cert chain
+     * but simply verifies that icc_cert is a valid certificate */
+    if (ca_cert) {
+        sc_log(ctx,"Verifying ICC certificate chain");
+        res=cwa_verify_icc_certificates(card,provider,ca_cert,icc_cert);
+        if (res!=SC_SUCCESS) {
+            res=SC_ERROR_OBJECT_NOT_VALID;
+            msg="Icc Certificates verification failed";
+            goto csc_end;
+        }
+    } else {
+        sc_log(ctx,"Cannot verify Certificate chain. skip step");
     }
 
     /* Extract public key from ICC certificate */
     icc_pubkey=X509_get_pubkey(icc_cert);
 
     /* Select Root CA in card for ifd certificate verification */
+    sc_log(ctx,"Step 8.4.1.2: Select Root CA in card for IFD cert verification");
     res=provider->cwa_get_root_ca_pubkey_ref(card,&buffer,&bufferlen);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get Root CA key reference from provider";
@@ -908,6 +924,7 @@ int cwa_create_secure_channel(
     if (res!=SC_SUCCESS) { msg="Select Root CA key ref failed"; goto csc_end; }
 
     /* Send IFD intermediate CA in CVC format C_CV_CA */
+    sc_log(ctx,"Step 8.4.1.3: Send CVC IFD intermediate CA Cert for ICC verification");
     res=provider->cwa_get_cvc_ca_cert(card,&cert,&certlen);
     if (res!=SC_SUCCESS) { 
         msg="Get CVC CA cert from provider failed";
@@ -917,6 +934,7 @@ int cwa_create_secure_channel(
     if (res!=SC_SUCCESS) { msg="Verify CVC CA failed"; goto csc_end; }
 
     /* select public key reference for sent IFD intermediate CA certificate */
+    sc_log(ctx,"Step 8.4.1.4: Select Intermediate CA pubkey ref for ICC verification");
     res=provider->cwa_get_intermediate_ca_pubkey_ref(card,&buffer,&bufferlen);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get intermediate CA key reference from provider";
@@ -935,6 +953,7 @@ int cwa_create_secure_channel(
     if (res!=SC_SUCCESS) { msg="Select CVC CA pubk failed"; goto csc_end; }
 
     /* Send IFD certiticate in CVC format C_CV_IFD */
+    sc_log(ctx,"Step 8.4.1.5: Send CVC IFD Certificate for ICC verification");
     res=provider->cwa_get_cvc_ifd_cert(card,&cert,&certlen);
     if (res!=SC_SUCCESS) { 
         msg="Get CVC IFD cert from provider failed";
@@ -943,8 +962,10 @@ int cwa_create_secure_channel(
     res=cwa_verify_cvc_certificate(card,cert,certlen);
     if (res!=SC_SUCCESS) { msg="Verify CVC IFD failed"; goto csc_end; }
 
-    /* select public key of ifd certificate and icc private key */ 
+    /* remember that this code changes IFD and ICC Cert verification steps */
 
+    /* select public key of ifd certificate and icc private key */ 
+    sc_log(ctx,"Step 8.4.1.9: Send IFD pubk and ICC privk key references for Internal Auth");
     res=provider->cwa_get_ifd_pubkey_ref(card,&buffer,&bufferlen);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get ifd public key reference from provider";
@@ -976,7 +997,7 @@ int cwa_create_secure_channel(
 
     /* Internal (Card) authentication (let the card verify sent ifd certs) 
      SN.IFD equals 8 lsb bytes of ifd.pubk ref according cwa14890 sec 8.4.1 */
-
+    sc_log(ctx,"Step 8.4.1.10: Perform Internal authentication");
     res=provider->cwa_get_sn_ifd(card,&buffer,&bufferlen);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get ifd serial number from provider";
@@ -1006,6 +1027,7 @@ int cwa_create_secure_channel(
     }
     
     /* verify received signature */
+    sc_log(ctx,"Verify Internal Auth command response");
     res=cwa_verify_internal_auth(
         card,
 	icc_pubkey->pkey.rsa,     /* evaluated icc public key */
@@ -1017,6 +1039,7 @@ int cwa_create_secure_channel(
     if (res!=SC_SUCCESS) { msg="Internal Auth Verify failed"; goto csc_end; }
 
     /* get challenge: retrieve 8 random bytes from card */
+    sc_log(ctx,"Step 8.4.1.11: Prepare External Auth: Get Challenge");
     res=card->ops->get_challenge(card,sm->rndicc,sizeof(sm->rndicc));
     if (res!=SC_SUCCESS) { msg="Get Challenge failed"; goto csc_end; }
 
@@ -1031,14 +1054,17 @@ int cwa_create_secure_channel(
     if (res!=SC_SUCCESS) { msg="Prepare external auth failed"; goto csc_end; }
 
     /* External (IFD)  authentication */
+    sc_log(ctx,"Step 8.4.1.12: Perform External (IFD) Authentication");
     res=cwa_external_auth(card,sm);
     if (res!=SC_SUCCESS) { msg="External auth cmd failed"; goto csc_end; }
 
     /* Session key generation */
+    sc_log(ctx,"Step 8.4.2: Compute Session Keys");
     res=cwa_compute_session_keys(card,sm);
     if (res!=SC_SUCCESS) { msg="Session Key generation failed"; goto csc_end; }
 
     /* call provider post-operation method */
+    sc_log(ctx,"CreateSecureChannel post-operations");
     if (provider->cwa_create_post_ops) {
         res=provider->cwa_create_post_ops(card,provider);
         if (res!=SC_SUCCESS) {

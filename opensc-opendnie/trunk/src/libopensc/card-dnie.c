@@ -382,7 +382,8 @@ static int dnie_init(struct sc_card *card){
         goto dnie_init_error;
     }
     /* initialize SM state to NONE */
-    result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
+    /* TODO: change to CWA_SM_OFF when SM testing get done */
+    result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
     if (result!=SC_SUCCESS) goto dnie_init_error;
 
     /* store private data into card driver structure */

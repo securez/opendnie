@@ -393,8 +393,8 @@ static int dnie_init(struct sc_card *card){
     card->name = DNIE_CHIP_SHORTNAME;
     card->cla  = 0x00; // card uses default APDU class (interindustry)
     card->caps |=SC_CARD_CAP_RNG; /* we have a random number generator */
-    card->max_send_size=256;
-    card->max_recv_size=256;
+    card->max_send_size=0xf0; /* manual says 255, but to be safe... */
+    card->max_recv_size=0xf0;
 
     unsigned long algoflags = SC_ALGORITHM_RSA_RAW; /* RSA support */
     algoflags    |= SC_ALGORITHM_RSA_HASH_NONE;

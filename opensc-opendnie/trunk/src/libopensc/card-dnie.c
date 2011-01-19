@@ -299,15 +299,17 @@ static int dnie_generate_key(sc_card_t *card, void *data) {
 static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
     int result;
     sc_apdu_t apdu;
-    u8        rbuf[SC_MAX_APDU_BUFFER_SIZE];
+    u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
     if ( (card==NULL) || (card->ctx==NULL) || (serial==NULL) ) 
         return SC_ERROR_INVALID_ARGUMENTS;
+
     LOG_FUNC_CALLED(card->ctx);
     if (card->type!=SC_CARD_TYPE_DNIE_USER) return SC_ERROR_NOT_SUPPORTED;
     /* if serial number is cached, use it */
     if (card->serialnr.len) {
         memcpy(serial, &card->serialnr, sizeof(*serial));
-        return SC_SUCCESS;
+        sc_log(card->ctx,"Serial Number (cached): '%s'",sc_dump_hex(serial->value,serial->len));
+        LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
     }
     /* not cached, retrieve it by mean of an APDU */
     sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0xb8, 0x00, 0x00);
@@ -333,7 +335,8 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
     */
     /* copy and return serial number */
     memcpy(serial, &card->serialnr, sizeof(*serial));
-    return SC_SUCCESS;
+    sc_log(card->ctx,"Serial Number (apdu): '%s'",sc_dump_hex(serial->value,serial->len));
+    LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
 }
 
 /**************************** sc_card_operations **********************/
@@ -381,13 +384,14 @@ static int dnie_init(struct sc_card *card){
         result=SC_ERROR_OUT_OF_MEMORY;
         goto dnie_init_error;
     }
+    dnie_priv.provider=p;
+
     /* initialize SM state to NONE */
     /* TODO: change to CWA_SM_OFF when SM testing get done */
     result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
     if (result!=SC_SUCCESS) goto dnie_init_error;
 
     /* store private data into card driver structure */
-    dnie_priv.provider=p;
     card->drv_data=&dnie_priv;
      
     /* set up flags according documentation */

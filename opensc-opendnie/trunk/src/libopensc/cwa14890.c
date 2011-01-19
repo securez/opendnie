@@ -492,7 +492,7 @@ static int cwa_prepare_external_auth(
         goto prepare_external_auth_end;
     }
     bnres=(BN_cmp(bn,bnsub)<0)?bn:bnsub; /* choose min(SIG,N.IFD-SIG) */
-    if (BN_numbytes(bnres)>128) {
+    if (BN_num_bytes(bnres)>128) {
         msg="Prepare external auth: BN sigmin result is too big";
         res=SC_ERROR_INTERNAL;
         goto prepare_external_auth_end;

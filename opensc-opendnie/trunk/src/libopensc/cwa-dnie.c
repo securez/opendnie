@@ -168,8 +168,9 @@ int dnie_read_file(
         size_t *length
         ) {
     u8 *data;
+    char *msg=NULL;
     int res = SC_SUCCESS;
-    if( (card==NULL) || (card->ctx==NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx= card->ctx;
     LOG_FUNC_CALLED(card->ctx);
     if (!buffer || !length || !path ) /* check received arguments */
@@ -179,7 +180,10 @@ int dnie_read_file(
     LOG_TEST_RET(ctx, res, "sc_lock() failed");
     /* select file by mean of iso7816 ops */
     res=card->ops->select_file(card,path,file);
-    if (res!=SC_SUCCESS) goto dnie_read_file_err;
+    if (res!=SC_SUCCESS) {
+        msg="select_file failed";
+        goto dnie_read_file_err;
+    }
     /* iso's select file calls if needed process_fci, so arriving here
      * we have file structure filled.
      */
@@ -188,22 +192,27 @@ int dnie_read_file(
         *buffer=NULL;
         *length=0;
         res=SC_SUCCESS;
+        msg="File is a DF: no need to read_binary()";
         goto dnie_read_file_end;
     }
     /* reserve enought space to read data from card*/
     if((*file)->size <= 0) {
         res = SC_ERROR_FILE_TOO_SMALL;
+        msg="provided buffer size is too small";
         goto dnie_read_file_err;
     }
     data=calloc((*file)->size,sizeof(u8));
     if (data==NULL) {
         res = SC_ERROR_OUT_OF_MEMORY;
+        msg="cannot reserve requested buffer size";
         goto dnie_read_file_err;
     }
     /* call iso7816 read_binary() to retrieve data */
+    sc_log(ctx,"call to read_binary(): '%d' bytes",(*file)->size);
     res=card->ops->read_binary(card,0,data,(*file)->size,0L);
     if (res<0) { /* read_binary returns number of bytes readed */
         res = SC_ERROR_CARD_CMD_FAILED;
+        msg="read_binary() failed";
         goto dnie_read_file_err;
     }
     *buffer=data;
@@ -217,6 +226,7 @@ dnie_read_file_err:
     if (*file) sc_file_free(*file);
 dnie_read_file_end:
     sc_unlock(card);
+    if (msg) sc_log(ctx,msg);
     LOG_FUNC_RETURN(ctx,res);
 }
 

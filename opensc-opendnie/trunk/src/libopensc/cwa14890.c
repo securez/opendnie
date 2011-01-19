@@ -106,36 +106,41 @@ static int cwa_compose_tlv(
         u8 *data,
         u8 **out,
         size_t *outlen) {
+    u8 *pt;
+    size_t size;
     /* preliminary checks */
     if ( !card || !card->ctx || !out || !outlen) 
         return SC_ERROR_INVALID_ARGUMENTS;
     /* comodity vars */
     sc_context_t *ctx=card->ctx; 
     LOG_FUNC_CALLED(ctx);
+    pt = *out;
+    size=*outlen;
 
     /* assume tag id is not multibyte */
-    *(*out+*outlen++)=tag;
+    *(pt+size++)=tag;
     /* evaluate tag length value according iso7816-4 sect 5.2.2 */
     if (len<0x80) {
-        *(*out+*outlen++)=len; 
+        *(pt+size++)=len; 
     } else if (len<0x00000100) {
-        *(*out+*outlen++)=0x81;
-        *(*out+*outlen++)=0xff & len; 
+        *(pt+size++)=0x81;
+        *(pt+size++)=0xff & len; 
     } else if (len<0x00010000) {
-        *(*out+*outlen++)=0x82;
-        *(*out+*outlen++)=0xff & (len>> 8);
-        *(*out+*outlen++)=0xff & len;
+        *(pt+size++)=0x82;
+        *(pt+size++)=0xff & (len>> 8);
+        *(pt+size++)=0xff & len;
     } else if (len<0x01000000) {
-        *(*out+*outlen++)=0x83;
-        *(*out+*outlen++)=0xff & (len>>16);
-        *(*out+*outlen++)=0xff & (len>> 8);
-        *(*out+*outlen++)=0xff & len;
+        *(pt+size++)=0x83;
+        *(pt+size++)=0xff & (len>>16);
+        *(pt+size++)=0xff & (len>> 8);
+        *(pt+size++)=0xff & len;
     } else { /* do not handle tag length 0x84 */
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     /* copy remaining data to buffer */
-    if (len!=0) memcpy(*out+*outlen,data,len);
-    *outlen+=len;
+    if (len!=0) memcpy(pt+size,data,len);
+    size+=len;
+    *outlen=size;
     LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
@@ -225,8 +230,7 @@ static int cwa_verify_icc_certificates(
     EVP_PKEY *root_ca_key=NULL;
     EVP_PKEY *sub_ca_key=NULL;
     /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) || (!provider ) )
-        return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx || !provider ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     if (!sub_ca_cert || !icc_cert ) /* check received arguments */
@@ -235,7 +239,7 @@ static int cwa_verify_icc_certificates(
     /* retrieve root ca pkey from provider */
     res=provider->cwa_get_root_ca_pubkey(card,&root_ca_key);
     if (res!=SC_SUCCESS) {
-        msg="Cannot compose root CA public key";
+        msg="Cannot get root CA public key";
         res=SC_ERROR_INTERNAL;
         goto verify_icc_certificates_end;
     }
@@ -284,7 +288,7 @@ static int cwa_verify_cvc_certificate(
     sc_apdu_t apdu;
     int result=SC_SUCCESS;
     /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     if (!cert || (len<=0) ) /* check received arguments */
@@ -325,7 +329,7 @@ static int cwa_set_security_env(
     sc_apdu_t apdu;
     int result=SC_SUCCESS;
     /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     if (!buffer || (length<=0) ) /* check received arguments */
@@ -362,7 +366,7 @@ static int cwa_internal_auth(
     u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
     int result=SC_SUCCESS;
     /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     if ( !data || (datalen<=0) ) /* check received arguments */
@@ -379,6 +383,9 @@ static int cwa_internal_auth(
     /* send composed apdu and parse result */
     result=sc_transmit_apdu(card,&apdu);
     LOG_TEST_RET(ctx,result,"SM internal auth failed");
+
+    /* TODO: get response */
+
     result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
     LOG_TEST_RET(ctx,result,"SM internal auth invalid response");
     if (apdu.resplen!=sizeof(sm->sig)) /* invalid number of bytes received */
@@ -436,7 +443,7 @@ static int cwa_prepare_external_auth(
     BIGNUM *bnres = NULL;
 
     /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
      /* check received arguments */
@@ -539,7 +546,7 @@ static int cwa_external_auth( sc_card_t *card, cwa_sm_status_t *sm) {
     sc_apdu_t apdu;
     int result=SC_SUCCESS;
     /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
 
@@ -577,7 +584,7 @@ static int cwa_compute_session_keys(
     u8 *sha_data; /* to store hash result */
 
     /* safety check */
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     /* Just a literal transcription of cwa14890-1 sections 8.7.2 to 8.9 */
@@ -677,7 +684,7 @@ static int cwa_verify_internal_auth(
     size_t len1,len2,len3;
     BIGNUM *bn;
     BIGNUM *sigbn;
-    if( (card!=NULL) || (card->ctx!=NULL) ) return SC_ERROR_INVALID_ARGUMENTS;
+    if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
     if (!ifdbuf || ifdlen!=16) res=SC_ERROR_INVALID_ARGUMENTS;
@@ -992,7 +999,7 @@ int cwa_create_secure_channel(
         goto csc_end;
     }
 
-    res=cwa_set_security_env(card,0x81,0xB6,tlv,tlvlen);
+    res=cwa_set_security_env(card,0xC1,0xA4,tlv,tlvlen);
     if (res!=SC_SUCCESS) { msg="Select CVC IFD pubk failed"; goto csc_end; }
 
     /* Internal (Card) authentication (let the card verify sent ifd certs) 
@@ -1012,7 +1019,7 @@ int cwa_create_secure_channel(
     RAND_bytes(sm->rndifd,8); /* generate 8 random bytes */
     memcpy(rndbuf,sm->rndifd,8); /* insert RND.IFD into rndbuf */
     memcpy(rndbuf+8,buffer,8); /* insert SN.IFD into rndbuf */
-    res=cwa_internal_auth(card,sm,rndbuf,sizeof(rndbuf));
+    res=cwa_internal_auth(card,sm,rndbuf,16);
     if (res!=SC_SUCCESS) { 
         msg="Internal auth cmd failed"; 
         goto csc_end;

@@ -253,7 +253,7 @@ static int dnie_read_certificate(sc_card_t *card, char *certpath, X509 **cert) {
         msg="Cannot get intermediate CA cert";
         goto read_cert_end;
     }
-    *cert= d2i_X509(NULL,(const unsigned char **)buffer,bufferlen);
+    *cert= d2i_X509(NULL,&buffer,bufferlen);
     if (*cert==NULL) { /* received data is not a certificate */
         res=SC_ERROR_OBJECT_NOT_VALID;
         msg="Readed data is not a certificate";
@@ -355,8 +355,8 @@ static int dnie_get_root_ca_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
 
 /* Retrieve key reference for intermediate CA to validate IFD certs */
 static int dnie_get_intermediate_ca_pubkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
-   *buf= cvc_ifd_keyref;
-   *len= sizeof(cvc_ifd_keyref);
+   *buf= cvc_intca_keyref;
+   *len= sizeof(cvc_intca_keyref);
    return SC_SUCCESS;
 }
 

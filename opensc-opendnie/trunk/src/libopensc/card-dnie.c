@@ -386,11 +386,6 @@ static int dnie_init(struct sc_card *card){
     }
     dnie_priv.provider=p;
 
-    /* initialize SM state to NONE */
-    /* TODO: change to CWA_SM_OFF when SM testing get done */
-    result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
-    if (result!=SC_SUCCESS) goto dnie_init_error;
-
     /* store private data into card driver structure */
     card->drv_data=&dnie_priv;
      
@@ -406,6 +401,9 @@ static int dnie_init(struct sc_card *card){
     _sc_card_add_rsa_alg(card,1024,algoflags,0);
     _sc_card_add_rsa_alg(card,2048,algoflags,0);
     
+    /* initialize SM state to NONE */
+    /* TODO: change to CWA_SM_OFF when SM testing get done */
+    result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
 
 dnie_init_error:
     LOG_FUNC_RETURN(card->ctx,result);

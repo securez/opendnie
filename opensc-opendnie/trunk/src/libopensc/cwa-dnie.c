@@ -170,14 +170,15 @@ int dnie_read_file(
     u8 *data;
     char *msg=NULL;
     int res = SC_SUCCESS;
+    unsigned int fsize=0; /* file size */
     if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx= card->ctx;
     LOG_FUNC_CALLED(card->ctx);
     if (!buffer || !length || !path ) /* check received arguments */
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
-    /* try to adquire lock on card */
-    res=sc_lock(card);
-    LOG_TEST_RET(ctx, res, "sc_lock() failed");
+    // /* try to adquire lock on card */
+    // res=sc_lock(card);
+    // LOG_TEST_RET(ctx, res, "sc_lock() failed");
     /* select file by mean of iso7816 ops */
     res=card->ops->select_file(card,path,file);
     if (res!=SC_SUCCESS) {
@@ -195,21 +196,22 @@ int dnie_read_file(
         msg="File is a DF: no need to read_binary()";
         goto dnie_read_file_end;
     }
+    fsize=(*file)->size;
     /* reserve enought space to read data from card*/
-    if((*file)->size <= 0) {
+    if(fsize<= 0) {
         res = SC_ERROR_FILE_TOO_SMALL;
         msg="provided buffer size is too small";
         goto dnie_read_file_err;
     }
-    data=calloc((*file)->size,sizeof(u8));
+    data=calloc(fsize,sizeof(u8));
     if (data==NULL) {
         res = SC_ERROR_OUT_OF_MEMORY;
         msg="cannot reserve requested buffer size";
         goto dnie_read_file_err;
     }
-    /* call iso7816 read_binary() to retrieve data */
-    sc_log(ctx,"call to read_binary(): '%d' bytes",(*file)->size);
-    res=card->ops->read_binary(card,0,data,(*file)->size,0L);
+    /* call sc_read_binary() to retrieve data */
+    sc_log(ctx,"read_binary(): expected '%d' bytes",fsize);
+    res=sc_read_binary(card,0,data,fsize,0L);
     if (res<0) { /* read_binary returns number of bytes readed */
         res = SC_ERROR_CARD_CMD_FAILED;
         msg="read_binary() failed";
@@ -225,7 +227,7 @@ int dnie_read_file(
 dnie_read_file_err:
     if (*file) sc_file_free(*file);
 dnie_read_file_end:
-    sc_unlock(card);
+    // sc_unlock(card);
     if (msg) sc_log(ctx,msg);
     LOG_FUNC_RETURN(ctx,res);
 }

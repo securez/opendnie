@@ -299,7 +299,9 @@ static int cwa_verify_cvc_certificate(
     apdu.data=cert;
     apdu.datalen=len;
     apdu.lc=len;
+    apdu.le=0;
     apdu.resplen=0;
+    apdu.resp=NULL;
 
     /* send composed apdu and parse result */
     result=sc_transmit_apdu(card,&apdu);
@@ -340,7 +342,9 @@ static int cwa_set_security_env(
     apdu.data=buffer;
     apdu.datalen=length;
     apdu.lc=length;
+    apdu.resp=NULL;
     apdu.resplen=0;
+    apdu.le=0;
 
     /* send composed apdu and parse result */
     result=sc_transmit_apdu(card,&apdu);
@@ -512,7 +516,7 @@ static int cwa_prepare_external_auth(
     }
 
     /* re-encrypt result with icc public key */
-    len1=RSA_private_decrypt(len3,buf3,buf1,icc_pubkey,RSA_NO_PADDING);
+    len1=RSA_public_encrypt(len3,buf3,buf1,icc_pubkey,RSA_NO_PADDING);
     if (len1<=0) {
         msg="Prepare external auth: icc_pubk encrypt failed";
         res=SC_ERROR_DECRYPT_FAILED;
@@ -554,6 +558,7 @@ static int cwa_external_auth( sc_card_t *card, cwa_sm_status_t *sm) {
     sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x82,0x00,0x00);
     apdu.data=sm->sig;
     apdu.datalen=sizeof(sm->sig);
+    apdu.lc=sizeof(sm->sig);
     apdu.le=0;
     apdu.resp=NULL;
     apdu.resplen=0;
@@ -1084,7 +1089,6 @@ int cwa_create_secure_channel(
     res=SC_SUCCESS;
 csc_end:
     if (serial)  { memset(serial,0,sizeof(sc_serial_number_t)); free(serial); }
-    if (buffer)      free(buffer); /* no need to memset */
     if (icc_pubkey)  EVP_PKEY_free(icc_pubkey);
     if (ifd_privkey) EVP_PKEY_free(ifd_privkey);
     if (res!=SC_SUCCESS) sc_log(ctx,msg);

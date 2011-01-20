@@ -38,6 +38,7 @@
 #include "internal.h"
 #include <openssl/x509.h>
 #include <openssl/des.h>
+#include <openssl/rand.h>
 
 #include "cwa14890.h"
 
@@ -78,8 +79,11 @@ static int cwa_increase_ssc(
  *@param len pointer to buffer length
  */
 static void cwa_iso7816_padding(u8 *buffer,size_t *len) {
-    *(buffer+*len++)=0x80;
-    for(; (*len & 0x07)==0x00; *len++) *(buffer+*len)=0x00;
+    size_t offset=*len;
+    *(buffer+offset)=0x80;
+    offset++;
+    for(; (offset & 0x07)!=0x00; offset++) *(buffer+offset)=0x00;
+    *len+=offset;
 }
 
 /**
@@ -682,13 +686,15 @@ static int cwa_verify_internal_auth(
         cwa_sm_status_t *sm
     ) {
     int res=SC_SUCCESS;
-    char *msg;
-    u8 *buf1; /* to decrypt with our private key */
-    u8 *buf2; /* to try SIGNUM==SIG */
-    u8 *buf3; /* to try SIGNUM==N.ICC-SIG */
-    size_t len1,len2,len3;
-    BIGNUM *bn;
-    BIGNUM *sigbn;
+    char *msg=NULL;
+    u8 *buf1=NULL; /* to decrypt with our private key */
+    u8 *buf2=NULL; /* to try SIGNUM==SIG */
+    u8 *buf3=NULL; /* to try SIGNUM==N.ICC-SIG */
+    size_t len1=0;
+    size_t len2=0;
+    size_t len3=0;
+    BIGNUM *bn=NULL;
+    BIGNUM *sigbn=NULL;
     if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
@@ -1121,7 +1127,7 @@ int cwa_encode_apdu(
     DES_key_schedule k1;
     DES_key_schedule k2;
     int i,j; /* for xor loops */
-    int len=0;
+    size_t len=0;
     int res=SC_SUCCESS;
     /* mandatory check */
     if( !card || !card->ctx || !provider) return SC_ERROR_INVALID_ARGUMENTS;
@@ -1292,7 +1298,6 @@ int cwa_decode_response(
     u8 *ccbuf;      /* buffer for mac CC calculation */
     size_t cclen;   /* ccbuf len */
     u8 macbuf[8];   /* where to calculate mac */
-    u8 *respbuf;    /* where to store decoded response */
     size_t resplen; /* respbuf length */
     DES_key_schedule k1, k2;
     int res=SC_SUCCESS;

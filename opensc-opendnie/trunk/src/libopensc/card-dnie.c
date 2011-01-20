@@ -630,7 +630,6 @@ static int dnie_set_security_env(struct sc_card *card,
                                 const struct sc_security_env *env, 
                                 int se_num){
     sc_apdu_t apdu;
-    u8 key_id;
     u8 sbuf[SC_MAX_APDU_BUFFER_SIZE]; /* buffer to compose apdu data */
     u8 *p=sbuf;
     int result=SC_SUCCESS;
@@ -721,7 +720,7 @@ static int dnie_set_security_env(struct sc_card *card,
     result=sc_transmit_apdu(card,&apdu);
     LOG_TEST_RET(card->ctx,result,"Set Security Environment failed");
     result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
-dnie_set_sec_env_end:
+
     LOG_FUNC_RETURN(card->ctx,result);
 }
 

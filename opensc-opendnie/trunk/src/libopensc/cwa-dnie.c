@@ -253,7 +253,7 @@ static int dnie_read_certificate(sc_card_t *card, char *certpath, X509 **cert) {
         msg="Cannot get intermediate CA cert";
         goto read_cert_end;
     }
-    *cert= d2i_X509(NULL,&buffer,bufferlen);
+    *cert= d2i_X509(NULL,(const unsigned char **)&buffer,bufferlen);
     if (*cert==NULL) { /* received data is not a certificate */
         res=SC_ERROR_OBJECT_NOT_VALID;
         msg="Readed data is not a certificate";
@@ -409,7 +409,7 @@ static int dnie_create_pre_ops(sc_card_t *card, cwa_provider_t *provider){
 /* convert little-endian data into unsigned long */
 static unsigned long le2ulong(u8 *pt) {
    unsigned long res=0;
-   res = pt[0] + pt[1]<<8 + pt[2]<<16 + pt[3]<<24;
+   res = pt[0] + (pt[1]<<8) + (pt[2]<<16) + (pt[3]<<24);
    return res;
 }
 

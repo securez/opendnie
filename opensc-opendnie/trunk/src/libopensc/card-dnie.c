@@ -432,7 +432,8 @@ static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu,int flag) {
         return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
     cwa_provider_t *provider=dnie_priv.provider;
-    if (provider->status.state==CWA_SM_NONE) return SC_SUCCESS;
+    /* TODO: if state is "in progress", should lock... */
+    if (provider->status.state!=CWA_SM_ACTIVE) return SC_SUCCESS;
     /* encode/decode apdu */
     if (flag==0) res = cwa_encode_apdu(card,provider,apdu);
     else         res = cwa_decode_response(card,provider,apdu);

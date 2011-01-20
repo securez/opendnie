@@ -476,12 +476,12 @@ static int cwa_prepare_external_auth(
     memcpy(buf3+1+74,sm->kifd,32); /* copy Kifd into buffer */
     /* prepare data to be hashed */
     memcpy(sha_buf,buf3+1,74); /* copy pRND into sha_buf */
-    memcpy(sha_buf+74,buf3+75,32); /* copy kifd into sha_buf */
+    memcpy(sha_buf+74,buf3+1+74,32); /* copy kifd into sha_buf */
     memcpy(sha_buf+74+32,sm->rndicc,8); /* copy 8 byte icc challenge */
     memcpy(sha_buf+74+32+8+1,serial->value,7); /* copy serialnr, 1 byte pad */
     SHA1(sha_buf,74+32+8+1+7,sha_data);
     /* copy hashed data into buffer */
-    memcpy(sha_data,buf3+1+74+32,SHA_DIGEST_LENGTH);
+    memcpy(buf3+1+74+32,sha_data,SHA_DIGEST_LENGTH);
     buf3[127]= 0xBC; /* iso padding */
  
     /* encrypt with ifd private key */
@@ -854,6 +854,9 @@ int cwa_create_secure_channel(
             sc_log(ctx,"Invalid provided SM initialization flag");
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
+    
+    /* mark SM status as in progress */
+    provider->status.state=CWA_SM_INPROGRESS;
 
     /* call provider pre-operation method */
     sc_log(ctx,"CreateSecureChannel pre-operations");
@@ -1097,7 +1100,13 @@ csc_end:
     if (serial)  { memset(serial,0,sizeof(sc_serial_number_t)); free(serial); }
     if (icc_pubkey)  EVP_PKEY_free(icc_pubkey);
     if (ifd_privkey) EVP_PKEY_free(ifd_privkey);
-    if (res!=SC_SUCCESS) sc_log(ctx,msg);
+    /* setup SM state according result */
+    if (res!=SC_SUCCESS) {
+        sc_log(ctx,msg);
+        provider->status.state=CWA_SM_NONE;
+    } else {
+        provider->status.state=CWA_SM_ACTIVE;
+    }
     LOG_FUNC_RETURN(ctx,res);
 }
 

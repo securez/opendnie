@@ -373,10 +373,11 @@ static int cwa_internal_auth(
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
 
     /* compose apdu for Internal Authenticate cmd */
-    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x88,0x00,0x00);
+    sc_format_apdu(card,&apdu,SC_APDU_CASE_4_SHORT,0x88,0x00,0x00);
     apdu.data=data;
     apdu.datalen=datalen;
     apdu.lc=datalen;
+    apdu.le=0x80; /* expected 1024 bits response */
     apdu.resp=rbuf;
     apdu.resplen=sizeof(rbuf);
 
@@ -384,10 +385,9 @@ static int cwa_internal_auth(
     result=sc_transmit_apdu(card,&apdu);
     LOG_TEST_RET(ctx,result,"SM internal auth failed");
 
-    /* TODO: get response */
-
     result=sc_check_sw(card,apdu.sw1,apdu.sw2); 
     LOG_TEST_RET(ctx,result,"SM internal auth invalid response");
+
     if (apdu.resplen!=sizeof(sm->sig)) /* invalid number of bytes received */
         LOG_FUNC_RETURN(ctx,SC_ERROR_UNKNOWN_DATA_RECEIVED);
     memcpy(sm->sig,apdu.resp,apdu.resplen); /* copy result to buffer */
@@ -493,7 +493,7 @@ static int cwa_prepare_external_auth(
         goto prepare_external_auth_end;
     }
     res=BN_sub(bnsub,ifd_privkey->n,bn); /* eval N.IFD-SIG */
-    if (res!=0) {
+    if (res==0) { /* 1:success 0 fail */
         msg="Prepare external auth: BN sigmin evaluation failed";
         res=SC_ERROR_INTERNAL;
         goto prepare_external_auth_end;
@@ -504,15 +504,15 @@ static int cwa_prepare_external_auth(
         res=SC_ERROR_INTERNAL;
         goto prepare_external_auth_end;
     }
-    res=BN_bn2bin(bnres,buf3); /* convert result back into buf3 */
-    if (res<=0) {
+    len3=BN_bn2bin(bnres,buf3); /* convert result back into buf3 */
+    if (len3<=0) {
         msg="Prepare external auth: BN to buffer conversion failed";
         res=SC_ERROR_INTERNAL;
         goto prepare_external_auth_end;
     }
 
     /* re-encrypt result with icc public key */
-    len1=RSA_private_decrypt(128,buf3,buf1,icc_pubkey,RSA_NO_PADDING);
+    len1=RSA_private_decrypt(len3,buf3,buf1,icc_pubkey,RSA_NO_PADDING);
     if (len1<=0) {
         msg="Prepare external auth: icc_pubk encrypt failed";
         res=SC_ERROR_DECRYPT_FAILED;

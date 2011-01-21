@@ -1205,8 +1205,8 @@ int cwa_encode_apdu(
     /* if no data, skip data encryption step */
     if (apdu->lc!=0) {
         size_t dlen=apdu->lc;
-        u8 msgbuf[SC_MAX_APDU_BUFFER_SIZE];
-        u8 cryptbuf[SC_MAX_APDU_BUFFER_SIZE];
+        u8 msgbuf[1024];
+        u8 cryptbuf[1024];
 
         /* prepare keys */
         DES_cblock iv={0,0,0,0,0,0,0,0};
@@ -1217,45 +1217,20 @@ int cwa_encode_apdu(
         memcpy (msgbuf,apdu->data,dlen);
         cwa_iso7816_padding(msgbuf,&dlen);
 
+        /* start kriptbuff with iso padding indicator */
+        cryptbuf[0]=0x01;
         /* aply TDES + CBC with kenc and iv=(0,..,0) */
-        DES_ede3_cbc_encrypt(msgbuf,cryptbuf,dlen,&k1,&k2,&k1,&iv,DES_ENCRYPT);
-
+        DES_ede3_cbc_encrypt(msgbuf,&cryptbuf[1],dlen,&k1,&k2,&k1,&iv,DES_ENCRYPT);
         /* compose data TLV and add to result buffer */
-        /* assume tag id is not multibyte */
-        *(ccbuf+cclen++)=0x87; /* padding content indicator + cryptogram tag */
-        /* evaluate tag length value according iso7816-4 sect 5.2.2 */
-        if ((dlen+1)<0x80) {
-            *(ccbuf+cclen++)=dlen+1; /* len is dlen + iso padding indicator */
-        } else if ((dlen+1)<0x00000100) {
-            *(ccbuf+cclen++)=0x81;
-            *(ccbuf+cclen++)=0xff & (dlen+1); /* dlen+padding indicator byte */
-        } else if ((dlen+1)<0x00010000) {
-            *(ccbuf+cclen++)=0x82;
-            *(ccbuf+cclen++)=0xff & ( (dlen+1) >> 8);
-            *(ccbuf+cclen++)=0xff & (dlen+1); 
-        } else if ((dlen+1)<0x01000000) {
-            *(ccbuf+cclen++)=0x83;
-            *(ccbuf+cclen++)=0xff & ( (dlen+1) >>16);
-            *(ccbuf+cclen++)=0xff & ( (dlen+1) >> 8);
-            *(ccbuf+cclen++)=0xff & (dlen+1); 
-        } else { /* do not handle tag length 0x84 */
-            LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
-        }
-
-        /* add iso padding type indicator */
-        *(ccbuf+cclen++)=0x01;   
-
-        /* copy remaining data to buffer */
-        memcpy(ccbuf+cclen,cryptbuf,dlen);
-        cclen+=dlen;
+        res=cwa_compose_tlv(card,0x87,dlen+1,&cryptbuf[0],&ccbuf,&cclen);
+        LOG_TEST_RET(ctx,res,"Error in compose tag 8x87 TLV");
     }
 
     /* if le byte is declared, compose and add Le TLV */
     /* TODO: study why original driver checks for le>=256? */
     if (apdu->le>0) {
-        *(ccbuf+cclen++)=0x97; /* TLV tag for CC protected Le */
-        *(ccbuf+cclen++)=0x01; /* length=1 byte */
-        *(ccbuf+cclen++)=apdu->le;
+        u8 le=0xff & apdu->le;
+        res=cwa_compose_tlv(card,0x97,1,&le,&ccbuf,&cclen);
     }
     /* copy current data to apdu buffer (skip header and header padding) */
     memcpy(apdubuf,ccbuf+8,cclen-8);
@@ -1286,10 +1261,7 @@ int cwa_encode_apdu(
     free(ccbuf); /* ccbuf is no longer needed */
 
     /* compose and add computed MAC TLV to result buffer */
-    *(apdubuf+apdulen++)=0x8E; /* TLV tag for MAC Cryptographic checksum */
-    *(apdubuf+apdulen++)=0x04; /* len= 4 bytes */
-    memcpy(apdubuf+apdulen,macbuf,4); /* 4 first bytes of computed mac */
-    apdulen+=4;
+    res=cwa_compose_tlv(card,0x8E,4,macbuf,&apdubuf,&apdulen);
 
     /* rewrite resulting header */
     apdu->lc=apdulen;

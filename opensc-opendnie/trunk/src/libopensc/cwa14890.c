@@ -44,6 +44,23 @@
 
 /*********************** utility functions ************************/
 
+static void cwa_trace_apdu(sc_card_t *card, sc_apdu_t *apdu, int flag) {
+/* set to 0 in production */
+#if 1
+    if (!card || !card->ctx || !apdu) return;
+    if (flag==0) { /* apdu command */
+        if (apdu->datalen>0)  {
+            sc_log(card->ctx,"APDU before encode:\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02x \nDATA: %s",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le,sc_dump_hex(apdu->data,apdu->datalen));
+        } else {
+            sc_log(card->ctx,"APDU before encode:\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02x\n(NO DATA)",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le);
+        }
+    } else {       /* apdu response */
+        sc_log(card->ctx,"APDU after decode:\nSW1: %02X SW2: %02X\nRESP: %s",apdu->sw1,apdu->sw2,sc_dump_hex(apdu->resp,apdu->resplen));
+    }
+#endif
+
+}
+
 /**
  * Increase send sequence counter SSC
  *
@@ -64,6 +81,7 @@ static int cwa_increase_ssc(
 
     LOG_FUNC_CALLED(ctx);
     /* u8 arithmetic; exit loop if no carry */
+    sc_log(ctx,"Curr SSC: '%s'",sc_dump_hex(sm->ssc,8));
     for(n=7;n>=0;n--) { sm->ssc[n]++; if ( (sm->ssc[n]) != 0x00 ) break; }
     sc_log(ctx,"Next SSC: '%s'",sc_dump_hex(sm->ssc,8));
     LOG_FUNC_RETURN(ctx,SC_SUCCESS);
@@ -78,12 +96,12 @@ static int cwa_increase_ssc(
  *@param buffer where to compose data
  *@param len pointer to buffer length
  */
-static void cwa_iso7816_padding(u8 *buffer,size_t *len) {
-    size_t offset=*len;
-    *(buffer+offset)=0x80;
+static void cwa_iso7816_padding(u8 *buf,size_t *buflen) {
+    size_t offset=0;
+    *(buf+offset)=0x80;
     offset++;
-    for(; (offset & 0x07)!=0x00; offset++) *(buffer+offset)=0x00;
-    *len+=offset;
+    for(; (*buflen+offset)&0x07; offset++) *(buf+offset)=0x00;
+    *buflen += offset;
 }
 
 /**
@@ -635,6 +653,11 @@ compute_session_keys_end:
     if (data) { memset(data,0,32+4); free(data); }
     if (sha_data) { memset(sha_data,0,SHA_DIGEST_LENGTH); free(sha_data); }
     if (res!=SC_SUCCESS) sc_log(ctx,msg);
+    else {
+        sc_log(ctx,"Kenc: %s",sc_dump_hex(sm->kenc,16));
+        sc_log(ctx,"Kmac: %s",sc_dump_hex(sm->kmac,16));
+        sc_log(ctx,"SSC:  %s",sc_dump_hex(sm->ssc,8));
+    }
     LOG_FUNC_RETURN(ctx,res);
 }
 
@@ -736,7 +759,7 @@ static int cwa_verify_internal_auth(
     /* evaluate DS[SK.ICC.AUTH](SIG) trying to decrypt with icc pubk */
     len3=RSA_public_encrypt(len1,buf1,buf3,icc_pubkey,RSA_NO_PADDING);
     if (len3<=0) goto verify_nicc_sig; /* evaluate N.ICC-SIG and retry */
-    res=cwa_compare_signature(buf2,len2,ifdbuf);
+    res=cwa_compare_signature(buf3,len3,ifdbuf);
     if (res==SC_SUCCESS) goto verify_internal_ok;
 
 verify_nicc_sig: 
@@ -1132,11 +1155,11 @@ int cwa_encode_apdu(
     u8 *apdubuf; /* to store resulting apdu */
     size_t apdulen;
     u8 *ccbuf; /* where to store data to eval cryptographic checksum CC */
+    size_t cclen=0;
     u8 macbuf[8]; /* to store and compute CC */
     DES_key_schedule k1;
     DES_key_schedule k2;
     int i,j; /* for xor loops */
-    size_t len=0;
     int res=SC_SUCCESS;
     /* mandatory check */
     if( !card || !card->ctx || !provider) return SC_ERROR_INVALID_ARGUMENTS;
@@ -1150,9 +1173,10 @@ int cwa_encode_apdu(
     if (sm->state != CWA_SM_ACTIVE) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
 
     /* check if APDU is already encoded */
-    if ((apdu->cla & 0x0C)==0) return SC_SUCCESS; /* already encoded */
+    if ((apdu->cla & 0x0C)!=0) return SC_SUCCESS; /* already encoded */
     if (apdu->ins == 0xC0) return SC_SUCCESS; /* dont encode GET Response cmd */
- 
+
+
     /* call provider pre-operation method */
     if (provider->cwa_encode_pre_ops) {
         res=provider->cwa_encode_pre_ops(card,provider,apdu);
@@ -1161,6 +1185,9 @@ int cwa_encode_apdu(
             LOG_FUNC_RETURN(ctx,res);
         }
     }
+    
+    /* trace APDU before encoding process */
+    cwa_trace_apdu(card,apdu,0); 
 
     /* allocate result apdu data buffer */
     apdubuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
@@ -1168,15 +1195,16 @@ int cwa_encode_apdu(
     if (!apdubuf || !ccbuf ) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
 
     /* fill buffer with header info */
-    *(ccbuf+len++)=apdu->cla;
-    *(ccbuf+len++)=apdu->ins;
-    *(ccbuf+len++)=apdu->p1;
-    *(ccbuf+len++)=apdu->p2;
-    cwa_iso7816_padding(ccbuf,&len); /* pad header (4 bytes pad) */
+    apdu->cla |= 0x0C; /* mark apdu as encoded */
+    *(ccbuf+cclen++)=apdu->cla;
+    *(ccbuf+cclen++)=apdu->ins;
+    *(ccbuf+cclen++)=apdu->p1;
+    *(ccbuf+cclen++)=apdu->p2;
+    cwa_iso7816_padding(ccbuf,&cclen); /* pad header (4 bytes pad) */
 
     /* if no data, skip data encryption step */
     if (apdu->lc!=0) {
-        size_t dlen=apdu->datalen;
+        size_t dlen=apdu->lc;
         u8 msgbuf[SC_MAX_APDU_BUFFER_SIZE];
         u8 cryptbuf[SC_MAX_APDU_BUFFER_SIZE];
 
@@ -1194,46 +1222,46 @@ int cwa_encode_apdu(
 
         /* compose data TLV and add to result buffer */
         /* assume tag id is not multibyte */
-        *(ccbuf+len++)=0x87; /* padding content indicator + cryptogram tag */
+        *(ccbuf+cclen++)=0x87; /* padding content indicator + cryptogram tag */
         /* evaluate tag length value according iso7816-4 sect 5.2.2 */
         if ((dlen+1)<0x80) {
-            *(ccbuf+len++)=dlen+1; /* len is dlen + iso padding indicator */
+            *(ccbuf+cclen++)=dlen+1; /* len is dlen + iso padding indicator */
         } else if ((dlen+1)<0x00000100) {
-            *(ccbuf+len++)=0x81;
-            *(ccbuf+len++)=0xff & (dlen+1); /* dlen +  padding indicator byte */
+            *(ccbuf+cclen++)=0x81;
+            *(ccbuf+cclen++)=0xff & (dlen+1); /* dlen+padding indicator byte */
         } else if ((dlen+1)<0x00010000) {
-            *(ccbuf+len++)=0x82;
-            *(ccbuf+len++)=0xff & ( (dlen+1) >> 8);
-            *(ccbuf+len++)=0xff & (dlen+1); 
+            *(ccbuf+cclen++)=0x82;
+            *(ccbuf+cclen++)=0xff & ( (dlen+1) >> 8);
+            *(ccbuf+cclen++)=0xff & (dlen+1); 
         } else if ((dlen+1)<0x01000000) {
-            *(ccbuf+len++)=0x83;
-            *(ccbuf+len++)=0xff & ( (dlen+1) >>16);
-            *(ccbuf+len++)=0xff & ( (dlen+1) >> 8);
-            *(ccbuf+len++)=0xff & (dlen+1); 
+            *(ccbuf+cclen++)=0x83;
+            *(ccbuf+cclen++)=0xff & ( (dlen+1) >>16);
+            *(ccbuf+cclen++)=0xff & ( (dlen+1) >> 8);
+            *(ccbuf+cclen++)=0xff & (dlen+1); 
         } else { /* do not handle tag length 0x84 */
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
         }
 
         /* add iso padding type indicator */
-        *(ccbuf+len++)=0x01;   
+        *(ccbuf+cclen++)=0x01;   
 
         /* copy remaining data to buffer */
-        memcpy(ccbuf+len,cryptbuf,dlen);
-        len+=dlen;
+        memcpy(ccbuf+cclen,cryptbuf,dlen);
+        cclen+=dlen;
     }
 
     /* if le byte is declared, compose and add Le TLV */
     /* TODO: study why original driver checks for le>=256? */
     if (apdu->le>0) {
-        *(ccbuf+len++)=0x97; /* TLV tag for CC protected Le */
-        *(ccbuf+len++)=0x01; /* length=1 byte */
-        *(ccbuf+len++)=apdu->le;
+        *(ccbuf+cclen++)=0x97; /* TLV tag for CC protected Le */
+        *(ccbuf+cclen++)=0x01; /* length=1 byte */
+        *(ccbuf+cclen++)=apdu->le;
     }
     /* copy current data to apdu buffer (skip header and header padding) */
-    memcpy(apdubuf,ccbuf+8,len-8);
-    apdulen=len-8;
+    memcpy(apdubuf,ccbuf+8,cclen-8);
+    apdulen=cclen-8;
     /* pad again ccbuffer to compute CC */
-    cwa_iso7816_padding(ccbuf,&len);
+    cwa_iso7816_padding(ccbuf,&cclen);
 
     /* compute MAC Cryptographic Checksum using kmac and increased SSC */
     res=cwa_increase_ssc(card,sm); /* increase send sequence counter */
@@ -1247,7 +1275,7 @@ int cwa_encode_apdu(
     DES_set_key_unchecked((const_DES_cblock *)&(sm->kmac[8]), &k2);
 
     memcpy(macbuf,sm->ssc,8); /* start with computed SSC */
-    for (i=0;i<len;i+=8) { /* divide data in 8 byte blocks */
+    for (i=0;i<cclen;i+=8) { /* divide data in 8 byte blocks */
         /* compute DES */
         DES_ecb_encrypt((const_DES_cblock *)macbuf, (DES_cblock *)macbuf, &k1, DES_ENCRYPT);
         /* XOR with data and repeat */
@@ -1264,7 +1292,6 @@ int cwa_encode_apdu(
     apdulen+=4;
 
     /* rewrite resulting header */
-    apdu->cla |= 0x0C; /* mark apdu as encoded */
     apdu->lc=apdulen;
     apdu->data=apdubuf;
     apdu->datalen=apdulen;
@@ -1516,6 +1543,7 @@ int cwa_decode_response(
 response_decode_end:
     if (ccbuf) free(ccbuf);
     if (msg)    sc_log(ctx,msg);
+    cwa_trace_apdu(card,apdu,1); /* trace apdu response */
     LOG_FUNC_RETURN(ctx,res);
 }
 

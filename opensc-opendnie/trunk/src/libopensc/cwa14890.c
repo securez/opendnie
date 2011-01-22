@@ -182,48 +182,57 @@ static int cwa_find_tlv(
    unsigned int tag,
    cwa_tlv_t *tlv 
    ) {
-    size_t tlen=0;
+    int n=0;
+    int tlen=0;
     /* preliminary checks */
     if ( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     /* comodity vars */
     sc_context_t *ctx=card->ctx; 
-
     LOG_FUNC_CALLED(ctx);
     if (!apdu || !tlv || tag==0x00) 
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
-    u8 *pt=apdu->resp;
-    u8 *last=apdu->resp+apdu->resplen;
-    /* jump from tlv to tlv till find requested tag */
-    for (;pt<last;pt+=tlen) {
-        memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
-        /* set tag. Assume tag length is 1 byte */
-        tlv->tlv_start=pt;
-        tlv->tag=*pt++;
-        /* evaluate length according iso7816 sect 5.2.2.2 */
-        switch(*pt) {
-            case 0x84: pt++; tlen=             (0xff & (size_t) *pt);
-            case 0x83: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
-            case 0x82: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
-            case 0x81: pt++; tlen= (tlen<<8) + (0xff & (size_t) *pt);
-            case 0x80: pt++; break;
+
+    /* create a new buffer */
+    u8 *buffer=calloc(apdu->resplen,sizeof(u8));
+    if (!buffer) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
+
+    for (n=0;n<apdu->resplen;n+=tlen) {
+        int j=2;
+        int maxlen=apdu->resplen-n;
+        memcpy(buffer,&apdu->resp[n],maxlen);
+        tlv->buf=buffer;
+        tlv->buflen=maxlen;
+        tlv->tag=buffer[0];
+        tlv->len=0;
+        /* evaluate len and start of data */
+        switch(buffer[1]) {
+            case 0x84: tlv->len =                 (0xff & buffer[j++]);
+            case 0x83: tlv->len = (tlv->len<<8) + (0xff & buffer[j++]);
+            case 0x82: tlv->len = (tlv->len<<8) + (0xff & buffer[j++]);
+            case 0x81: tlv->len = (tlv->len<<8) + (0xff & buffer[j++]);
+            case 0x80: tlv->len = (tlv->len<<8) + (0xff & buffer[j++]);
+                       break;
             default:
-                if (*pt<0x80) {
-                    tlen= (0xff & (size_t) *pt); pt++;
+                if ((buffer[1]&0xff)<0x80) {
+                    tlv->len= 0xff & buffer[1];
                 } else {
-                    sc_log(ctx,"Invalid tag length indicator: %d",(size_t)*pt);
+                    sc_log(ctx,"Invalid tag length indicator: %d",buffer[1]);
                     LOG_FUNC_RETURN(ctx,SC_ERROR_WRONG_LENGTH);
                 }
         }
-        if (tlv->tag!=tag) continue; /* tag not found: jump to next tlv */
-        /* tag found: fill data and return OK */
-        tlv->len     = tlen;
-        tlv->data    = pt;
-        tlv->tlv_len = (pt+tlen) - tlv->tlv_start;
-        LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+        tlv->data= &buffer[j];
+        tlv->buflen=tlv->len+j;
+        if (tlv->tag==tag) {
+            sc_log(ctx,"Tag: %02X Length: %02X Value: %s",tlv->tag,tlv->len,sc_dump_hex(tlv->data,tlv->len));
+            return SC_SUCCESS; /* tag found: return */
+        }
+        tlen=tlv->buflen; /* jump to next tag and retry */
     }
-    /* arriving here means requested tlv not found */
+    /* arriving here means tag not found */
     memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+    free(buffer);
+    sc_log(ctx,"Tag %02X not found",tag);
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS); /* mark no error: just clean tlv data */
 }
 
 /*********************** authentication routines *******************/
@@ -1312,7 +1321,7 @@ int cwa_decode_response(
     int i,j;
     cwa_tlv_t p_tlv; /* to store plain data (Tag 0x81) */
     cwa_tlv_t e_tlv; /* to store padded encoded data (Tag 0x87) */
-    cwa_tlv_t m_tlv; /* to store mac CC (Tag 0x97) */
+    cwa_tlv_t m_tlv; /* to store mac CC (Tag 0x8E) */
     cwa_tlv_t s_tlv; /* to store sw1-sw2 status (Tag 0x99) */
     u8 *ccbuf;      /* buffer for mac CC calculation */
     size_t cclen;   /* ccbuf len */
@@ -1368,13 +1377,13 @@ int cwa_decode_response(
     cwa_find_tlv(card,apdu,0x99,&s_tlv); /* status data (optional) */
     cwa_find_tlv(card,apdu,0x87,&e_tlv); /* encoded data (optional) */
     cwa_find_tlv(card,apdu,0x81,&p_tlv); /* plain data (optional) */
-    cwa_find_tlv(card,apdu,0x97,&m_tlv); /* MAC data (mandatory) */
-    if (p_tlv.data && e_tlv.data) { /* encoded & plain are exclusive */
+    cwa_find_tlv(card,apdu,0x8E,&m_tlv); /* MAC data (mandatory) */
+    if (p_tlv.buf && e_tlv.buf) {
         msg="Plain and Encoded data are mutually exclusive in apdu response";
         res=SC_ERROR_INVALID_DATA;
         goto response_decode_end;
     }
-    if (!m_tlv.data) {
+    if (!m_tlv.buf) {
         msg="No MAC TAG found in apdu response";
         res=SC_ERROR_INVALID_DATA;
         goto response_decode_end;
@@ -1388,7 +1397,7 @@ int cwa_decode_response(
     /* compose buffer to evaluate mac */
 
     /* reserve enought space for data+status+padding */
-    ccbuf=calloc(e_tlv.tlv_len + s_tlv.tlv_len + p_tlv.tlv_len + 8,sizeof(u8));
+    ccbuf=calloc(e_tlv.buflen + s_tlv.buflen + p_tlv.buflen + 8,sizeof(u8));
     if (!ccbuf) {
         msg="Cannot allocate space for mac checking";
         res=SC_ERROR_OUT_OF_MEMORY;
@@ -1397,12 +1406,12 @@ int cwa_decode_response(
     /* copy data into buffer */
     cclen=0;
     if (e_tlv.data) { /* encoded data */
-        memcpy(ccbuf,e_tlv.tlv_start,e_tlv.tlv_len);
-        cclen = e_tlv.tlv_len;
+        memcpy(ccbuf,e_tlv.buf,e_tlv.buflen);
+        cclen = e_tlv.buflen;
     }
     if (p_tlv.data) { /* plain data */
-        memcpy(ccbuf,p_tlv.tlv_start,p_tlv.tlv_len);
-        cclen = p_tlv.tlv_len;
+        memcpy(ccbuf,p_tlv.buf,p_tlv.buflen);
+        cclen += p_tlv.buflen;
     }
     if (s_tlv.data) { /* response status */
         if (s_tlv.len!=2) {
@@ -1410,8 +1419,8 @@ int cwa_decode_response(
             res=SC_ERROR_INVALID_DATA;
             goto response_decode_end;
         }
-        memcpy(ccbuf+cclen,s_tlv.tlv_start,s_tlv.tlv_len);
-        cclen += s_tlv.tlv_len;
+        memcpy(ccbuf+cclen,s_tlv.buf,s_tlv.buflen);
+        cclen += s_tlv.buflen;
     }
     /* add iso7816 padding */
     cwa_iso7816_padding(ccbuf,&cclen);
@@ -1496,13 +1505,9 @@ int cwa_decode_response(
         DES_ede3_cbc_encrypt(&e_tlv.data[1],apdu->resp,e_tlv.len-1,&k1,&k2,&k1,&iv, DES_DECRYPT);
         apdu->resplen=e_tlv.len-1;
         /* remove iso padding from response length */
-        for(; (apdu->resplen > 0)  && (*(apdu->resp+apdu->resplen)==0x00) ; apdu->resplen-- ); /* empty loop */
-        if (apdu->resplen==0) { /* assure some data remains available */
-            msg="Encoded TLV: Decrypt returns no data !";
-            res=SC_ERROR_INVALID_DATA;
-            goto response_decode_end;
-        }
-        if ( *(apdu->resp+apdu->resplen) != 0x80 ) { /* check padding byte */
+        for(; (apdu->resplen > 0)  && (apdu->resp[apdu->resplen]==0x00) ; apdu->resplen-- ); /* empty loop */
+        
+        if ( apdu->resp[apdu->resplen] != 0x80 ) { /* check padding byte */
             msg="Decrypted TLV has no 0x80 iso padding indicator!";
             res=SC_ERROR_INVALID_DATA;
             goto response_decode_end;

@@ -62,11 +62,11 @@
  * are not supported (tag 0x84)
  */
 typedef struct cwa_tlv_st {
-        u8 *tlv_start;       /* local copy of BER-TLV encoded data */
-        size_t tlv_len;      /* length of copy */
+        u8 *buf;             /* local copy of TLV byte array */
+        size_t buflen;       /* lengt of buffer */
         unsigned int tag;    /* tag ID */ 
-        unsigned char *data; /* pointer to start of data in tlv_start buffer */
         size_t len;          /* lenght of data field */
+        u8 *data; /* pointer to start of data in buf buffer */
 } cwa_tlv_t;
 
 /**

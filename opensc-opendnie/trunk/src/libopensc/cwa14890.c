@@ -97,11 +97,9 @@ static int cwa_increase_ssc(
  *@param len pointer to buffer length
  */
 static void cwa_iso7816_padding(u8 *buf,size_t *buflen) {
-    size_t offset=0;
-    *(buf+offset)=0x80;
-    offset++;
-    for(; (*buflen+offset)&0x07; offset++) *(buf+offset)=0x00;
-    *buflen += offset;
+    buf[*buflen]=0x80;
+    (*buflen)++;
+    for(; *buflen&0x07; (*buflen)++) buf[*buflen]=0x00;
 }
 
 /**
@@ -609,6 +607,8 @@ static int cwa_compute_session_keys(
     u8 *kseed; /* to compose kifd ^ kicc */
     u8 *data;  /* to compose kenc and kmac to be hashed */
     u8 *sha_data; /* to store hash result */
+    u8 kenc[4]={0x00,0x00,0x00,0x01};
+    u8 kmac[4]={0x00,0x00,0x00,0x02};
 
     /* safety check */
     if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
@@ -624,22 +624,22 @@ static int cwa_compute_session_keys(
         goto compute_session_keys_end;
     }
     /* compose kseed  (cwa-14890-1 sect 8.7.2) */
-    for (n=0;n<32;n++) *(kseed+n)= *(sm->kicc+n) ^ *(sm->kifd+n);
+    for (n=0;n<32;n++) *(kseed+n)= sm->kicc[n] ^ sm->kifd[n];
 
     /* evaluate kenc (cwa-14890-1 sect 8.8) */
     memcpy(data,kseed,32);
-    *(data+35)=0x01; /* data = kseed || 0x00 0x00 0x00 0x01 */
+    memcpy(data+32,kenc,4);
     SHA1(data,32+4,sha_data);
-    memcpy(sm->kenc,sha_data,16); /* 16 MS bytes  of sha result */
+    memcpy(sm->kenc,sha_data,16); /* kenc=16 fsb sha((kifd^kicc)||00000001) */
 
     /* evaluate kmac */
     memset(data,0,32+4);
     memset(sha_data,0,SHA_DIGEST_LENGTH); /* clear buffers */
 
     memcpy(data,kseed,32);
-    *(data+35)=0x02; /* data = kseed || 0x00 0x00 0x00 0x02 */ 
+    memcpy(data+32,kmac,4);
     SHA1(data,32+4,sha_data);
-    memcpy(sm->kmac,sha_data,16);
+    memcpy(sm->kmac,sha_data,16);/* kmac=16 fsb sha((kifd^kicc)||00000002) */
 
     /* evaluate send sequence counter  (cwa-14890-1 sect 8.9 & 9.6 */
     memcpy(sm->ssc,sm->rndicc+4,4); /* 4 least significant bytes of rndicc */
@@ -1176,6 +1176,17 @@ int cwa_encode_apdu(
     if ((apdu->cla & 0x0C)!=0) return SC_SUCCESS; /* already encoded */
     if (apdu->ins == 0xC0) return SC_SUCCESS; /* dont encode GET Response cmd */
 
+#if 0
+    /* For testing results according manual */
+    u8 kenc[16]= { 0x59,0x8f,0x26,0xe3,0x6e,0x11,0xa8,0xec,0x14,0xb8,0x1e,0x19,0xbd,0xa2,0x23,0xca };
+    u8 kmac[16]= { 0x5d,0xe2,0x93,0x9a,0x1e,0xa0,0x3a,0x93,0x0b,0x88,0x20,0x6d,0x8f,0x73,0xe8,0xa7 };
+    u8 ssc[8]= { 0xd3,0x1a,0xc8,0xec,0x7b,0xa0,0xfe,0x74 };
+    memcpy (sm->kenc,kenc,16);
+    memcpy (sm->kmac,kmac,16);
+    memcpy (sm->ssc,ssc,16);
+    apdu->le=0;
+    /* para debugging end */
+#endif
 
     /* call provider pre-operation method */
     if (provider->cwa_encode_pre_ops) {
@@ -1253,7 +1264,7 @@ int cwa_encode_apdu(
     for (i=0;i<cclen;i+=8) { /* divide data in 8 byte blocks */
         /* compute DES */
         DES_ecb_encrypt((const_DES_cblock *)macbuf, (DES_cblock *)macbuf, &k1, DES_ENCRYPT);
-        /* XOR with data and repeat */
+        /* XOR with next data and repeat */
         for (j=0;j<8;j++) macbuf[j] ^= ccbuf[i+j];
     }
     /* and apply 3DES to result */

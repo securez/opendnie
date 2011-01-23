@@ -1505,9 +1505,9 @@ int cwa_decode_response(
         DES_ede3_cbc_encrypt(&e_tlv.data[1],apdu->resp,e_tlv.len-1,&k1,&k2,&k1,&iv, DES_DECRYPT);
         apdu->resplen=e_tlv.len-1;
         /* remove iso padding from response length */
-        for(; (apdu->resplen > 0)  && (apdu->resp[apdu->resplen]==0x00) ; apdu->resplen-- ); /* empty loop */
+        for(; (apdu->resplen > 0)  && (apdu->resp[apdu->resplen-1]==0x00) ; apdu->resplen-- ); /* empty loop */
         
-        if ( apdu->resp[apdu->resplen] != 0x80 ) { /* check padding byte */
+        if ( apdu->resp[apdu->resplen-1] != 0x80 ) { /* check padding byte */
             msg="Decrypted TLV has no 0x80 iso padding indicator!";
             res=SC_ERROR_INVALID_DATA;
             goto response_decode_end;

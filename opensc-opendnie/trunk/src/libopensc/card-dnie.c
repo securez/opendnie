@@ -421,22 +421,23 @@ static int dnie_finish(struct sc_card *card) {
     LOG_FUNC_RETURN(card->ctx,result);
 }
 
-/* Called before invoke card_driver->ops->transmit.
- * for performing APDU wrap(flag=0) or unwrap(flag=1)
+/* Called before sc_transmit_apdu() to allowing APDU wrapping
  * If set to NULL no wrapping process will be done
  * Usefull on Secure Messaging APDU encode/decode
- * Returns SC_SUCCESS or error code */
-static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu,int flag) {
+ * If returned value is greater than zero, sc_transmit_apdu() 
+ * will be called, else means either SC_SUCCESS or error code */
+static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu) {
     int res=SC_SUCCESS;
     if( (card==NULL) || (card->ctx==NULL) || (apdu==NULL) )
         return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
     cwa_provider_t *provider=dnie_priv.provider;
     /* TODO: if state is "in progress", should lock... */
-    if (provider->status.state!=CWA_SM_ACTIVE) return SC_SUCCESS;
-    /* encode/decode apdu */
-    if (flag==0) res = cwa_encode_apdu(card,provider,apdu);
-    else         res = cwa_decode_response(card,provider,apdu);
+    if (provider->status.state!=CWA_SM_ACTIVE) return 1;
+    /* encode/send/receivedecode apdu process*/
+
+    /* TODO: write */ 
+
     LOG_FUNC_RETURN(card->ctx,res);
 }
 

@@ -516,8 +516,11 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 
         /* check for need of apdu wrapping */
         if (card->ops->wrap_apdu) {
-            r= card->ops->wrap_apdu(card,apdu,0);
-            SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,r,"wrap() apdu error");
+            r= card->ops->wrap_apdu(card,apdu);
+            /* if result== means process done, return
+             * on result<0 some error happened, abort and return
+             * on result>0 continue normal sc_transmit_apdu processing */ 
+            if (r<=0) LOG_FUNC_RETURN(card->ctx,r);
         }
 	/* determine the APDU type if necessary, i.e. to use
 	 * short or extended APDUs  */
@@ -599,12 +602,6 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 	/* all done => release lock */
 	if (sc_unlock(card) != SC_SUCCESS)
 		sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "sc_unlock failed");
-
-        /* check for need of apdu un-wrapping */
-        if (card->ops->wrap_apdu) {
-            r= card->ops->wrap_apdu(card,apdu,1);
-            SC_TEST_RET(card->ctx,SC_LOG_DEBUG_NORMAL,r,"unwrap() apdu error");
-        }
 
 	return r;
 }

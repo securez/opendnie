@@ -505,7 +505,7 @@ static int do_single_transmit(sc_card_t *card, sc_apdu_t *apdu)
 	return SC_SUCCESS;
 }
 
-int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
+int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu) 
 {
 	int r = SC_SUCCESS;
 
@@ -522,6 +522,18 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
              * on result>0 continue normal sc_transmit_apdu processing */ 
             if (r<=0) LOG_FUNC_RETURN(card->ctx,r);
         }
+        LOG_FUNC_RETURN(card->ctx,_sc_transmit_apdu(card,apdu));
+}
+
+int _sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
+{
+	int r = SC_SUCCESS;
+
+	if (card == NULL || apdu == NULL)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+
 	/* determine the APDU type if necessary, i.e. to use
 	 * short or extended APDUs  */
 	sc_detect_apdu_cse(card, apdu);

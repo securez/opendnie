@@ -191,7 +191,8 @@ extern int cwa_create_secure_channel(
  * And DNIe's manual
  *
  *@param card card info structure
- *@param apdu APDU with response to be decoded
+ *@param provider cwa provider data to handle SM channel
+ *@param apdu apdu to be decoded
  *@return SC_SUCCESS if ok; else error code
  */
 extern int cwa_decode_response( 
@@ -208,7 +209,8 @@ extern int cwa_decode_response(
  * And DNIe's manual
  *
  *@param card card info structure
- *@param apdu APDU to be encoded
+ *@param provider cwa provider data to handle SM channel
+ *@param apdu apdu to be encoded
  *@param to Where to store encoded apdu
  *@return SC_SUCCESS if ok; else error code
  */

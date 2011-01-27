@@ -421,24 +421,135 @@ static int dnie_finish(struct sc_card *card) {
     LOG_FUNC_RETURN(card->ctx,result);
 }
 
-/* Called before sc_transmit_apdu() to allowing APDU wrapping
- * If set to NULL no wrapping process will be done
- * Usefull on Secure Messaging APDU encode/decode
- * If returned value is greater than zero, sc_transmit_apdu() 
- * will be called, else means either SC_SUCCESS or error code */
-static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu) {
+/** DNIe's replacement for sc_transmit_apdu 
+ * DNIe doesn't handle apdu chaining, but envelope() cmd is
+ * used when lc>max_send_size
+ *
+ * Notice that SM _requires_ an apdu response on every chunk of data
+ * so provide a default buffer to send intermediate apdus,
+ * and use real buffer in last one
+ *@param card pointer to card driver structure;
+ *@param apdu APDU to be sent
+ *@return SC_SUCCESS if OK; else error code
+ */
+static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
+    u8 *buf=NULL; /* use for store partial le responses */
     int res=SC_SUCCESS;
+    cwa_provider_t *provider=dnie_priv.provider;
     if( (card==NULL) || (card->ctx==NULL) || (apdu==NULL) )
         return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
-    cwa_provider_t *provider=dnie_priv.provider;
-    /* TODO: if state is "in progress", should lock... */
-    if (provider->status.state!=CWA_SM_ACTIVE) return 1;
-    /* encode/send/receivedecode apdu process*/
+    buf= calloc(card->max_send_size,sizeof(u8));
+    if (!buf) LOG_FUNC_RETURN(card->ctx,SC_ERROR_OUT_OF_MEMORY);
 
-    /* TODO: write */ 
+    /* check if envelope is needed */
+    if (apdu->lc <= card->max_send_size) { 
 
+        /* no envelope needed */
+
+        int tmp=apdu->cse; /* save original apdu type */
+        /* if SM is on, assure rx buffer exists and force get_response */
+        if ( provider->status.state == CWA_SM_ACTIVE ) {
+            if (tmp==SC_APDU_CASE_3_SHORT) apdu->cse=SC_APDU_CASE_4_SHORT;
+            if (apdu->resplen==0) { /* no response buffer: create */
+                apdu->resp=buf;
+                apdu->resplen=card->max_send_size;
+                apdu->le=card->max_send_size;
+            }
+        }
+        /* call std sc_transmit_apdu */
+        res = _sc_transmit_apdu(card,apdu);
+        /* and restore original apdu type */
+        apdu->cse=tmp;
+    } else {
+        
+    /* envelope needed */
+
+        sc_apdu_t *e_apdu=calloc(1,sizeof(sc_apdu_t)); /* enveloped apdu */
+        u8 *e_tx=calloc(1024,sizeof(u8)); /* enveloped data */
+        size_t e_txlen=0;
+        size_t index=0;
+        if ( !e_apdu || !e_tx ) 
+            LOG_FUNC_RETURN(card->ctx,SC_ERROR_OUT_OF_MEMORY);
+
+        /* copy apdu info into enveloped data */
+        *(e_tx+0)=apdu->cla; /* apdu header */
+        *(e_tx+1)=apdu->ins;
+        *(e_tx+2)=apdu->p1;
+        *(e_tx+3)=apdu->p2; 
+        *(e_tx+4)=0x00; /* length in extended format */
+        *(e_tx+5)=0xff & (apdu->lc >> 8);
+        *(e_tx+6)=0xff & apdu->lc;
+        memcpy(e_tx+7,apdu->data,apdu->lc);
+        e_txlen=7+apdu->lc;
+
+        /* split apdu in n chunks of max_send_size len */
+        for (index=0 ; index<e_txlen ; index+=card->max_send_size) {
+            int len= MIN(card->max_send_size,e_txlen-index);
+            /* compose envelope apdu command */ 
+            sc_format_apdu(card,e_apdu,apdu->cse,0xC2,0x00,0x00);
+            e_apdu->cla=0x90; /* propietary CLA */
+            e_apdu->data=e_tx+index;
+            e_apdu->lc=len;
+            e_apdu->le=apdu->le;
+            e_apdu->resp=apdu->resp;
+            e_apdu->resplen=apdu->resplen;
+            /* if SM is ON, ensure resp exists, and force getResponse()*/
+            if ( provider->status.state == CWA_SM_ACTIVE ) {
+                /* set up proper apdu type */
+                if (e_apdu->cse==SC_APDU_CASE_3_SHORT) 
+                     e_apdu->cse=SC_APDU_CASE_4_SHORT;
+                /* if no response buffer: create */
+                if (apdu->resplen==0) { 
+                    e_apdu->resp=buf;
+                    e_apdu->resplen=card->max_recv_size;
+                    e_apdu->le=card->max_recv_size;
+                }
+            }
+            /* send data chunk */
+            res = _sc_transmit_apdu(card,apdu);
+            LOG_TEST_RET(card->ctx,res,"Error in envelope() send apdu");
+        } /* for */
+    }
+    if (buf) free(buf);
     LOG_FUNC_RETURN(card->ctx,res);
+}
+
+/* Called before sc_transmit_apdu() to allowing APDU wrapping
+ * If set to NULL no wrapping process will be done
+ * Usefull on Secure Messaging APDU encode/decode
+ * If returned value is greater than zero, _sc_transmit_apdu() 
+ * will be called, else means either SC_SUCCESS or error code */
+
+/* NOTE:
+ * DNIe doesn't handle apdu chaining; instead apdus with
+ * lc>max_send_size are sent by mean of envelope() apdu command
+ * So we use this method for
+ * - encode and decode SM if SM is on
+ * - use envelope instead of apdu chain if lc>max_send_size
+ */
+static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu) {
+    int res=SC_SUCCESS;
+    cwa_provider_t *provider=dnie_priv.provider;
+
+    if( (card==NULL) || (card->ctx==NULL) || (apdu==NULL) )
+        return SC_ERROR_INVALID_ARGUMENTS;
+    LOG_FUNC_CALLED(card->ctx);
+    
+    /* SM is active, encode apdu */
+    if ( provider->status.state == CWA_SM_ACTIVE ) {
+        res= cwa_encode_apdu(card,provider,apdu);
+        LOG_TEST_RET(card->ctx,res,"Error in cwa_encode_apdu process");
+    }
+    /* send apdu via envelope() cmd if needed */
+    res= dnie_transmit_apdu(card,apdu);
+    LOG_TEST_RET(card->ctx,res,"Error in dnie_transmit_apdu process");
+    /* if SM is active; decode apdu */
+    if ( provider->status.state == CWA_SM_ACTIVE ) {
+        res= cwa_decode_response(card,provider,apdu);
+        LOG_TEST_RET(card->ctx,res,"Error in cwa_decode_response process");
+    }
+    LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
 }
 
 /* ISO 7816-4 functions */

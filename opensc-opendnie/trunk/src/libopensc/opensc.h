@@ -664,6 +664,9 @@ typedef struct sc_context {
  */
 int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu);
 
+/* same as above, but no check for apdu wrapping is done */
+int _sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu);
+
 void sc_format_apdu(sc_card_t *card, sc_apdu_t *apdu, int cse, int ins,
 		    int p1, int p2);
 

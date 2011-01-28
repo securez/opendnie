@@ -45,17 +45,21 @@
 /*********************** utility functions ************************/
 
 static void cwa_trace_apdu(sc_card_t *card, sc_apdu_t *apdu, int flag) {
+   size_t blen=128 + MAX(apdu->datalen,apdu->resplen);
+   char *buf=calloc(blen,sizeof(char));
 /* set to 0 in production */
 #if 1
-    if (!card || !card->ctx || !apdu) return;
+    if (!card || !card->ctx || !apdu || !buf ) return;
     if (flag==0) { /* apdu command */
-        if (apdu->datalen>0)  {
-            sc_log(card->ctx,"APDU before encode:\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02x \nDATA: %s",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le,sc_dump_hex(apdu->data,apdu->datalen));
-        } else {
-            sc_log(card->ctx,"APDU before encode:\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02x\n(NO DATA)",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le);
+        if (apdu->datalen>0)  { /* apdu data to show */
+            sc_hex_dump(card->ctx,SC_LOG_DEBUG_NORMAL,apdu->data,apdu->datalen,buf,blen);
+            sc_log(card->ctx,"\nAPDU before encode: ==================================================\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02X DATA: [%5u bytes]\n%s======================================================================\n",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le,apdu->datalen,buf);
+        } else { /* apdu data field is empty */
+            sc_log(card->ctx,"\nAPDU before encode: ==================================================\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02X (NO DATA)\n======================================================================\n",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le);
         }
     } else {       /* apdu response */
-        sc_log(card->ctx,"APDU after decode:\nSW1: %02X SW2: %02X\nRESP: %s",apdu->sw1,apdu->sw2,sc_dump_hex(apdu->resp,apdu->resplen));
+        sc_hex_dump(card->ctx,SC_LOG_DEBUG_NORMAL,apdu->resp,apdu->resplen,buf,blen);
+        sc_log(card->ctx,"\nAPDU response after decode: ==========================================\nSW1: %02X SW2: %02X RESP: [%5u bytes]\n%s======================================================================\n",apdu->sw1,apdu->sw2,apdu->resplen,buf);
     }
 #endif
 
@@ -1153,13 +1157,15 @@ csc_end:
  *
  *@param card card info structure
  *@param sm Secure Messaging state information
- *@param apdu APDU to be encoded
+ *@param from APDU to be encoded
+ *@param to where to store encoded apdu
  *@return SC_SUCCESS if ok; else error code
  */
 int cwa_encode_apdu(
     sc_card_t *card,
     cwa_provider_t *provider,
-    sc_apdu_t *apdu
+    sc_apdu_t *from,
+    sc_apdu_t *to
     ) {
     u8 *apdubuf; /* to store resulting apdu */
     size_t apdulen;
@@ -1168,38 +1174,50 @@ int cwa_encode_apdu(
     u8 macbuf[8]; /* to store and compute CC */
     DES_key_schedule k1;
     DES_key_schedule k2;
+
     int i,j; /* for xor loops */
     int res=SC_SUCCESS;
+
+    u8 *msgbuf=calloc(8+from->lc,sizeof(u8)); /* to encrypt apdu data */
+    u8 *cryptbuf=calloc(8+from->lc,sizeof(u8)); 
+    
     /* mandatory check */
     if( !card || !card->ctx || !provider) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     cwa_sm_status_t *sm=&(provider->status);
-
+   
     LOG_FUNC_CALLED(ctx);
     /* check remaining arguments */
-    if ((apdu==NULL) || (sm==NULL)) 
-            LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+    if (!from || !to || !sm) LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     if (sm->state != CWA_SM_ACTIVE) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
+    if (!msgbuf || !cryptbuf) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY); 
+
 
     /* check if APDU is already encoded */
-    if ((apdu->cla & 0x0C)!=0) return SC_SUCCESS; /* already encoded */
-    if (apdu->ins == 0xC0) return SC_SUCCESS; /* dont encode GET Response cmd */
+    if ((from->cla & 0x0C)!=0) {
+        memcpy(to,from,sizeof(sc_apdu_t));
+        return SC_SUCCESS; /* already encoded */
+    }
+    if (from->ins == 0xC0) {
+        memcpy(to,from,sizeof(sc_apdu_t));
+        return SC_SUCCESS; /* dont encode GET Response cmd */
+    }
 
 #if 0
-    /* For testing results according manual */
+    /* For testing results according DNIe manual */
     u8 kenc[16]= { 0x59,0x8f,0x26,0xe3,0x6e,0x11,0xa8,0xec,0x14,0xb8,0x1e,0x19,0xbd,0xa2,0x23,0xca };
     u8 kmac[16]= { 0x5d,0xe2,0x93,0x9a,0x1e,0xa0,0x3a,0x93,0x0b,0x88,0x20,0x6d,0x8f,0x73,0xe8,0xa7 };
     u8 ssc[8]= { 0xd3,0x1a,0xc8,0xec,0x7b,0xa0,0xfe,0x74 };
     memcpy (sm->kenc,kenc,16);
     memcpy (sm->kmac,kmac,16);
     memcpy (sm->ssc,ssc,16);
-    apdu->le=0;
+    from->le=0;
     /* para debugging end */
 #endif
 
     /* call provider pre-operation method */
     if (provider->cwa_encode_pre_ops) {
-        res=provider->cwa_encode_pre_ops(card,provider,apdu);
+        res=provider->cwa_encode_pre_ops(card,provider,from,to);
         if (res!=SC_SUCCESS) {
             sc_log(ctx,"Encode APDU: provider pre_ops() failed");
             LOG_FUNC_RETURN(ctx,res);
@@ -1207,26 +1225,31 @@ int cwa_encode_apdu(
     }
     
     /* trace APDU before encoding process */
-    cwa_trace_apdu(card,apdu,0); 
+    cwa_trace_apdu(card,from,0); 
 
     /* allocate result apdu data buffer */
     apdubuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
     ccbuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
     if (!apdubuf || !ccbuf ) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
 
+    /* set up data on destination apdu */
+    to->cse = SC_APDU_CASE_3_SHORT;
+    to->cla = from->cla | 0x0C; /* mark apdu as encoded */
+    to->ins = from->ins;
+    to->p1  = from->p1;
+    to->p2  = from->p2;
+    to->le  = from->le;
+    to->lc  = 0; /* to be evaluated */
     /* fill buffer with header info */
-    apdu->cla |= 0x0C; /* mark apdu as encoded */
-    *(ccbuf+cclen++)=apdu->cla;
-    *(ccbuf+cclen++)=apdu->ins;
-    *(ccbuf+cclen++)=apdu->p1;
-    *(ccbuf+cclen++)=apdu->p2;
+    *(ccbuf+cclen++)=to->cla;
+    *(ccbuf+cclen++)=to->ins;
+    *(ccbuf+cclen++)=to->p1;
+    *(ccbuf+cclen++)=to->p2;
     cwa_iso7816_padding(ccbuf,&cclen); /* pad header (4 bytes pad) */
 
     /* if no data, skip data encryption step */
-    if (apdu->lc!=0) {
-        size_t dlen=apdu->lc;
-        u8 msgbuf[1024];
-        u8 cryptbuf[1024];
+    if (from->lc!=0) {
+        size_t dlen=from->lc;
 
         /* prepare keys */
         DES_cblock iv={0,0,0,0,0,0,0,0};
@@ -1234,22 +1257,25 @@ int cwa_encode_apdu(
         DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[8]), &k2);
 
         /* pad message */
-        memcpy (msgbuf,apdu->data,dlen);
+        memcpy (msgbuf,from->data,dlen);
         cwa_iso7816_padding(msgbuf,&dlen);
 
         /* start kriptbuff with iso padding indicator */
-        cryptbuf[0]=0x01;
+        *cryptbuf=0x01;
         /* aply TDES + CBC with kenc and iv=(0,..,0) */
-        DES_ede3_cbc_encrypt(msgbuf,&cryptbuf[1],dlen,&k1,&k2,&k1,&iv,DES_ENCRYPT);
+        DES_ede3_cbc_encrypt(msgbuf,cryptbuf+1,dlen,&k1,&k2,&k1,&iv,DES_ENCRYPT);
         /* compose data TLV and add to result buffer */
-        res=cwa_compose_tlv(card,0x87,dlen+1,&cryptbuf[0],&ccbuf,&cclen);
-        LOG_TEST_RET(ctx,res,"Error in compose tag 8x87 TLV");
+        res=cwa_compose_tlv(card,0x87,dlen+1,cryptbuf,&ccbuf,&cclen);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Error in compose tag 8x87 TLV");
+            goto encode_end;
+        }
     }
 
     /* if le byte is declared, compose and add Le TLV */
     /* TODO: study why original driver checks for le>=256? */
-    if (apdu->le>0) {
-        u8 le=0xff & apdu->le;
+    if (from->le>0) {
+        u8 le=0xff & from->le;
         res=cwa_compose_tlv(card,0x97,1,&le,&ccbuf,&cclen);
     }
     /* copy current data to apdu buffer (skip header and header padding) */
@@ -1258,12 +1284,13 @@ int cwa_encode_apdu(
     /* pad again ccbuffer to compute CC */
     cwa_iso7816_padding(ccbuf,&cclen);
 
+    /* sc_log(ctx,"data to compose mac: %s",sc_dump_hex(ccbuf,cclen)); */
     /* compute MAC Cryptographic Checksum using kmac and increased SSC */
     res=cwa_increase_ssc(card,sm); /* increase send sequence counter */
     if (res!=SC_SUCCESS) {
     	sc_log(ctx,"Error in computing SSC");
         free(ccbuf);
-        LOG_FUNC_RETURN(ctx,res);
+        goto encode_end;
     }
     /* set up keys for mac computing */
     DES_set_key_unchecked((const_DES_cblock *)&(sm->kmac[0]), &k1);
@@ -1284,21 +1311,25 @@ int cwa_encode_apdu(
     res=cwa_compose_tlv(card,0x8E,4,macbuf,&apdubuf,&apdulen);
 
     /* rewrite resulting header */
-    apdu->lc=apdulen;
-    apdu->data=apdubuf;
-    apdu->datalen=apdulen;
+    to->lc=apdulen;
+    to->data=apdubuf;
+    to->datalen=apdulen;
 
     /* call provider post-operation method */
     if (provider->cwa_encode_post_ops) {
-        res=provider->cwa_encode_post_ops(card,provider,apdu);
+        res=provider->cwa_encode_post_ops(card,provider,from,to);
         if (res!=SC_SUCCESS) {
             sc_log(ctx,"Encode APDU: provider post_ops() failed");
-            LOG_FUNC_RETURN(ctx,res);
+            goto encode_end;
         }
     }
-
     /* that's all folks */
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+    res=SC_SUCCESS;
+
+encode_end:
+    if (msgbuf) free(msgbuf);
+    if (cryptbuf) free(cryptbuf);
+    LOG_FUNC_RETURN(ctx,res);
 }
 
 /**
@@ -1310,13 +1341,15 @@ int cwa_encode_apdu(
  *
  *@param card card info structure
  *@param sm Secure Messaging state information
- *@param apdu APDU with response to be decoded
+ *@param from APDU with response to be decoded
+ *@param to where to store decoded apdu
  *@return SC_SUCCESS if ok; else error code
  */
 int cwa_decode_response(
     sc_card_t *card,
     cwa_provider_t *provider,
-    sc_apdu_t *apdu
+    sc_apdu_t *from,
+    sc_apdu_t *to
     ) {
     int i,j;
     cwa_tlv_t p_tlv; /* to store plain data (Tag 0x81) */
@@ -1339,13 +1372,13 @@ int cwa_decode_response(
     LOG_FUNC_CALLED(ctx);
 
     /* check remaining arguments */
-    if ((apdu==NULL) || (sm==NULL)) 
+    if ((from==NULL) || (to==NULL) || (sm==NULL)) 
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     if ( sm->state != CWA_SM_ACTIVE ) LOG_FUNC_RETURN(ctx,SC_ERROR_INTERNAL);
 
     /* cwa14890 sect 9.3: check SW1 or SW2 for SM related errors */
-    if (apdu->sw1==0x69) {
-        if ( (apdu->sw2==0x88) || (apdu->sw2==0x87) ) {
+    if (from->sw1==0x69) {
+        if ( (from->sw2==0x88) || (from->sw2==0x87) ) {
             msg="SM related errors in APDU response";
             res=SC_ERROR_INTERNAL; /* tell driver to restart SM */
             goto response_decode_end;
@@ -1353,7 +1386,7 @@ int cwa_decode_response(
     }
 
     /* checks if apdu response needs decoding by checking tags in response*/
-    switch (apdu->resp[0]) {
+    switch (from->resp[0]) {
         case CWA_SM_PLAIN_TAG: 
         case CWA_SM_CRYPTO_TAG: 
         case CWA_SM_MAC_TAG: 
@@ -1366,7 +1399,7 @@ int cwa_decode_response(
 
     /* call provider pre-operation method */
     if (provider->cwa_decode_pre_ops) {
-        res=provider->cwa_decode_pre_ops(card,provider,apdu);
+        res=provider->cwa_decode_pre_ops(card,provider,from,to);
         if (res!=SC_SUCCESS) {
             sc_log(ctx,"Decode APDU: provider pre_ops() failed");
             LOG_FUNC_RETURN(ctx,res);
@@ -1374,10 +1407,10 @@ int cwa_decode_response(
     }
 
     /* parse response to find TLV data and check results */
-    cwa_find_tlv(card,apdu,0x99,&s_tlv); /* status data (optional) */
-    cwa_find_tlv(card,apdu,0x87,&e_tlv); /* encoded data (optional) */
-    cwa_find_tlv(card,apdu,0x81,&p_tlv); /* plain data (optional) */
-    cwa_find_tlv(card,apdu,0x8E,&m_tlv); /* MAC data (mandatory) */
+    cwa_find_tlv(card,from,0x99,&s_tlv); /* status data (optional) */
+    cwa_find_tlv(card,from,0x87,&e_tlv); /* encoded data (optional) */
+    cwa_find_tlv(card,from,0x81,&p_tlv); /* plain data (optional) */
+    cwa_find_tlv(card,from,0x8E,&m_tlv); /* MAC data (mandatory) */
     if (p_tlv.buf && e_tlv.buf) {
         msg="Plain and Encoded data are mutually exclusive in apdu response";
         res=SC_ERROR_INVALID_DATA;
@@ -1421,6 +1454,11 @@ int cwa_decode_response(
         }
         memcpy(ccbuf+cclen,s_tlv.buf,s_tlv.buflen);
         cclen += s_tlv.buflen;
+        to->sw1=s_tlv.data[0];
+        to->sw2=s_tlv.data[1];
+    } else { /* if no response status tag, use sw1 and sw2 from apdu */
+        to->sw1=from->sw1;
+        to->sw2=from->sw2;
     }
     /* add iso7816 padding */
     cwa_iso7816_padding(ccbuf,&cclen);
@@ -1458,28 +1496,28 @@ int cwa_decode_response(
 
     /* allocate response buffer */
     resplen= 10 + MAX(p_tlv.len,e_tlv.len); /* estimate response buflen */
-    if (apdu->resp) { /* if response apdu provides buffer, try to use it */
-        if(apdu->resplen<resplen) {
+    if (to->resp) { /* if response apdu provides buffer, try to use it */
+        if(to->resplen<resplen) {
             msg="Provided buffer has not enought size to store response";
             res=SC_ERROR_OUT_OF_MEMORY;
             goto response_decode_end;
         }
     } else { /* buffer not provided: create and assing to response apdu */
-        apdu->resp=calloc(p_tlv.len,sizeof(u8));
-        if (!apdu->resp) {
+        to->resp=calloc(p_tlv.len,sizeof(u8));
+        if (!to->resp) {
             msg="Cannot allocate buffer to store response";
             res=SC_ERROR_OUT_OF_MEMORY;
             goto response_decode_end;
         }
     }
-    apdu->resplen=resplen;
+    to->resplen=resplen;
     
     /* fill destination response apdu buffer with data */
 
     /* if plain data, just copy TLV data into apdu response */
     if (p_tlv.data) { /* plain data */
-        memcpy(apdu->resp,p_tlv.data,p_tlv.len);
-        apdu->resplen=p_tlv.len;
+        memcpy(to->resp,p_tlv.data,p_tlv.len);
+        to->resplen=p_tlv.len;
     }
 
     /* if encoded data, decode and store into apdu response */
@@ -1502,23 +1540,23 @@ int cwa_decode_response(
         DES_set_key_unchecked((const_DES_cblock *)&(sm->kenc[8]), &k2);
         /* decrypt into response buffer
          * by using 3DES CBC by mean of kenc and iv={0,...0} */
-        DES_ede3_cbc_encrypt(&e_tlv.data[1],apdu->resp,e_tlv.len-1,&k1,&k2,&k1,&iv, DES_DECRYPT);
-        apdu->resplen=e_tlv.len-1;
+        DES_ede3_cbc_encrypt(&e_tlv.data[1],to->resp,e_tlv.len-1,&k1,&k2,&k1,&iv, DES_DECRYPT);
+        to->resplen=e_tlv.len-1;
         /* remove iso padding from response length */
-        for(; (apdu->resplen > 0)  && (apdu->resp[apdu->resplen-1]==0x00) ; apdu->resplen-- ); /* empty loop */
+        for(; (to->resplen > 0)  && (to->resp[to->resplen-1]==0x00) ; to->resplen-- ); /* empty loop */
         
-        if ( apdu->resp[apdu->resplen-1] != 0x80 ) { /* check padding byte */
+        if ( to->resp[to->resplen-1] != 0x80 ) { /* check padding byte */
             msg="Decrypted TLV has no 0x80 iso padding indicator!";
             res=SC_ERROR_INVALID_DATA;
             goto response_decode_end;
         }
         /* everything ok: remove ending 0x80 from response */
-        apdu->resplen--;
+        to->resplen--;
     }
 
     /* call provider post-operation method */
     if (provider->cwa_decode_post_ops) {
-        res=provider->cwa_decode_post_ops(card,provider,apdu);
+        res=provider->cwa_decode_post_ops(card,provider,from,to);
         if (res!=SC_SUCCESS) {
             sc_log(ctx,"Decode APDU: provider post_ops() failed");
             LOG_FUNC_RETURN(ctx,res);
@@ -1531,7 +1569,7 @@ int cwa_decode_response(
 response_decode_end:
     if (ccbuf) free(ccbuf);
     if (msg)    sc_log(ctx,msg);
-    cwa_trace_apdu(card,apdu,1); /* trace apdu response */
+    cwa_trace_apdu(card,to,1); /* trace apdu response */
     LOG_FUNC_RETURN(ctx,res);
 }
 
@@ -1607,20 +1645,20 @@ static int default_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
 /************** operations related with APDU encoding ******************/
 
 /* pre and post operations */
-static int default_encode_pre_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *apdu) {
+static int default_encode_pre_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *from,sc_apdu_t *to) {
     return SC_SUCCESS;
 }
-static int default_encode_post_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *apdu) {
+static int default_encode_post_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *from,sc_apdu_t *to) {
     return SC_SUCCESS;
 }
 
 /************** operations related APDU response decoding **************/
 
 /* pre and post operations */
-static int default_decode_pre_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *apdu) {
+static int default_decode_pre_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *from,sc_apdu_t *to) {
     return SC_SUCCESS;
 }
-static int default_decode_post_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *apdu) {
+static int default_decode_post_ops( sc_card_t *card, cwa_provider_t *provider, sc_apdu_t *from,sc_apdu_t *to) {
     return SC_SUCCESS;
 }
 

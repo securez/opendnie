@@ -425,31 +425,31 @@ static unsigned long le2ulong(u8 *pt) {
 static int dnie_decode_post_ops( 
     sc_card_t *card, 
     cwa_provider_t *provider, 
-    sc_apdu_t *apdu) {
+    sc_apdu_t *from, sc_apdu_t *to) {
 
 #ifdef ENABLE_ZLIB
     unsigned long compressed;
     unsigned long uncompressed;
     int res;
     u8 *upt;
-    if (apdu->resplen<8) return SC_SUCCESS; /* no compression posible */
-    compressed=le2ulong(apdu->resp);
-    uncompressed=le2ulong(apdu->resp+4);
-    if (compressed!=apdu->resplen-8) return SC_SUCCESS;/* not compressed */
+    if (to->resplen<8) return SC_SUCCESS; /* no compression posible */
+    compressed=le2ulong(to->resp);
+    uncompressed=le2ulong(to->resp+4);
+    if (compressed!=to->resplen-8) return SC_SUCCESS;/* not compressed */
     if (uncompressed<compressed) return SC_SUCCESS; /* not compressed */
     upt=calloc(uncompressed,sizeof(u8));
     if(!upt)return SC_ERROR_OUT_OF_MEMORY;
     res=sc_decompress(upt,(size_t *)uncompressed,
-                      apdu->resp+8,compressed,
+                      to->resp+8,compressed,
                       COMPRESSION_ZLIB);
     if (res!=SC_SUCCESS) {
         sc_log(card->ctx,"Uncompression failed");
         return SC_SUCCESS; /* assume that still may not need uncompression */
     }
     /* copy uncompressed data and len into apdu response */
-    free(apdu->resp); /* no longer needed */
-    apdu->resp=upt;
-    apdu->resplen=uncompressed;
+    free(to->resp); /* no longer needed */
+    to->resp=upt;
+    to->resplen=uncompressed;
 #endif
 
     return SC_SUCCESS;

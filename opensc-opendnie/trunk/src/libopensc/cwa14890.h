@@ -154,14 +154,14 @@ typedef struct cwa_provider_st {
     /************** operations related with APDU encoding ******************/
 
     /* pre and post operations */
-    int (*cwa_encode_pre_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *apdu);
-    int (*cwa_encode_post_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *apdu);
+    int (*cwa_encode_pre_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *from, sc_apdu_t *to);
+    int (*cwa_encode_post_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *from, sc_apdu_t *to);
 
     /************** operations related APDU response decoding **************/
 
     /* pre and post operations */
-    int (*cwa_decode_pre_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *apdu);
-    int (*cwa_decode_post_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *apdu);
+    int (*cwa_decode_pre_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *from, sc_apdu_t *to);
+    int (*cwa_decode_post_ops)( sc_card_t *card, struct cwa_provider_st *provider, sc_apdu_t *from, sc_apdu_t *to);
 } cwa_provider_t;
 
 /************************** external function prototypes ******************/
@@ -192,13 +192,15 @@ extern int cwa_create_secure_channel(
  *
  *@param card card info structure
  *@param provider cwa provider data to handle SM channel
- *@param apdu apdu to be decoded
+ *@param from apdu to be decoded
+ *@param to   where to store decoded apdu
  *@return SC_SUCCESS if ok; else error code
  */
 extern int cwa_decode_response( 
     sc_card_t *card, 
     cwa_provider_t *provider,
-    sc_apdu_t *apdu
+    sc_apdu_t *from,
+    sc_apdu_t *to
     );
 
 /**
@@ -210,14 +212,15 @@ extern int cwa_decode_response(
  *
  *@param card card info structure
  *@param provider cwa provider data to handle SM channel
- *@param apdu apdu to be encoded
+ *@param from apdu to be encoded
  *@param to Where to store encoded apdu
  *@return SC_SUCCESS if ok; else error code
  */
 extern int cwa_encode_apdu( 
     sc_card_t *card, 
     cwa_provider_t *provider,
-    sc_apdu_t *apdu
+    sc_apdu_t *from,
+    sc_apdu_t *to
     );
 
 /**

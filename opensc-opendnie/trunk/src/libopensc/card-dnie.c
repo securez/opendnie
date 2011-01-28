@@ -466,7 +466,7 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
     /* envelope needed */
 
         sc_apdu_t *e_apdu=calloc(1,sizeof(sc_apdu_t)); /* enveloped apdu */
-        u8 *e_tx=calloc(1024,sizeof(u8)); /* enveloped data */
+        u8 *e_tx=calloc(7+apdu->datalen,sizeof(u8)); /* enveloped data */
         size_t e_txlen=0;
         size_t index=0;
         if ( !e_apdu || !e_tx ) 
@@ -531,22 +531,25 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
 static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu) {
     int res=SC_SUCCESS;
     cwa_provider_t *provider=dnie_priv.provider;
-
+    sc_apdu_t wrapped;
+    sc_apdu_t *to_be_sent=apdu;
     if( (card==NULL) || (card->ctx==NULL) || (apdu==NULL) )
         return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
     
     /* SM is active, encode apdu */
     if ( provider->status.state == CWA_SM_ACTIVE ) {
-        res= cwa_encode_apdu(card,provider,apdu);
+        memcpy(&wrapped,apdu,sizeof(sc_apdu_t));
+        res= cwa_encode_apdu(card,provider,apdu,&wrapped);
         LOG_TEST_RET(card->ctx,res,"Error in cwa_encode_apdu process");
+        to_be_sent=&wrapped;
     }
     /* send apdu via envelope() cmd if needed */
-    res= dnie_transmit_apdu(card,apdu);
+    res= dnie_transmit_apdu(card,to_be_sent);
     LOG_TEST_RET(card->ctx,res,"Error in dnie_transmit_apdu process");
     /* if SM is active; decode apdu */
     if ( provider->status.state == CWA_SM_ACTIVE ) {
-        res= cwa_decode_response(card,provider,apdu);
+        res= cwa_decode_response(card,provider,&wrapped,apdu);
         LOG_TEST_RET(card->ctx,res,"Error in cwa_decode_response process");
     }
     LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);

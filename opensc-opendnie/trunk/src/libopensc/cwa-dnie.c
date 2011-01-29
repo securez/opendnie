@@ -409,7 +409,10 @@ static int dnie_create_pre_ops(sc_card_t *card, cwa_provider_t *provider){
 /* convert little-endian data into unsigned long */
 static unsigned long le2ulong(u8 *pt) {
    unsigned long res=0;
-   res = pt[0] + (pt[1]<<8) + (pt[2]<<16) + (pt[3]<<24);
+   res =   (0xff & *(pt+0))       + 
+         ( (0xff & *(pt+1)) <<8  )+ 
+         ( (0xff & *(pt+2)) <<16 )+ 
+         ( (0xff & *(pt+3)) <<24 );
    return res;
 }
 

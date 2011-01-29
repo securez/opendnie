@@ -175,65 +175,67 @@ static int cwa_compose_tlv(
  * NOTICE that iso7816 sect 5.2.2 states that Tag length may be 1 to n bytes
  * length. In this code we'll assume allways tag lenght = 1 byte
  *@param card card info structure
- *@param apdu APDU data to extract response from
  *@param tag  TLV tag to search for
+ *@param data Buffer to look for tlv into
+ *@param datalen Buffer len
  *@param tlv  TLV structure to store result into
  *@return SC_SUCCESS if OK; else error code
  */
 static int cwa_find_tlv(
    sc_card_t *card,
-   sc_apdu_t *apdu,
    unsigned int tag,
+   u8 *data,
+   size_t datalen,
    cwa_tlv_t *tlv 
    ) {
     int n=0;
-    int tlen=0;
+    size_t next=0;
     /* preliminary checks */
     if ( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     /* comodity vars */
     sc_context_t *ctx=card->ctx; 
     LOG_FUNC_CALLED(ctx);
-    if (!apdu || !tlv || tag==0x00) 
+    if (!data || !tlv || tag==0x00) 
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
 
     /* create a new buffer */
-    u8 *buffer=calloc(apdu->resplen,sizeof(u8));
+    u8 *buffer=calloc(datalen,sizeof(u8));
     if (!buffer) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
 
-    for (n=0;n<apdu->resplen;n+=tlen) {
-        int j=2;
-        int maxlen=apdu->resplen-n;
-        memcpy(buffer,&apdu->resp[n],maxlen);
+    for (n=0;n<datalen;n+=next) {
+        size_t j=2; /* TLV has at least two bytes */
+        memcpy(buffer,data+n,datalen-n);
         tlv->buf=buffer;
-        tlv->buflen=maxlen;
-        tlv->tag=buffer[0];
+        tlv->buflen=datalen-n;
+sc_log(ctx,"Looking for tag '%02X' maxlen '%d' buf: \n%s",tag,tlv->buflen,sc_dump_hex(tlv->buf,tlv->buflen));
+        tlv->tag= 0xff & *buffer;
         tlv->len=0;
         /* evaluate len and start of data */
-        switch(buffer[1]) {
-            case 0x84: tlv->len =                 (0xff & buffer[j++]);
-            case 0x83: tlv->len = (tlv->len<<8) + (0xff & buffer[j++]);
-            case 0x82: tlv->len = (tlv->len<<8) + (0xff & buffer[j++]);
-            case 0x81: tlv->len = (tlv->len<<8) + (0xff & buffer[j++]);
-            case 0x80: tlv->len = (tlv->len<<8) + (0xff & buffer[j++]);
+        switch( 0xff & *(buffer+1)) {
+            case 0x84: tlv->len =                 (0xff & *(buffer+j++));
+            case 0x83: tlv->len = (tlv->len<<8) + (0xff & *(buffer+j++));
+            case 0x82: tlv->len = (tlv->len<<8) + (0xff & *(buffer+j++));
+            case 0x81: tlv->len = (tlv->len<<8) + (0xff & *(buffer+j++));
+            case 0x80: tlv->len = (tlv->len<<8) + (0xff & *(buffer+j++));
                        break;
             default:
-                if ((buffer[1]&0xff)<0x80) {
-                    tlv->len= 0xff & buffer[1];
+                if ( ( *(buffer+1) & 0xff )< 0x80 ) {
+                    tlv->len= 0xff & *(buffer+1);
                 } else {
-                    sc_log(ctx,"Invalid tag length indicator: %d",buffer[1]);
+                    sc_log(ctx,"Invalid tag length indicator: %d",*(buffer+1));
                     LOG_FUNC_RETURN(ctx,SC_ERROR_WRONG_LENGTH);
                 }
         }
-        tlv->data= &buffer[j];
-        tlv->buflen=tlv->len+j;
+        tlv->data= buffer+j;
+        sc_log(ctx,"Found tag: %02X Length: %02X Value: \n%s",tlv->tag,tlv->len,sc_dump_hex(tlv->data,tlv->len));
         if (tlv->tag==tag) {
-            sc_log(ctx,"Tag: %02X Length: %02X Value: %s",tlv->tag,tlv->len,sc_dump_hex(tlv->data,tlv->len));
-            return SC_SUCCESS; /* tag found: return */
-        }
-        tlen=tlv->buflen; /* jump to next tag and retry */
+            sc_log(ctx,"Tag %02X found",tag);
+            LOG_FUNC_RETURN(ctx,SC_SUCCESS); /* tag found: return */
+        } 
+        next=j+tlv->len;/* jump to next tag and retry */
     }
     /* arriving here means tag not found */
-    memset(tlv,0,sizeof(struct sc_tlv_data)); /* clear info */
+    memset(tlv,0,sizeof(cwa_tlv_t)); /* clear info */
     free(buffer);
     sc_log(ctx,"Tag %02X not found",tag);
     LOG_FUNC_RETURN(ctx,SC_SUCCESS); /* mark no error: just clean tlv data */
@@ -1352,17 +1354,18 @@ int cwa_decode_response(
     sc_apdu_t *to
     ) {
     int i,j;
-    cwa_tlv_t p_tlv; /* to store plain data (Tag 0x81) */
-    cwa_tlv_t e_tlv; /* to store padded encoded data (Tag 0x87) */
-    cwa_tlv_t m_tlv; /* to store mac CC (Tag 0x8E) */
-    cwa_tlv_t s_tlv; /* to store sw1-sw2 status (Tag 0x99) */
-    u8 *ccbuf;      /* buffer for mac CC calculation */
-    size_t cclen;   /* ccbuf len */
-    u8 macbuf[8];   /* where to calculate mac */
-    size_t resplen; /* respbuf length */
-    DES_key_schedule k1, k2;
+    cwa_tlv_t p_tlv;  /* to store plain data (Tag 0x81) */
+    cwa_tlv_t e_tlv;  /* to store padded encoded data (Tag 0x87) */
+    cwa_tlv_t m_tlv;  /* to store mac CC (Tag 0x8E) */
+    cwa_tlv_t s_tlv;  /* to store sw1-sw2 status (Tag 0x99) */
+    u8 *ccbuf=NULL;   /* buffer for mac CC calculation */
+    size_t cclen=0;   /* ccbuf len */
+    u8 macbuf[8];     /* where to calculate mac */
+    size_t resplen=0; /* respbuf length */
+    DES_key_schedule k1;
+    DES_key_schedule k2;
     int res=SC_SUCCESS;
-    char *msg=NULL;             /* to store error messages */
+    char *msg=NULL;   /* to store error messages */
 
     /* mandatory check */
     if( !card || !card->ctx || !provider ) return SC_ERROR_INVALID_ARGUMENTS;
@@ -1370,7 +1373,6 @@ int cwa_decode_response(
     cwa_sm_status_t *sm=&(provider->status);
 
     LOG_FUNC_CALLED(ctx);
-
     /* check remaining arguments */
     if ((from==NULL) || (to==NULL) || (sm==NULL)) 
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
@@ -1384,9 +1386,14 @@ int cwa_decode_response(
             goto response_decode_end;
         }
     }
-
+    /* if response is null/empty assume unencoded apdu */
+    if (!from->resp || (from->resplen==0) ) {
+        sc_log(ctx,"Empty APDU response: assume not cwa encoded");
+        memcpy(to,from,sizeof(sc_apdu_t));
+        return SC_SUCCESS;
+    }
     /* checks if apdu response needs decoding by checking tags in response*/
-    switch (from->resp[0]) {
+    switch (*from->resp) {
         case CWA_SM_PLAIN_TAG: 
         case CWA_SM_CRYPTO_TAG: 
         case CWA_SM_MAC_TAG: 
@@ -1394,6 +1401,7 @@ int cwa_decode_response(
         case CWA_SM_STATUS_TAG: break; /* cwa tags found: continue decoding */
         default:   /* else apdu response seems not to be cwa encoded */
            sc_log(card->ctx,"APDU Response seems not to be cwa encoded");
+           memcpy(to,from,sizeof(sc_apdu_t));
            return SC_SUCCESS; /* let process continue */
     }
 
@@ -1407,10 +1415,19 @@ int cwa_decode_response(
     }
 
     /* parse response to find TLV data and check results */
-    cwa_find_tlv(card,from,0x99,&s_tlv); /* status data (optional) */
-    cwa_find_tlv(card,from,0x87,&e_tlv); /* encoded data (optional) */
-    cwa_find_tlv(card,from,0x81,&p_tlv); /* plain data (optional) */
-    cwa_find_tlv(card,from,0x8E,&m_tlv); /* MAC data (mandatory) */
+    /* encoded data (optional) */
+    memset(&e_tlv,0,sizeof(cwa_tlv_t));
+    cwa_find_tlv(card,0x87,from->resp,from->resplen,&e_tlv); 
+    /* status data (optional) */ 
+    memset(&s_tlv,0,sizeof(cwa_tlv_t));
+    cwa_find_tlv(card,0x99,from->resp,from->resplen,&s_tlv); 
+    /* plain data (optional) */
+    memset(&p_tlv,0,sizeof(cwa_tlv_t));
+    cwa_find_tlv(card,0x81,from->resp,from->resplen,&p_tlv); 
+    /* MAC data (mandatory) */
+    memset(&m_tlv,0,sizeof(cwa_tlv_t));
+    cwa_find_tlv(card,0x8E,from->resp,from->resplen,&m_tlv);
+    /* check consistency of received TLV's */
     if (p_tlv.buf && e_tlv.buf) {
         msg="Plain and Encoded data are mutually exclusive in apdu response";
         res=SC_ERROR_INVALID_DATA;
@@ -1438,15 +1455,15 @@ int cwa_decode_response(
     }
     /* copy data into buffer */
     cclen=0;
-    if (e_tlv.data) { /* encoded data */
+    if (e_tlv.buf) { /* encoded data */
         memcpy(ccbuf,e_tlv.buf,e_tlv.buflen);
         cclen = e_tlv.buflen;
     }
-    if (p_tlv.data) { /* plain data */
+    if (p_tlv.buf) { /* plain data */
         memcpy(ccbuf,p_tlv.buf,p_tlv.buflen);
         cclen += p_tlv.buflen;
     }
-    if (s_tlv.data) { /* response status */
+    if (s_tlv.buf) { /* response status */
         if (s_tlv.len!=2) {
             msg="Invalid SW TAG length";
             res=SC_ERROR_INVALID_DATA;
@@ -1515,13 +1532,13 @@ int cwa_decode_response(
     /* fill destination response apdu buffer with data */
 
     /* if plain data, just copy TLV data into apdu response */
-    if (p_tlv.data) { /* plain data */
+    if (p_tlv.buf) { /* plain data */
         memcpy(to->resp,p_tlv.data,p_tlv.len);
         to->resplen=p_tlv.len;
     }
 
     /* if encoded data, decode and store into apdu response */
-    if (e_tlv.data) { /* encoded data */
+    if (e_tlv.buf) { /* encoded data */
         DES_cblock iv = {0,0,0,0,0,0,0,0};
         /* check data len */
         if ( (e_tlv.len<9) || ((e_tlv.len-1)%8)!=0) {
@@ -1568,8 +1585,8 @@ int cwa_decode_response(
 
 response_decode_end:
     if (ccbuf) free(ccbuf);
-    if (msg)    sc_log(ctx,msg);
-    cwa_trace_apdu(card,to,1); /* trace apdu response */
+    if (msg) sc_log(ctx,msg);
+    else     cwa_trace_apdu(card,to,1); /* trace apdu response */
     LOG_FUNC_RETURN(ctx,res);
 }
 

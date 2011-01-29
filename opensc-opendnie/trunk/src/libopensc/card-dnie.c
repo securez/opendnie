@@ -511,7 +511,7 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
             LOG_TEST_RET(card->ctx,res,"Error in envelope() send apdu");
         } /* for */
     }
-    if (buf) free(buf);
+    /* if (buf) free(buf); */ /* dont free buf as is returned in apdu */
     LOG_FUNC_RETURN(card->ctx,res);
 }
 
@@ -678,6 +678,47 @@ static int dnie_select_file(struct sc_card *card,
     res=card->ops->process_fci(card, file, apdu.resp+2, apdu.resp[1]);
     *file_out=file;
     LOG_FUNC_RETURN(ctx,res);
+}
+
+/* Get Response: Retrieve min(card_recv_size,count) bytes from 
+ * card, storing result and new length into provided pointers
+ *
+ * Just a copy of iso7816.c::get_response(), but calling 
+ * _sc_transmit_apdu to avoid wrap/unwrap response
+ *
+ *@param card Pointer to card structure
+ *@param count pointer to get expected data length / return received length
+ *@return error code (negative) or number of bytes left
+ */
+static int dnie_get_response(sc_card_t *card, size_t *count, u8 *buf) {
+    sc_apdu_t apdu;
+    int r;
+    size_t rlen;
+
+    /* request at most max_recv_size bytes */
+    if ( (card->max_recv_size > 0) && (*count > card->max_recv_size) )
+         rlen = card->max_recv_size;
+    else rlen = *count;
+
+    sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0xC0, 0x00, 0x00);
+    apdu.le      = rlen;
+    apdu.resplen = rlen;
+    apdu.resp    = buf;
+    /* don't call GET RESPONSE recursively */
+    apdu.flags  |= SC_APDU_FLAGS_NO_GET_RESP;
+
+    r = _sc_transmit_apdu(card, &apdu); /* bypass wrapping */
+    SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r, "APDU transmit failed");
+    if (apdu.resplen == 0)
+        LOG_FUNC_RETURN(card->ctx, sc_check_sw(card, apdu.sw1, apdu.sw2));
+
+    *count = apdu.resplen;
+
+    if (apdu.sw1==0x90 && apdu.sw2 == 0x00) r=0; /* no more data to read */
+    else if (apdu.sw1==0x61) r=(apdu.sw2==0)?256:apdu.sw2; /*more data to read*/
+    else if (apdu.sw1==0x62 && apdu.sw2==0x82) r=0; /* Le not reached but file/record ended */
+    else r = sc_check_sw(card,apdu.sw1,apdu.sw2); /* check for other errors */
+    return r;
 }
 
 /* Get challenge: retrieve 8 random bytes for any further use
@@ -1267,7 +1308,7 @@ static sc_card_driver_t *get_dnie_driver(void) {
     /* dnie_ops.append_record */
     /* dnie_ops.update_record */
     dnie_ops.select_file           = dnie_select_file;
-    /* dnie_ops.get_response */
+    dnie_ops.get_response          = dnie_get_response;
     dnie_ops.get_challenge         = dnie_get_challenge;
 
     /* iso7816-8 functions */

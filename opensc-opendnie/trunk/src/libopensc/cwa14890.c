@@ -227,12 +227,13 @@ sc_log(ctx,"Looking for tag '%02X' maxlen '%d' buf: \n%s",tag,tlv->buflen,sc_dum
                 }
         }
         tlv->data= buffer+j;
-        sc_log(ctx,"Found tag: %02X Length: %02X Value: \n%s",tlv->tag,tlv->len,sc_dump_hex(tlv->data,tlv->len));
-        if (tlv->tag==tag) {
-            sc_log(ctx,"Tag %02X found",tag);
+        next=j+tlv->len;
+        if (tlv->tag==tag) { /* tag found */
+            tlv->buflen = next; /* fix buffer length info */
+            sc_log(ctx,"Found tag: %02X Length: %02X Value: \n%s",tlv->tag,tlv->len,sc_dump_hex(tlv->data,tlv->len));
             LOG_FUNC_RETURN(ctx,SC_SUCCESS); /* tag found: return */
         } 
-        next=j+tlv->len;/* jump to next tag and retry */
+        /* tag not found: jump to next tag and retry */
     }
     /* arriving here means tag not found */
     memset(tlv,0,sizeof(cwa_tlv_t)); /* clear info */

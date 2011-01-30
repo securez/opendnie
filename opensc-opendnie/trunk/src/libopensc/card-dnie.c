@@ -540,6 +540,8 @@ static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu) {
     /* SM is active, encode apdu */
     if ( provider->status.state == CWA_SM_ACTIVE ) {
         memcpy(&wrapped,apdu,sizeof(sc_apdu_t));
+        wrapped.resp=NULL;
+        wrapped.resplen=0; /* let get_response() assign space */
         res= cwa_encode_apdu(card,provider,apdu,&wrapped);
         LOG_TEST_RET(card->ctx,res,"Error in cwa_encode_apdu process");
         to_be_sent=&wrapped;
@@ -549,6 +551,8 @@ static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu) {
     LOG_TEST_RET(card->ctx,res,"Error in dnie_transmit_apdu process");
     /* if SM is active; decode apdu */
     if ( provider->status.state == CWA_SM_ACTIVE ) {
+        apdu->resp=NULL;
+        apdu->resplen=0; /* let decode_response() eval & create size */
         res= cwa_decode_response(card,provider,&wrapped,apdu);
         LOG_TEST_RET(card->ctx,res,"Error in cwa_decode_response process");
     }

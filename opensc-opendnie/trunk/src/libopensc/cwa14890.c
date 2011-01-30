@@ -197,7 +197,6 @@ static int cwa_parse_tlv(
     u8 *buffer=calloc(datalen,sizeof(u8));
     if (!buffer) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
     memcpy(buffer,data,datalen);
-
     for (n=0;n<datalen;n+=next) {
         cwa_tlv_t *tlv=NULL; /* pointer to TLV structure to store info */
         size_t j=2; /* TLV has at least two bytes */
@@ -471,7 +470,7 @@ static int cwa_prepare_external_auth(
     u8 *buf1; /* where to encrypt with icc pub key */
     u8 *buf2; /* where to encrypt with ifd pub key */
     u8 *buf3; /* where to compose message to be encrypted */
-    size_t len1,len2,len3;
+    int len1,len2,len3;
     u8 *sha_buf; /* to compose message to be sha'd */
     u8 *sha_data; /* sha signature data */
     BIGNUM *bn = NULL;
@@ -725,9 +724,9 @@ static int cwa_verify_internal_auth(
     u8 *buf1=NULL; /* to decrypt with our private key */
     u8 *buf2=NULL; /* to try SIGNUM==SIG */
     u8 *buf3=NULL; /* to try SIGNUM==N.ICC-SIG */
-    size_t len1=0;
-    size_t len2=0;
-    size_t len3=0;
+    int len1=0;
+    int len2=0;
+    int len3=0;
     BIGNUM *bn=NULL;
     BIGNUM *sigbn=NULL;
     if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
@@ -1176,9 +1175,9 @@ int cwa_encode_apdu(
 
     int i,j; /* for xor loops */
     int res=SC_SUCCESS;
-
-    u8 *msgbuf=calloc(8+from->lc,sizeof(u8)); /* to encrypt apdu data */
-    u8 *cryptbuf=calloc(8+from->lc,sizeof(u8)); 
+    /* reserve extra bytes for padding and tlv header */
+    u8 *msgbuf=calloc(12+from->lc,sizeof(u8)); /* to encrypt apdu data */
+    u8 *cryptbuf=calloc(12+from->lc,sizeof(u8)); 
     
     /* mandatory check */
     if( !card || !card->ctx || !provider) return SC_ERROR_INVALID_ARGUMENTS;
@@ -1414,6 +1413,7 @@ int cwa_decode_response(
 
     /* parse response to find TLV's data and check results */
     memset(tlv_array,0,4*sizeof(cwa_tlv_t));
+
     res=cwa_parse_tlv(card,from->resp,from->resplen,tlv_array); 
     if (res!=SC_SUCCESS) {
             msg="Error in TLV parsing";
@@ -1513,7 +1513,7 @@ int cwa_decode_response(
             goto response_decode_end;
         }
     } else { /* buffer not provided: create and assing to response apdu */
-        to->resp=calloc(p_tlv->len,sizeof(u8));
+        to->resp=calloc(resplen,sizeof(u8));
         if (!to->resp) {
             msg="Cannot allocate buffer to store response";
             res=SC_ERROR_OUT_OF_MEMORY;
@@ -1553,9 +1553,9 @@ int cwa_decode_response(
         DES_ede3_cbc_encrypt(&e_tlv->data[1],to->resp,e_tlv->len-1,&k1,&k2,&k1,&iv, DES_DECRYPT);
         to->resplen=e_tlv->len-1;
         /* remove iso padding from response length */
-        for(; (to->resplen > 0)  && (to->resp[to->resplen-1]==0x00) ; to->resplen-- ); /* empty loop */
+        for(; (to->resplen > 0)  && *(to->resp+to->resplen-1)==0x00 ; to->resplen-- ); /* empty loop */
         
-        if ( to->resp[to->resplen-1] != 0x80 ) { /* check padding byte */
+        if ( *(to->resp+to->resplen-1) != 0x80 ) { /* check padding byte */
             msg="Decrypted TLV has no 0x80 iso padding indicator!";
             res=SC_ERROR_INVALID_DATA;
             goto response_decode_end;

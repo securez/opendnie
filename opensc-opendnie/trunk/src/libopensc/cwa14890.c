@@ -218,6 +218,8 @@ static int cwa_parse_tlv(
             case 0x83: tlv->len = (tlv->len<<8) + (0xff & *(buffer + n + j++));
             case 0x82: tlv->len = (tlv->len<<8) + (0xff & *(buffer + n + j++));
             case 0x81: tlv->len = (tlv->len<<8) + (0xff & *(buffer + n + j++));
+                       break;
+            /* case 0x80 is not standard, but official code uses it */
             case 0x80: tlv->len = (tlv->len<<8) + (0xff & *(buffer + n + j++));
                        break;
             default:

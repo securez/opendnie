@@ -439,7 +439,7 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
     if( (card==NULL) || (card->ctx==NULL) || (apdu==NULL) )
         return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
-    buf= calloc(card->max_send_size,sizeof(u8));
+    buf= calloc(2048,sizeof(u8));
     if (!buf) LOG_FUNC_RETURN(card->ctx,SC_ERROR_OUT_OF_MEMORY);
 
     /* check if envelope is needed */
@@ -453,8 +453,8 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
             if (tmp==SC_APDU_CASE_3_SHORT) apdu->cse=SC_APDU_CASE_4_SHORT;
             if (apdu->resplen==0) { /* no response buffer: create */
                 apdu->resp=buf;
-                apdu->resplen=card->max_send_size;
-                apdu->le=card->max_send_size;
+                apdu->resplen=2048;
+                apdu->le=card->max_recv_size;
             }
         }
         /* call std sc_transmit_apdu */
@@ -502,7 +502,7 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
                 /* if no response buffer: create */
                 if (apdu->resplen==0) { 
                     e_apdu->resp=buf;
-                    e_apdu->resplen=card->max_recv_size;
+                    e_apdu->resplen=2048;
                     e_apdu->le=card->max_recv_size;
                 }
             }
@@ -511,7 +511,6 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
             LOG_TEST_RET(card->ctx,res,"Error in envelope() send apdu");
         } /* for */
     }
-    /* if (buf) free(buf); */ /* dont free buf as is returned in apdu */
     LOG_FUNC_RETURN(card->ctx,res);
 }
 
@@ -552,7 +551,7 @@ static int dnie_wrap_apdu(sc_card_t *card, sc_apdu_t *apdu) {
     /* if SM is active; decode apdu */
     if ( provider->status.state == CWA_SM_ACTIVE ) {
         apdu->resp=NULL;
-        apdu->resplen=0; /* let decode_response() eval & create size */
+        apdu->resplen=0; /* let cwa_decode_response() eval & create size */
         res= cwa_decode_response(card,provider,&wrapped,apdu);
         LOG_TEST_RET(card->ctx,res,"Error in cwa_decode_response process");
     }

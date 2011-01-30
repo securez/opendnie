@@ -131,7 +131,7 @@ static int iso7816_read_binary(sc_card_t *card,
 	SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r, "APDU transmit failed");
 	if (apdu.resplen == 0)
 		SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, sc_check_sw(card, apdu.sw1, apdu.sw2));
-	memcpy(buf, recvbuf, apdu.resplen);
+	memcpy(buf, apdu.resp, apdu.resplen);
 
 	SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, apdu.resplen);
 }
@@ -157,7 +157,7 @@ static int iso7816_read_record(sc_card_t *card,
 	SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r, "APDU transmit failed");
 	if (apdu.resplen == 0)
 		SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, sc_check_sw(card, apdu.sw1, apdu.sw2));
-	memcpy(buf, recvbuf, apdu.resplen);
+	memcpy(buf, apdu.resp, apdu.resplen);
 
 	SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_VERBOSE, apdu.resplen);
 }

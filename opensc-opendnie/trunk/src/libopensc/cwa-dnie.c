@@ -443,7 +443,7 @@ static int dnie_decode_post_ops(
     /* evaluate compressed an uncompressed sizes (little endian format) */
     compressed=le2ulong(to->resp);
     uncompressed=le2ulong(to->resp+4);
-    /* if compressed size doesn't match assume not compressed */
+    /* if compressed size doesn't match data length assume not compressed */
     if (compressed!=to->resplen-8) LOG_FUNC_RETURN(ctx,SC_SUCCESS);
     /* if compressed size greater than uncompressed, assume uncompressed data */
     if (uncompressed<compressed) LOG_FUNC_RETURN(ctx,SC_SUCCESS);

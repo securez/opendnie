@@ -435,27 +435,36 @@ static int dnie_decode_post_ops(
     unsigned long uncompressed;
     int res;
     u8 *upt;
-    if (to->resplen<8) return SC_SUCCESS; /* no compression posible */
+    if (!card || !card->ctx) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    LOG_FUNC_CALLED(ctx);
+    /* if data size not enoughr for compression header assume uncompressed */
+    if (to->resplen<8) LOG_FUNC_RETURN(ctx,SC_SUCCESS); 
+    /* evaluate compressed an uncompressed sizes (little endian format) */
     compressed=le2ulong(to->resp);
     uncompressed=le2ulong(to->resp+4);
-    if (compressed!=to->resplen-8) return SC_SUCCESS;/* not compressed */
-    if (uncompressed<compressed) return SC_SUCCESS; /* not compressed */
+    /* if compressed size doesn't match assume not compressed */
+    if (compressed!=to->resplen-8) LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+    /* if compressed size greater than uncompressed, assume uncompressed data */
+    if (uncompressed<compressed) LOG_FUNC_RETURN(ctx,SC_SUCCESS);
     upt=calloc(uncompressed,sizeof(u8));
     if(!upt)return SC_ERROR_OUT_OF_MEMORY;
     res=sc_decompress(upt,(size_t *)uncompressed,
                       to->resp+8,compressed,
                       COMPRESSION_ZLIB);
     if (res!=SC_SUCCESS) {
-        sc_log(card->ctx,"Uncompression failed");
-        return SC_SUCCESS; /* assume that still may not need uncompression */
+        sc_log(ctx,"Uncompression failed or data not compressed");
+        LOG_FUNC_RETURN(ctx,SC_SUCCESS); /* assume not need uncompression */
     }
     /* copy uncompressed data and len into apdu response */
     free(to->resp); /* no longer needed */
     to->resp=upt;
     to->resplen=uncompressed;
+    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+#else 
+    return SC_SUCCESS;
 #endif
 
-    return SC_SUCCESS;
 }
 
 cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card) {

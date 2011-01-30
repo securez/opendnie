@@ -1222,7 +1222,7 @@ static int card_read_binary(sc_card_t *card,
     SC_TEST_RET(card->ctx,  SC_LOG_DEBUG_NORMAL, r, "APDU transmit failed");
     if (apdu.resplen == 0)
       SC_FUNC_RETURN(card->ctx, 2, card_check_sw(card, apdu.sw1, apdu.sw2));    
-    memcpy(buf, apdu.resp, apdu.resplen);
+    memcpy(buf, recvbuf, apdu.resplen);
   }
 
  crb_end:

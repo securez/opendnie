@@ -1533,7 +1533,7 @@ int cwa_decode_response(
     }
 
     /* if encoded data, decode and store into apdu response */
-    if (e_tlv->buf) { /* encoded data */
+    else if (e_tlv->buf) { /* encoded data */
         DES_cblock iv = {0,0,0,0,0,0,0,0};
         /* check data len */
         if ( (e_tlv->len<9) || ((e_tlv->len-1)%8)!=0) {
@@ -1565,6 +1565,8 @@ int cwa_decode_response(
         /* everything ok: remove ending 0x80 from response */
         to->resplen--;
     }
+    
+    else to->resplen=0; /* neither plain, nor encoded data */
 
     /* call provider post-operation method */
     if (provider->cwa_decode_post_ops) {

@@ -623,6 +623,12 @@ u8 *uncompress(sc_card_t *card, u8 *from, int *len) {
     return upt;
 }
 
+static inline void clear_cache() {
+    if (dnie_priv.cache) free(dnie_priv.cache);
+    dnie_priv.cache=NULL;
+    dnie_priv.cachelen=0;
+}
+
 /**
  * fill a temporary buffer by mean of consecutive calls to read_binary()
  * until card sends eof
@@ -642,9 +648,7 @@ static int dnie_fill_cache(sc_card_t *card) {
     LOG_FUNC_CALLED(ctx);
 
     /* mark cache empty */
-    if (dnie_priv.cache) free(dnie_priv.cache);
-    dnie_priv.cache=NULL;
-    dnie_priv.cachelen=0;
+    clear_cache();
 
     /* initialize apdu */
     sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0xB0,0x00,0x00);
@@ -862,6 +866,8 @@ static int dnie_select_file(struct sc_card *card,
     }
     res=card->ops->process_fci(card, file, apdu.resp+2, apdu.resp[1]);
     *file_out=file;
+    /* as last step clear data cache and return */
+    clear_cache();
     LOG_FUNC_RETURN(ctx,res);
 }
 

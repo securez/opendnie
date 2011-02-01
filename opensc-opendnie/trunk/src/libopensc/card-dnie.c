@@ -592,14 +592,14 @@ u8 *uncompress(sc_card_t *card, u8 *from, int *len) {
     LOG_FUNC_CALLED(card->ctx);
 
     /* if data size not enought for compression header assume uncompressed */
-    if (*len<8) return from;
+    if (*len<8) goto compress_exit;
     /* evaluate compressed an uncompressed sizes (little endian format) */
-    compressed=le2ulong(from);
-    uncompressed=le2ulong(from+4);
+    uncompressed=le2ulong(from);
+    compressed=le2ulong(from+4);
     /* if compressed size doesn't match data length assume not compressed */
-    if (compressed != (*len)-8) return from;
+    if (compressed != (*len)-8) goto compress_exit;
     /* if compressed size greater than uncompressed, assume uncompressed data */
-    if (uncompressed<compressed) return from;
+    if (uncompressed<compressed) goto compress_exit;
 
     sc_log(card->ctx,"Data seems to be compressed. calling uncompress");
     /* ok: data seems to be compressed */
@@ -616,14 +616,17 @@ u8 *uncompress(sc_card_t *card, u8 *from, int *len) {
     /* TODO: check that returned uncompressed size matches expected */
     if (res!=SC_SUCCESS) {
         sc_log(card->ctx,"Uncompress() failed or data not compressed");
-        return from; /* assume not need uncompression */
+        goto compress_exit; /* assume not need uncompression */
     }
     /* Done; update buffer len and return pt to uncompressed data */
     *len=uncompressed;
     sc_log(card->ctx,"Uncompress() done. Before:'%l' After: '%l'",compressed,uncompressed);
+
+compress_exit:
+
 #endif
 
-    sc_log(card->ctx,"exiting uncompress() function");
+    sc_log(card->ctx,"uncompress: returning with%s de-compression ",(upt==from)?"out":"");
     return upt;
 }
 

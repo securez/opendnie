@@ -62,6 +62,7 @@ static char *cwa_hexdump(const u8 *buf, size_t len) {
           sprintf(res,"%s%c",res,(isprint(c)?c:'.'));
       }
       for ( ;     j<16     ; j++ ) sprintf(res,"%s ",res);
+      snprintf(res,"%s\n",res);
    }
    return res;
 }
@@ -74,13 +75,13 @@ static void cwa_trace_apdu(sc_card_t *card, sc_apdu_t *apdu, int flag) {
     if (flag==0) { /* apdu command */
         if (apdu->datalen>0)  { /* apdu data to show */
             buf=cwa_hexdump(apdu->data,apdu->datalen);
-            sc_log(card->ctx,"\nAPDU before encode: ==================================================\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02X DATA: [%5u bytes]\n%s\n======================================================================\n",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le,apdu->datalen,buf);
+            sc_log(card->ctx,"\nAPDU before encode: ==================================================\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02X DATA: [%5u bytes]\n%s======================================================================\n",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le,apdu->datalen,buf);
         } else { /* apdu data field is empty */
             sc_log(card->ctx,"\nAPDU before encode: ==================================================\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02X (NO DATA)\n======================================================================\n",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le);
         }
     } else {       /* apdu response */
         buf=cwa_hexdump(apdu->resp,apdu->resplen);
-        sc_log(card->ctx,"\nAPDU response after decode: ==========================================\nSW1: %02X SW2: %02X RESP: [%5u bytes]\n%s\n======================================================================\n",apdu->sw1,apdu->sw2,apdu->resplen,buf);
+        sc_log(card->ctx,"\nAPDU response after decode: ==========================================\nSW1: %02X SW2: %02X RESP: [%5u bytes]\n%s======================================================================\n",apdu->sw1,apdu->sw2,apdu->resplen,buf);
     }
 #endif
 

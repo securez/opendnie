@@ -32,6 +32,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "opensc.h"
 #include "cardctl.h"
@@ -44,6 +45,27 @@
 
 /*********************** utility functions ************************/
 
+static char *cwa_hexdump(const u8 *buf, size_t len) {
+   int j;
+   int count=0;
+   static char res[16384];
+   memset(res,0,sizeof(res));
+   len= MIN(len,sizeof(res));
+   for (count=0;count<len;count+=16) {
+      int nitems = MIN( 16 , len-count );
+      for ( j=0 ; j<nitems ; j++ )
+          sprintf(res,"%s%02X ",res,0xff & *(buf+count+j));
+      for ( ;     j<16     ; j++ )
+          sprintf(res,"%s   ",res);
+      for ( j=0 ; j<nitems ; j++ ) {
+          char c = (char) *(buf+count+j);
+          sprintf(res,"%s%c",res,(isprint(c)?c:'.'));
+      }
+      for ( ;     j<16     ; j++ ) sprintf(res,"%s ",res);
+   }
+   return res;
+}
+
 static void cwa_trace_apdu(sc_card_t *card, sc_apdu_t *apdu, int flag) {
    char *buf=NULL;
 /* set to 0 in production */
@@ -51,13 +73,13 @@ static void cwa_trace_apdu(sc_card_t *card, sc_apdu_t *apdu, int flag) {
     if (!card || !card->ctx || !apdu ) return;
     if (flag==0) { /* apdu command */
         if (apdu->datalen>0)  { /* apdu data to show */
-            buf=sc_dump_hex(apdu->data,apdu->datalen);
+            buf=cwa_hexdump(apdu->data,apdu->datalen);
             sc_log(card->ctx,"\nAPDU before encode: ==================================================\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02X DATA: [%5u bytes]\n%s\n======================================================================\n",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le,apdu->datalen,buf);
         } else { /* apdu data field is empty */
             sc_log(card->ctx,"\nAPDU before encode: ==================================================\nCLA: %02X INS: %02X P1: %02X P2: %02X Lc: %02X Le: %02X (NO DATA)\n======================================================================\n",apdu->cla,apdu->ins,apdu->p1,apdu->p2,apdu->lc,apdu->le);
         }
     } else {       /* apdu response */
-        buf=sc_dump_hex(apdu->resp,apdu->resplen);
+        buf=cwa_hexdump(apdu->resp,apdu->resplen);
         sc_log(card->ctx,"\nAPDU response after decode: ==========================================\nSW1: %02X SW2: %02X RESP: [%5u bytes]\n%s\n======================================================================\n",apdu->sw1,apdu->sw2,apdu->resplen,buf);
     }
 #endif

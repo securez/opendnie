@@ -651,7 +651,7 @@ static int dnie_fill_cache(sc_card_t *card) {
 
     /* try to read_binary while data available but never long than 32767 */
     count=card->max_recv_size;
-    for ( len=0; len<0x7fff; ) { 
+    for ( len=0 ; len<0x7fff ; ) { 
         int r=SC_SUCCESS;
         /* fill apdu */
 	apdu.p1=0xff & (len>>8);
@@ -673,8 +673,9 @@ static int dnie_fill_cache(sc_card_t *card) {
             if (r==SC_ERROR_WRONG_LENGTH) {
                 count=0xff & apdu.sw2;
                 if (count!=0) continue; /* read again with correct size */
-                else break; /* no more data to read */
+                goto read_done; /* no more data to read */
             }
+            if (r==SC_ERROR_INCORRECT_PARAMETERS) goto read_done;
             LOG_FUNC_RETURN(ctx,r); /* arriving here means response error */
         }
         /* copy received data into buffer. realloc() if not enought space */
@@ -683,7 +684,10 @@ static int dnie_fill_cache(sc_card_t *card) {
         if (!buffer) LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
         memcpy(buffer+len,tmp,count);
         len+=count;
+        if (count!=card->max_recv_size) goto read_done;
     }
+
+read_done:
     /* no more data to read: check if data is compressed */
     pt=uncompress(card,buffer,&len);
     if (pt==NULL) {

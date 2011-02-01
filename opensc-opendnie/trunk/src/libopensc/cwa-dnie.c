@@ -35,7 +35,6 @@
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
-#include "compression.h"
 
 #include "cwa14890.h"
 
@@ -406,67 +405,6 @@ static int dnie_create_pre_ops(sc_card_t *card, cwa_provider_t *provider){
     return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, &serial);
 }
 
-/* convert little-endian data into unsigned long */
-static unsigned long le2ulong(u8 *pt) {
-   unsigned long res=0;
-   res =   (0xff & *(pt+0))       + 
-         ( (0xff & *(pt+1)) <<8  )+ 
-         ( (0xff & *(pt+2)) <<16 )+ 
-         ( (0xff & *(pt+3)) <<24 );
-   return res;
-}
-
-/* 
- * DNIe stores some certificates in compressed format.
- * As these certificates are allways retrieved when SM is on,
- * the best way to detect and unencrypt certificates in a
- * transparent way is after an apdu decode operation
- *
- * In this way no need for any kind of file cache, just call
- * read_binary() and SM code will do the trick :-)
- */
-static int dnie_decode_post_ops( 
-    sc_card_t *card, 
-    cwa_provider_t *provider, 
-    sc_apdu_t *from, sc_apdu_t *to) {
-
-#ifdef ENABLE_ZLIB
-    unsigned long compressed;
-    unsigned long uncompressed;
-    int res;
-    u8 *upt;
-    if (!card || !card->ctx) return SC_ERROR_INVALID_ARGUMENTS;
-    sc_context_t *ctx=card->ctx;
-    LOG_FUNC_CALLED(ctx);
-    /* if data size not enoughr for compression header assume uncompressed */
-    if (to->resplen<8) LOG_FUNC_RETURN(ctx,SC_SUCCESS); 
-    /* evaluate compressed an uncompressed sizes (little endian format) */
-    compressed=le2ulong(to->resp);
-    uncompressed=le2ulong(to->resp+4);
-    /* if compressed size doesn't match data length assume not compressed */
-    if (compressed!=to->resplen-8) LOG_FUNC_RETURN(ctx,SC_SUCCESS);
-    /* if compressed size greater than uncompressed, assume uncompressed data */
-    if (uncompressed<compressed) LOG_FUNC_RETURN(ctx,SC_SUCCESS);
-    upt=calloc(uncompressed,sizeof(u8));
-    if(!upt)return SC_ERROR_OUT_OF_MEMORY;
-    res=sc_decompress(upt,(size_t *)uncompressed,
-                      to->resp+8,compressed,
-                      COMPRESSION_ZLIB);
-    if (res!=SC_SUCCESS) {
-        sc_log(ctx,"Uncompression failed or data not compressed");
-        LOG_FUNC_RETURN(ctx,SC_SUCCESS); /* assume not need uncompression */
-    }
-    /* copy uncompressed data and len into apdu response */
-    free(to->resp); /* no longer needed */
-    to->resp=upt;
-    to->resplen=uncompressed;
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
-#else 
-    return SC_SUCCESS;
-#endif
-
-}
-
 cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card) {
 
     cwa_provider_t *res=cwa_get_default_provider(card);
@@ -521,7 +459,7 @@ cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card) {
 
     /* pre and post operations */
     res->cwa_decode_pre_ops = NULL;
-    res->cwa_decode_post_ops = dnie_decode_post_ops;
+    res->cwa_decode_post_ops = NULL;
 
     return res;
 }

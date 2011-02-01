@@ -146,6 +146,7 @@ static u8 cvc_ifd_keyref[] = { 0x00,0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00,0x00
 static u8 icc_priv_keyref[] = { 0x02, 0x1f };
 
 static u8 sn_ifd[] = { 0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x01 };
+static u8 sn_icc[] = { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
 
 /************ internal functions **********************************/
 
@@ -218,8 +219,6 @@ int dnie_read_file(
     }
     *buffer=data;
     *length=res;
-    /* now check if needed to uncompress data */
-    /* TODO: dnie_read_file() check if uncompress data is required */
     /* arriving here means success */
     res=SC_SUCCESS;
     goto dnie_read_file_end;
@@ -373,16 +372,23 @@ static int dnie_get_icc_privkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
    return SC_SUCCESS;
 }
 
-/* Retrieve SN.IFD */
-static int dnie_get_sn_ifd(sc_card_t *card, u8 **buf, size_t *len) {
+/* Retrieve SN.IFD (8 bytes left padded with zeroes if required)*/
+static int dnie_get_sn_ifd(sc_card_t *card, u8 **buf) {
    *buf= sn_ifd;
-   *len= sizeof(sn_ifd);
    return SC_SUCCESS;
 }
 
-/* Retrieve SN.ICC */
-static int dnie_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
-   return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, *serial);
+/* Retrieve SN.ICC (8 bytes left padded with zeroes if needed) */
+static int dnie_get_sn_icc(sc_card_t *card, u8 **buf) {
+   sc_serial_number_t serial;
+   int res= sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, &serial);
+   LOG_TEST_RET(card->ctx,res,"Error in gettting serial number");
+   /* copy into sn_icc buffer.Remember that dnie sn has 7 bytes length */
+   memset(&sn_icc[0],0,sizeof(sn_icc));
+   memcpy(&sn_icc[1],serial.value,7);
+   /* return data */
+   *buf=&sn_icc[0];
+   return SC_SUCCESS;
 }
 
 /* 

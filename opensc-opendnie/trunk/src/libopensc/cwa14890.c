@@ -437,7 +437,7 @@ static int cwa_internal_auth(
  *@param card pointer to st_card_t card data information
  *@param icc_pubkey public key of card
  *@param ifd_privkey private RSA key of ifd
- *@param serial card serial number
+ *@param sn_icc card serial number
  *@param sm pointer to cwa_internal_t data
  *@return SC_SUCCESS if ok; else errorcode
  */
@@ -445,7 +445,7 @@ static int cwa_prepare_external_auth(
         sc_card_t *card,
         RSA *icc_pubkey,
         RSA *ifd_privkey,
-        sc_serial_number_t *serial,
+        u8  *sn_icc,
         cwa_sm_status_t *sm
     ) {
     /* we have to compose following message:
@@ -484,12 +484,12 @@ static int cwa_prepare_external_auth(
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
      /* check received arguments */
-    if ( !icc_pubkey || !ifd_privkey || !serial || !sm )
+    if ( !icc_pubkey || !ifd_privkey || !sn_icc || !sm )
         LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     buf1=calloc(128, sizeof(u8));
     buf2=calloc(128, sizeof(u8));
     buf3=calloc(128, sizeof(u8));
-    sha_buf=calloc(74+32+8+1+7,sizeof(u8));
+    sha_buf=calloc(74+32+8+8,sizeof(u8));
     sha_data=calloc(SHA_DIGEST_LENGTH,sizeof(u8));
     /* alloc() resources */
     if (!buf1 || !buf2 || !buf3 || !sha_buf || !sha_data) {
@@ -507,8 +507,8 @@ static int cwa_prepare_external_auth(
     memcpy(sha_buf,buf3+1,74); /* copy pRND into sha_buf */
     memcpy(sha_buf+74,buf3+1+74,32); /* copy kifd into sha_buf */
     memcpy(sha_buf+74+32,sm->rndicc,8); /* copy 8 byte icc challenge */
-    memcpy(sha_buf+74+32+8+1,serial->value,7); /* copy serialnr, 1 byte pad */
-    SHA1(sha_buf,74+32+8+1+7,sha_data);
+    memcpy(sha_buf+74+32+8,sn_icc,8); /* copy serialnr, 8 bytes */
+    SHA1(sha_buf,74+32+8+8,sha_data);
     /* copy hashed data into buffer */
     memcpy(buf3+1+74+32,sha_data,SHA_DIGEST_LENGTH);
     buf3[127]= 0xBC; /* iso padding */
@@ -848,7 +848,7 @@ int cwa_create_secure_channel(
     int res=SC_SUCCESS;
     char *msg="Success";
 
-    sc_serial_number_t *serial;
+    u8 *sn_icc;
 
     /* data to get and parse certificates */
     X509 *icc_cert=NULL;
@@ -891,6 +891,9 @@ int cwa_create_secure_channel(
             LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
     
+    /* OK: lets start process */
+
+
     /* mark SM status as in progress */
     provider->status.state=CWA_SM_INPROGRESS;
 
@@ -904,19 +907,23 @@ int cwa_create_secure_channel(
         }
     }
 
+    /* retrieve icc serial number */
+    sc_log(ctx,"Retrieve ICC serial number");
+    if (provider->cwa_get_sn_icc) {
+        res=provider->cwa_get_sn_icc(card,&sn_icc);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Retrieve ICC failed");
+            goto csc_end;
+        }
+    } else {
+        sc_log(ctx,"Don't know how to obtain ICC serial number");
+        res=SC_ERROR_INTERNAL;
+        goto csc_end;
+    }
+
     /* reset card (warm reset, do not unpower card) */
     sc_log(ctx,"Resseting card");
     sc_reset(card,0); 
-
-    /* Retrieve Card serial Number */
-    sc_log(ctx,"Retrieving ICC Serial Number");
-    serial= (sc_serial_number_t *)calloc(1,sizeof(sc_serial_number_t));
-    if (!serial) {
-        sc_log(ctx,"Cannot allocate space for serial_nr data");
-        LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
-    }
-    res=provider->cwa_get_sn_icc(card,&serial);
-    if (res!=SC_SUCCESS) { msg="CWA Cannot get ICC serialnr"; goto csc_end; }
 
     /* 
     * Notice that this code inverts ICC and IFD certificate standard
@@ -1055,7 +1062,7 @@ int cwa_create_secure_channel(
     /* Internal (Card) authentication (let the card verify sent ifd certs) 
      SN.IFD equals 8 lsb bytes of ifd.pubk ref according cwa14890 sec 8.4.1 */
     sc_log(ctx,"Step 8.4.1.10: Perform Internal authentication");
-    res=provider->cwa_get_sn_ifd(card,&buffer,&bufferlen);
+    res=provider->cwa_get_sn_ifd(card,&buffer);
     if (res!=SC_SUCCESS) { 
         msg="Cannot get ifd serial number from provider";
         goto csc_end;
@@ -1099,13 +1106,13 @@ int cwa_create_secure_channel(
     sc_log(ctx,"Step 8.4.1.11: Prepare External Auth: Get Challenge");
     res=card->ops->get_challenge(card,sm->rndicc,sizeof(sm->rndicc));
     if (res!=SC_SUCCESS) { msg="Get Challenge failed"; goto csc_end; }
-
+    
     /* compose signature data for external auth */
     res=cwa_prepare_external_auth(
         card,
         icc_pubkey->pkey.rsa,
         ifd_privkey->pkey.rsa,
-        serial,
+        sn_icc,
         sm
     );
     if (res!=SC_SUCCESS) { msg="Prepare external auth failed"; goto csc_end; }
@@ -1133,7 +1140,6 @@ int cwa_create_secure_channel(
     /* arriving here means ok: cleanup */
     res=SC_SUCCESS;
 csc_end:
-    if (serial)  { memset(serial,0,sizeof(sc_serial_number_t)); free(serial); }
     if (icc_pubkey)  EVP_PKEY_free(icc_pubkey);
     if (ifd_privkey) EVP_PKEY_free(ifd_privkey);
     /* setup SM state according result */
@@ -1646,14 +1652,14 @@ static int default_get_icc_privkey_ref(sc_card_t *card, u8 **buf, size_t *len) {
     return SC_ERROR_NOT_SUPPORTED;
 }
 
-/* Retrieve SN.IFD */
-static int default_get_sn_ifd(sc_card_t *card, u8 **buf, size_t *len) {
+/* Retrieve SN.IFD (8 bytes left padded with zeroes if needed) */
+static int default_get_sn_ifd(sc_card_t *card, u8 **buf) {
     return SC_ERROR_NOT_SUPPORTED;
 }
 
-/* Retrieve SN.ICC */
-static int default_get_sn_icc(sc_card_t *card, sc_serial_number_t **serial) {
-   return sc_card_ctl(card,SC_CARDCTL_GET_SERIALNR, *serial);
+/* Retrieve SN.ICC (8 bytes left padded with zeroes if needed) */
+static int default_get_sn_icc(sc_card_t *card, u8 **buf) {
+    return SC_ERROR_NOT_SUPPORTED;
 }
 
 /************** operations related with APDU encoding ******************/

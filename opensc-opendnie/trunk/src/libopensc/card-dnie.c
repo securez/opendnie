@@ -405,6 +405,7 @@ static int dnie_init(struct sc_card *card){
     
     /* initialize SM state to NONE */
     /* TODO: change to CWA_SM_OFF when SM testing get done */
+    // result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
     result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
 
 dnie_init_error:
@@ -584,7 +585,7 @@ u8 *uncompress(sc_card_t *card, u8 *from, int *len) {
     int res=SC_SUCCESS;
     u8 *upt=from;
     unsigned long uncompressed=0L;
-    unsigned long compressed=0;
+    unsigned long compressed=0L;
 
 #ifdef ENABLE_ZLIB
     if(!card || !card->ctx || !from || !len) return NULL;
@@ -600,6 +601,7 @@ u8 *uncompress(sc_card_t *card, u8 *from, int *len) {
     /* if compressed size greater than uncompressed, assume uncompressed data */
     if (uncompressed<compressed) return from;
 
+    sc_log(card->ctx,"Data seems to be compressed. calling uncompress");
     /* ok: data seems to be compressed */
     upt=calloc(uncompressed,sizeof(u8));
     if(!upt) {
@@ -607,19 +609,21 @@ u8 *uncompress(sc_card_t *card, u8 *from, int *len) {
         return NULL;
     }
     res=sc_decompress(upt, /* try to uncompress by calling sc_xx routine */
-                      (size_t *)uncompressed,
+                      (size_t *) &uncompressed,
                       from+8,
-                      compressed,
+                      (size_t) compressed,
                       COMPRESSION_ZLIB);
+    /* TODO: check that returned uncompressed size matches expected */
     if (res!=SC_SUCCESS) {
-        sc_log(card->ctx,"Uncompression failed or data not compressed");
+        sc_log(card->ctx,"Uncompress() failed or data not compressed");
         return from; /* assume not need uncompression */
     }
     /* Done; update buffer len and return pt to uncompressed data */
-    sc_log(card->ctx,"exiting uncompress() function");
     *len=uncompressed;
+    sc_log(card->ctx,"Uncompress() done. Before:'%l' After: '%l'",compressed,uncompressed);
 #endif
 
+    sc_log(card->ctx,"exiting uncompress() function");
     return upt;
 }
 
@@ -704,6 +708,7 @@ read_done:
     /* ok: as final step, set correct cache data into dnie_priv structures */
     dnie_priv.cache=pt;
     dnie_priv.cachelen=len;
+    sc_log(ctx,"fill_cache() done. length '%d' bytes",len);
     LOG_FUNC_RETURN(ctx,len);
 }
 
@@ -742,7 +747,8 @@ static int dnie_read_binary(
     }
     if (idx>=dnie_priv.cachelen) return 0; /* at eof */
     res=MIN(count,dnie_priv.cachelen-idx); /* eval how many bytes to read */
-    memcpy(buf,dnie_priv.cache+idx,count); /* copy data from buffer */
+    memcpy(buf,dnie_priv.cache+idx,res); /* copy data from buffer */
+    sc_log(ctx,"dnie_read_binary() '%d' bytes",res);
     LOG_FUNC_RETURN(ctx,res);
 }
 

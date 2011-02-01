@@ -145,11 +145,11 @@ typedef struct cwa_provider_st {
     /* Get ICC private key reference */
     int (*cwa_get_icc_privkey_ref)(sc_card_t *card, u8 **buf, size_t *len);  
  
-    /* Get IFD Serial Number */
-    int (*cwa_get_sn_ifd)(sc_card_t *card, u8 **buf, size_t *len);
+    /* Get IFD Serial Number (8 bytes left padded with zeroes if needed) */
+    int (*cwa_get_sn_ifd)(sc_card_t *card, u8 **buf);
 
-    /* Get ICC Serial Number */
-    int (*cwa_get_sn_icc)(sc_card_t *card, sc_serial_number_t **serial);
+    /* Get ICC Serial Number (8 bytes left padded with zeroes if needed) */
+    int (*cwa_get_sn_icc)(sc_card_t *card, u8 **buf);
 
     /************** operations related with APDU encoding ******************/
 

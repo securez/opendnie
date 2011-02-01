@@ -62,7 +62,7 @@ static char *cwa_hexdump(const u8 *buf, size_t len) {
           sprintf(res,"%s%c",res,(isprint(c)?c:'.'));
       }
       for ( ;     j<16     ; j++ ) sprintf(res,"%s ",res);
-      snprintf(res,"%s\n",res);
+      sprintf(res,"%s\n",res);
    }
    return res;
 }

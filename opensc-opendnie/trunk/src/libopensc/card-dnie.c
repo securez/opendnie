@@ -405,8 +405,8 @@ static int dnie_init(struct sc_card *card){
     
     /* initialize SM state to NONE */
     /* TODO: change to CWA_SM_OFF when SM testing get done */
-    result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
-    // result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
+    // result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
+    result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
 
 dnie_init_error:
     LOG_FUNC_RETURN(card->ctx,result);
@@ -690,7 +690,7 @@ static int dnie_fill_cache(sc_card_t *card) {
         count=apdu.resplen;
         buffer=realloc(buffer,len+count);
         if (!buffer) LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-        memcpy(buffer+len,tmp,count);
+        memcpy(buffer+len,apdu.resp,count);
         len+=count;
         if (count!=card->max_recv_size) goto read_done;
     }

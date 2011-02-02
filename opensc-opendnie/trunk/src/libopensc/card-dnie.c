@@ -63,6 +63,13 @@ typedef struct dnie_private_data_st {
     size_t cachelen;
 } dnie_private_data_t;
 
+typedef struct dnie_path_trans_st {
+    u8 from[8];
+    size_t fromlen;
+    u8 to[8];
+    size_t tolen;
+} dnie_path_trans_t;
+
 extern cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card);
 
 #define DNIE_CHIP_NAME "DNIe: Spanish eID card"
@@ -77,6 +84,13 @@ static struct sc_card_error dnie_errors[] = {
     { 0x6688, SC_ERROR_UNKNOWN, "Secure Message value is incorrect" },
     { 0x6A89, SC_ERROR_FILE_ALREADY_EXISTS, "File/Key already exists" },
     { 0,0,NULL }
+};
+
+/* list of paths that needs to be translated to get correct file */
+static dnie_path_trans_t dnie_path_trans [] = {
+    { { 0x3F,0x00,0x50,0x15,0x60,0x61 }, 6 , { 0x3F,0x00,0x60,0x61 }, 4 }, /* CA Certificate DF */
+    { { 0x3F,0x00,0x50,0x15,0x60,0x81 }, 6 , { 0x3F,0x00,0x60,0x81 }, 4 }, /* User Certificate DF */
+    {  { 0x00 } , 0, { 0x00 }, 0 }
 };
 
 /* 
@@ -755,6 +769,60 @@ static int dnie_read_binary(
     LOG_FUNC_RETURN(ctx,res);
 }
 
+/** rewrites PKCS15 paths to accomodate to DNIe card filesystem 
+ * if provided path matches or startsWith an entry in translation table, 
+ * replace it with data from table, and append rest of provided path
+ * to the end of translated path
+ *
+ *@param card pointer to card structure
+ *@param to where to store resulting path
+ *@param from original path
+ *@param len original path length
+ *@return resulting path length
+ */
+static int dnie_rewrite_path(
+       sc_card_t *card, u8 *to, const u8 *from, size_t len) {
+    int n=0;
+    int i=0;
+    int res=len;
+    u8 buffer[SC_MAX_PATH_SIZE];
+    /* mandatory check */
+    if ( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    LOG_FUNC_CALLED(ctx);
+    /* check rest of arguments */
+    if ( !from || !to || (len<2)) 
+        LOG_FUNC_RETURN(ctx,SC_ERROR_INVALID_ARGUMENTS);
+
+    for (n=0; dnie_path_trans[n].fromlen!=0; n++) {
+        dnie_path_trans_t *pt=&dnie_path_trans[n];
+
+        /* check for patch matching */
+        if ( len < pt->fromlen ) continue; /* invalid size */
+        if ( memcmp(from,pt->from,pt->fromlen)!=0 ) continue; /*doesn't match*/
+
+        /* provided path equals or startsWith item in transtable: rewrite */
+        sc_log(ctx,"Original path: '%s'",sc_dump_hex(from,len));
+        memset(buffer,0,SC_MAX_PATH_SIZE); /* clear buffer */
+        /* copy rewritten prefix */
+        memcpy(buffer,pt->to,pt->tolen); 
+        /* copy rest of bytes from original path */
+        for (i=0; (i + pt->fromlen) < len; i++) {
+            buffer[pt->tolen+i] = from[pt->fromlen+i]; 
+        }
+        /* copy resulting data to path structure and return */
+        memcpy(to,buffer,pt->tolen+i);
+        res=pt->tolen+i;
+        sc_log(ctx,"Resulting path: '%s'",sc_dump_hex(to,res));
+
+        LOG_FUNC_RETURN(ctx,res);
+    }
+    /* arriving here means no match: copy and return */
+    sc_log(ctx,"No translation done");
+    memcpy(to,from,len);
+    LOG_FUNC_RETURN(ctx,len);
+}
+
 /* select_file: Does the equivalent of SELECT FILE command specified
  *   in ISO7816-4. Stores information about the selected file to
  *   <file>, if not NULL. */
@@ -775,8 +843,13 @@ static int dnie_select_file(struct sc_card *card,
 
     LOG_FUNC_CALLED(ctx);
 
-    memcpy(path, in_path->value, in_path->len);
-    pathlen = in_path->len;
+    /* rewrite path if needed */
+    if(in_path->type==SC_PATH_TYPE_PATH) {
+        pathlen= dnie_rewrite_path(card,path,in_path->value,in_path->len);
+    } else {
+        memcpy(path, in_path->value, in_path->len);
+        pathlen=in_path->len;
+    }
     sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0xA4, 0, 0);
 
     /* SELECT file in DNIe is a bit tricky: 
@@ -1293,12 +1366,16 @@ static int dnie_process_fci(struct sc_card *card,
     }
     /* byte 0 denotes file type */
     switch(file->prop_attr[0]) {
-        case 0x01:
+        case 0x01: /* EF for plain files */
             file->type = SC_FILE_TYPE_WORKING_EF;
             file->ef_structure = SC_FILE_EF_TRANSPARENT;
             break;
         case 0x15: /* EF for keys: linear variable simple TLV */
             file->type = SC_FILE_TYPE_WORKING_EF;
+            break;
+        case 0x24: /* EF for compressed certificates */
+            file->type = SC_FILE_TYPE_WORKING_EF;
+            file->ef_structure = SC_FILE_EF_TRANSPARENT;
             break;
         case 0x38: /* Errata: manual page 35 says wrong 0x34 */
             file->type = SC_FILE_TYPE_DF;

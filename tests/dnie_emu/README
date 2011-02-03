@@ -1,0 +1,9 @@
+* Change path to OPENSC_TRUNK in build.sh
+* Modify conf-block 'framework pkcs15' in opensc.conf:
+	* set 'try_emulation_first = yes'
+	* add:
+		emulate dnie {
+			module = SOMEPATH/dnie.so;
+			function = bind;
+		}
+

@@ -911,8 +911,16 @@ static int dnie_select_file(struct sc_card *card,
             LOG_FUNC_RETURN(ctx,SC_SUCCESS);
             break;
         case SC_PATH_TYPE_FROM_CURRENT:
-        case SC_PATH_TYPE_PARENT:
             LOG_FUNC_RETURN(ctx, SC_ERROR_NO_CARD_SUPPORT);
+        case SC_PATH_TYPE_PARENT:
+            /* Hey!! Manual doesn't says anything on this, but
+             * gscriptor shows that this type is supported
+             */
+            sc_log(ctx,"select_file(PARENT)");
+            /* according iso7816-4 sect 7.1.1 shouldn't have any parameters */
+            if (pathlen!=0) LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+            apdu.p1 = 3;
+            break;
         default:
             LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
             break;

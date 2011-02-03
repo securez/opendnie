@@ -1,42 +1,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../config.h"
-#include "libopensc/internal.h"
 #include "libopensc/log.h"
 #include "libopensc/asn1.h"
 #include "libopensc/pkcs15.h"
 
-#define DNIE_CHIP_SHORTNAME "dnie"
 
-#if 0
 /* Card driver related */
-static struct sc_atr_table dnie_atrs[] = {
-    /* TODO: get ATR for uninitalized DNIe */
-    {   /* card activated; normal operation state */
-        "3B:7F:00:00:00:00:6A:44:4E:49:65:00:00:00:00:00:00:03:90:00",
-        "FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:00:00:00:00:00:00:FF:FF:FF",
-        DNIE_CHIP_SHORTNAME,
-        SC_CARD_TYPE_DNIE_USER,
-        0,
-        NULL
-    },
-    { /* card finalized, unusable */
-        "3B:7F:00:00:00:00:6A:44:4E:49:65:00:00:00:00:00:00:0F:65:81",
-        "FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:00:00:00:00:00:00:FF:FF:FF",
-        DNIE_CHIP_SHORTNAME,
-        SC_CARD_TYPE_DNIE_TERMINATED,
-        0,
-        NULL
-    },
-    { NULL, NULL, NULL, 0, 0, NULL }
-};
-#endif
+
 static
 int match_card(struct sc_card *card)
 {
-    // int matched=_sc_match_atr(card,dnie_atrs,&card->type);
-    // return (matched>=0)? 1:0;
-    return 1;
+	/* Do card recognition here */
+
+	return 1;
 }
 
 
@@ -96,7 +73,10 @@ int parse_odf(const u8 * buf, size_t buflen, struct sc_pkcs15_card *p15card)
                 { NULL, 0, 0, 0, NULL, NULL }
         };
         struct sc_asn1_entry asn1_odf[10];
-        
+
+	sc_path_t *path_prefix = calloc(1, sizeof(sc_path_t));
+	sc_format_path("3F005015", path_prefix);
+	
         sc_copy_asn1_entry(c_asn1_odf, asn1_odf);
         for (i = 0; asn1_odf[i].name != NULL; i++)
                 sc_format_asn1_entry(asn1_odf + i, asn1_obj_or_path, NULL, 0);
@@ -107,7 +87,7 @@ int parse_odf(const u8 * buf, size_t buflen, struct sc_pkcs15_card *p15card)
                 if (r < 0)
                         return r;
                 type = r;
-                r = sc_pkcs15_make_absolute_path(&p15card->file_app->path, &path);
+                r = sc_pkcs15_make_absolute_path(path_prefix, &path);
                 if (r < 0)
                         return r;
                 r = sc_pkcs15_add_df(p15card, odf_indexes[type], &path, NULL);
@@ -136,7 +116,7 @@ int bind(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *options)
 	int rv;
 
 	/* Check for correct card driver (i.e. iso7816) */
-	if (strcmp(p15card->card->driver->short_name, DNIE_CHIP_SHORTNAME) != 0)
+	if (strcmp(p15card->card->driver->short_name, "dnie") != 0)
 		return SC_ERROR_WRONG_CARD;
 
 	/* Check for correct card */

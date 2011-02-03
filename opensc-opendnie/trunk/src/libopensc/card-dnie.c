@@ -843,6 +843,7 @@ static int dnie_select_file(struct sc_card *card,
 
     LOG_FUNC_CALLED(ctx);
 
+#if 0
     /* rewrite path if needed */
     if(in_path->type==SC_PATH_TYPE_PATH) {
         pathlen= dnie_rewrite_path(card,path,in_path->value,in_path->len);
@@ -850,6 +851,10 @@ static int dnie_select_file(struct sc_card *card,
         memcpy(path, in_path->value, in_path->len);
         pathlen=in_path->len;
     }
+#else
+        memcpy(path, in_path->value, in_path->len);
+        pathlen=in_path->len;
+#endif
     sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0xA4, 0, 0);
 
     /* SELECT file in DNIe is a bit tricky: 

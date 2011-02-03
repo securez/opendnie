@@ -2834,14 +2834,7 @@ static CK_RV pkcs15_pubkey_get_attribute(struct sc_pkcs11_session *session,
 	case CKA_MODULUS:
 	 	return get_modulus(pubkey->pub_data, attr);
 	case CKA_MODULUS_BITS:
-	/*	return get_modulus_bits(pubkey->pub_data, attr); */
-               if (pubkey->pub_info) {
-                       check_attribute_buffer(attr, sizeof(CK_ULONG));
-                       *(CK_ULONG *) attr->pValue = (CK_ULONG) pubkey->pub_info->modulus_length;
-                       return CKR_OK;
-               } else {
-                       return get_modulus_bits(pubkey->pub_data, attr);
-               }
+		return get_modulus_bits(pubkey->pub_data, attr);
 	case CKA_PUBLIC_EXPONENT:
 		return get_public_exponent(pubkey->pub_data, attr);
 	case CKA_VALUE:

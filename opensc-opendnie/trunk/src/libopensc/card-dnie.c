@@ -1431,7 +1431,7 @@ static int dnie_process_fci(struct sc_card *card,
                             const u8 *buf,
                             size_t buflen){
     int res=SC_SUCCESS;
-    int *acl=df_acl;
+    int *op=df_acl;
     int n=0;
     if ((card==NULL) || (card->ctx==NULL) || (file==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
@@ -1482,50 +1482,50 @@ static int dnie_process_fci(struct sc_card *card,
      * Moreover: Manual talks on 5 bytes, but official driver only uses 4
      * No info available (yet), so copy code from card-jcos.c and card-flex.c
      * card drivers and pray... */
-    acl=(file->type==SC_FILE_TYPE_DF)? df_acl:ef_acl; 
-    for(n=0;n<5;n++,acl++) {
-        if (*acl==-1) continue; /* unused entry: skip */
+    op=(file->type==SC_FILE_TYPE_DF)? df_acl:ef_acl; 
+    for(n=0;n<5;n++) {
+        if (*(op+n)==-1) continue; /* unused entry: skip */
         int key_ref=file->prop_attr[5+n] & 0x0F;
         switch(0xF0 & file->prop_attr[5+n]) {
           case 0x00: 
-            sc_file_add_acl_entry(file,*acl,SC_AC_NONE,SC_AC_KEY_REF_NONE); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_NONE,SC_AC_KEY_REF_NONE); 
             break;
           case 0x10:
           /* this tag is omitted in official code 
           case 0x20: 
           */
           case 0x30:
-            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_CHV,key_ref); 
             break;
           case 0x40:
-            sc_file_add_acl_entry(file,*acl,SC_AC_TERM,key_ref); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_TERM,key_ref); 
             break;
            /* these tags are omitted in official code 
           case 0x50:
-            sc_file_add_acl_entry(file,*acl,SC_AC_AUT,SC_AC_KEY_REF_NONE); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_AUT,SC_AC_KEY_REF_NONE); 
             break;
           case 0x60: 
-            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
-            sc_file_add_acl_entry(file,*acl,SC_AC_PRO,SC_AC_KEY_REF_NONE); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_PRO,SC_AC_KEY_REF_NONE); 
             break;
           case 0x70: 
-            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
-            sc_file_add_acl_entry(file,*acl,SC_AC_PRO,SC_AC_KEY_REF_NONE); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_PRO,SC_AC_KEY_REF_NONE); 
             break;
           case 0x80: 
-            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
-            sc_file_add_acl_entry(file,*acl,SC_AC_AUT,key_ref
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_AUT,key_ref);
             break;
           case 0x90: 
-            sc_file_add_acl_entry(file,*acl,SC_AC_CHV,key_ref); 
-            sc_file_add_acl_entry(file,*acl,SC_AC_AUT,key_ref); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_CHV,key_ref); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_AUT,key_ref); 
             break;
           */
           case 0xF0:
-            sc_file_add_acl_entry(file,*acl,SC_AC_NEVER,SC_AC_KEY_REF_NONE); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_NEVER,SC_AC_KEY_REF_NONE); 
             break;
           default:
-            sc_file_add_acl_entry(file,*acl,SC_AC_UNKNOWN,SC_AC_KEY_REF_NONE); 
+            sc_file_add_acl_entry(file,*(op+n),SC_AC_UNKNOWN,SC_AC_KEY_REF_NONE); 
             break;
         }
     }

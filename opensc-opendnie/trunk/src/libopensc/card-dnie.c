@@ -419,8 +419,8 @@ static int dnie_init(struct sc_card *card){
     
     /* initialize SM state to NONE */
     /* TODO: change to CWA_SM_OFF when SM testing get done */
-    // result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
-    result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
+    result=cwa_create_secure_channel(card,p,CWA_SM_COLD);
+    // result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
 
 dnie_init_error:
     LOG_FUNC_RETURN(card->ctx,result);
@@ -634,8 +634,8 @@ u8 *uncompress(sc_card_t *card, u8 *from, int *len) {
     }
     /* Done; update buffer len and return pt to uncompressed data */
     *len=uncompressed;
-    sc_log(card->ctx,"Uncompress() done. Before:'%l' After: '%l'",compressed,uncompressed);
-
+    sc_log(card->ctx,"Uncompress() done. Before:'%lu' After: '%lu'",compressed,uncompressed);
+    sc_log(card->ctx,"Uncompressed data:\n%s\n",sc_dump_hex(upt,uncompressed));
 compress_exit:
 
 #endif

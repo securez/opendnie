@@ -191,7 +191,7 @@ int bind(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *options)
 			p15_obj->auth_id.value[0] = 0x01;
 			p15_obj->auth_id.len = 1;
 		}
-
+#if 0
 		/* Unset flags 'private, modifiable' on public keys */
 		if ((p15_obj->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PUBKEY) {
 			p15_obj->flags &= ~(SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE);
@@ -201,7 +201,7 @@ int bind(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *options)
 		if ((p15_obj->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_CERT) {
 			p15_obj->flags &= ~(SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE);
 		}
-
+#endif
 		p15_obj = p15_obj->next;
 	}
 

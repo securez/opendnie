@@ -780,6 +780,7 @@ static int dnie_read_binary(
  *@param len original path length
  *@return resulting path length
  */
+#if 0
 static int dnie_rewrite_path(
        sc_card_t *card, u8 *to, const u8 *from, size_t len) {
     int n=0;
@@ -822,6 +823,7 @@ static int dnie_rewrite_path(
     memcpy(to,from,len);
     LOG_FUNC_RETURN(ctx,len);
 }
+#endif
 
 /* select_file: Does the equivalent of SELECT FILE command specified
  *   in ISO7816-4. Stores information about the selected file to
@@ -858,8 +860,8 @@ static int dnie_select_file(struct sc_card *card,
     sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0xA4, 0, 0);
 
     /* SELECT file in DNIe is a bit tricky: 
-     * - only handles file types 
-     * SC_PATH_TYPE_FILE_ID and SC_PATH_TYPE_DF_NAME
+     * - only handles some types 
+     * SC_PATH_TYPE_FILE_ID ,SC_PATH_TYPE_DF_NAME and SC_PATH_TYPE_PARENT
      * - Also MF must be addressed by their Name, not their ID
      * So some magic is needed:
      * - split SC_PATH_TYPE_PATH into several calls to each 2-byte data
@@ -868,14 +870,18 @@ static int dnie_select_file(struct sc_card *card,
      *
      * Also, Response always handle a proprietary FCI info, so
      * need to handle it manually via dnie_process_fci()
-     *
-     * (Again manual is so obscure: only talks about APDUs
-     * 00 A4 00 00 xx / 00 A4 04 00 xx works. I've discovered that
-     * the other P1 values fails by mean of trial and error )
      */
     switch (in_path->type) {
         case SC_PATH_TYPE_FILE_ID:
             /* pathlen must be of len=2 */
+            /* 
+            * gscriptor shows that DNIe also handles 
+            * Select child DF (p1=1) and Select EF (p1=2),
+            * but we'll use P1=0 as general solution for all cases
+            *
+            * According iso7816-4 sect 7.1.1  pathlen==0 implies
+            * select MF, but this case is not supported by DNIe
+            */
             if (pathlen != 2) LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
             sc_log(ctx,"select_file(ID): %s",sc_dump_hex(path,pathlen));
             apdu.p1 = 0;
@@ -1284,6 +1290,71 @@ static int dnie_compute_signature(struct sc_card *card,
  */
 
 /**
+ * List available files in current DF
+ * This is a dirty and trick implementation:
+ * Just try every ID in current dir
+ *
+ */
+static int dnie_list_files(sc_card_t * card, u8 * buf, size_t buflen) {
+    int res=SC_SUCCESS;
+    int id1=0;
+    int id2=0;
+    int count=0;
+    u8  data[2];
+    sc_apdu_t apdu;
+    if (!card || !card->ctx) return SC_ERROR_INVALID_ARGUMENTS;
+
+    LOG_FUNC_CALLED(card->ctx);
+    if (!buf||(buflen<2)) LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
+
+    /* compose select_file(ID) command */
+    sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0xA4,0x00,0x00);
+    apdu.le=0;
+    apdu.lc=0;
+    apdu.data=data;
+    apdu.resp=NULL;
+    apdu.datalen=2;
+    apdu.resplen=0;
+    /* iterate on every possible ids */
+    for (id1=0;id1<256;id1++) {
+        for (id2=0;id2<256;id2++) {
+            if (count>=(buflen-2)) {
+                sc_log(card->ctx,"list_files: end of buffer. Listing stopped");
+                LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
+            }
+            /* according iso several ids are not allowed, so check for it */
+            if ((id1==0x3F) && (id2==0xFF)) continue; /* generic parent "." DF*/
+            if ((id1==0x2F) && (id2==0x00)) continue; /* RFU see iso 8.2.1.1 */
+            if ((id1==0x2F) && (id2==0x01)) continue; /* RFU */
+            /* compose and transmit select_file() cmd */
+            apdu.p1=0;
+            apdu.lc=2;
+            data[0]=(u8)(0xff & id1);
+            data[1]=(u8)(0xff & id2);
+            res=sc_transmit_apdu(card,&apdu);
+            if (res!=SC_SUCCESS) {
+            	sc_log(card->ctx,"List file '%02X%02X' failed",id1,id2);
+                LOG_FUNC_RETURN(card->ctx,res);
+            }
+            /* if file not found, continue */
+            if (apdu.sw1!=0x61) continue; /* go to next id */
+            /* if file found, process fci to get file type */
+            sc_log(card->ctx,"Found File ID '%02X%02X'",id1,id2);
+            /* store id into buffer */
+            *(buf+count++)=data[0];
+            *(buf+count++)=data[1];
+            /* and go back to parent DF to continue search */
+            apdu.p1=3; /* select parent DF command */
+            apdu.lc=0;
+            res=sc_transmit_apdu(card,&apdu);
+            LOG_TEST_RET(card->ctx,res,"List file '(back)' failed");
+        }
+    }
+    /* arriving here means all done */
+    LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
+}
+
+/**
  * parse APDU results
  */
 static int dnie_check_sw(struct sc_card *card,
@@ -1291,7 +1362,9 @@ static int dnie_check_sw(struct sc_card *card,
                          unsigned int sw2){
     int res=SC_SUCCESS;
     int n=0;
+    if (!card || !card->ctx) return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
+
     /* check specific dnie errors */
     for( n=0; dnie_errors[n].SWs!=0; n++) {
       if (dnie_errors[n].SWs == ((sw1 << 8) | sw2)) {
@@ -1299,6 +1372,7 @@ static int dnie_check_sw(struct sc_card *card,
         return dnie_errors[n].errorno;
       }
     }
+
     /* arriving here means check for supported iso error codes */
     res=iso_ops->check_sw(card,sw1,sw2);
     LOG_FUNC_RETURN(card->ctx,res);
@@ -1614,7 +1688,7 @@ static sc_card_driver_t *get_dnie_driver(void) {
     /* iso7816-9 functions */
     dnie_ops.create_file           = NULL; /* not allowed on DNIe user mode*/
     dnie_ops.delete_file           = NULL;
-    /* dnie_ops.list_files */
+    dnie_ops.list_files            = dnie_list_files;
     dnie_ops.check_sw              = dnie_check_sw;
     dnie_ops.card_ctl              = dnie_card_ctl; 
     dnie_ops.process_fci           = dnie_process_fci;

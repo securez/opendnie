@@ -595,7 +595,7 @@ static unsigned long le2ulong(u8 *pt) {
  *@return uncompresed or original buffer; len points to new buffer length
  *        on error return null
  */
-u8 *uncompress(sc_card_t *card, u8 *from, int *len) {
+static u8 *dnie_uncompress(sc_card_t *card, u8 *from, int *len) {
     int res=SC_SUCCESS;
     u8 *upt=from;
     unsigned long uncompressed=0L;
@@ -644,7 +644,7 @@ compress_exit:
     return upt;
 }
 
-static inline void clear_cache() {
+static inline void dnie_clear_cache() {
     if (dnie_priv.cache) free(dnie_priv.cache);
     dnie_priv.cache=NULL;
     dnie_priv.cachelen=0;
@@ -669,7 +669,7 @@ static int dnie_fill_cache(sc_card_t *card) {
     LOG_FUNC_CALLED(ctx);
 
     /* mark cache empty */
-    clear_cache();
+    dnie_clear_cache();
 
     /* initialize apdu */
     sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0xB0,0x00,0x00);
@@ -714,7 +714,7 @@ static int dnie_fill_cache(sc_card_t *card) {
 
 read_done:
     /* no more data to read: check if data is compressed */
-    pt=uncompress(card,buffer,&len);
+    pt=dnie_uncompress(card,buffer,&len);
     if (pt==NULL) {
         sc_log(ctx,"Uncompress proccess failed");
         if (buffer) free(buffer);
@@ -968,7 +968,7 @@ static int dnie_select_file(struct sc_card *card,
     res=card->ops->process_fci(card, file, apdu.resp+2, apdu.resp[1]);
     *file_out=file;
     /* as last step clear data cache and return */
-    clear_cache();
+    dnie_clear_cache();
     LOG_FUNC_RETURN(ctx,res);
 }
 
@@ -1415,17 +1415,80 @@ static int dnie_card_ctl(struct sc_card *card,
     }
 }
 
-static int df_acl[]= {
+/**
+ * Extract real file length from compressed file by reading 8 first bytes
+ *
+ * Just a direct read binary apdu bypassing dnie file cache
+ *@param card sc_card_t structure pointer
+ *@return <0: error code - ==0 not compressed - >0 file size
+ */
+static int dnie_read_header(struct sc_card *card) {
+    sc_apdu_t apdu;
+    int r;
+    u8 buf[SC_MAX_APDU_BUFFER_SIZE];
+    unsigned long uncompressed=0L;
+    unsigned long compressed=0L;
+
+    if(!card|| !card->ctx) return SC_ERROR_INVALID_ARGUMENTS;
+    sc_context_t *ctx=card->ctx;
+    LOG_FUNC_CALLED(ctx);
+
+    /* initialize apdu */
+    sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0xB0,0x00,0x00);
+    apdu.p1=0x00;
+    apdu.p2=0x00;
+    apdu.le=8;    /* read 8 bytes at begining of file */
+    apdu.resplen=SC_MAX_APDU_BUFFER_SIZE;
+    apdu.resp=buf; 
+    /* transmit apdu */
+    r=sc_transmit_apdu(card,&apdu);
+    if (r!=SC_SUCCESS) {
+        sc_log(ctx,"read_header() APDU transmit failed");
+        LOG_FUNC_RETURN(ctx,r);
+    }
+    /* check response */
+    if (apdu.resplen!=8) goto header_notcompressed;
+    uncompressed=le2ulong(apdu.resp);
+    compressed=le2ulong(apdu.resp+4);
+    if (uncompressed<compressed) goto header_notcompressed;
+    if (uncompressed>32767) goto header_notcompressed;
+    /* ok: assume data is correct */
+    sc_log(ctx,"read_header: uncompressed file size is %lu",uncompressed);
+    return (int) (0x7FFF & uncompressed);
+
+header_notcompressed:
+     sc_log(ctx,"response doesn't match compressed file header");
+     return 0;
+}
+
+/** 
+ *  access control list bytes for propietary DNIe response parsing
+ *  based in information from official DNIe Driver
+ *  Parsing code based on itacns card driver
+ */
+static int df_acl[]= { /* to handle DF's */
       SC_AC_OP_CREATE, SC_AC_OP_DELETE ,
       SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE,
       -1 /* !hey!, what about 5th byte of FCI info? */
     };
-static int ef_acl[]= {
+static int ef_acl[]= { /* to handle EF's */
       SC_AC_OP_READ, SC_AC_OP_UPDATE,
       SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE,
       -1 /* !hey!, what about 5th byte of FCI info? */
     };
 
+/**
+ * Parse SelectFile's File Control information
+ *
+ * First, std iso_parse_fci is called to parse std fci tags
+ * then analyze propietary tag according DNIe Manual
+ *
+ *@param card OpenSC card structure pointer
+ *@param file currently selected EF or DF
+ *@param buf received FCI data
+ *@param buflen FCI length
+ *@return SC_SUCCESS if OK; else error code 
+ */
 static int dnie_process_fci(struct sc_card *card,
                             struct sc_file *file,
                             const u8 *buf,
@@ -1463,6 +1526,15 @@ static int dnie_process_fci(struct sc_card *card,
         case 0x24: /* EF for compressed certificates */
             file->type = SC_FILE_TYPE_WORKING_EF;
             file->ef_structure = SC_FILE_EF_TRANSPARENT;
+            /* evaluate real length by reading first 8 bytes from file */
+            res=dnie_read_header(card);
+            if (res<=0) {
+                sc_log(ctx,"Cannot evaluate uncompressed size. use fci length");
+            } else {
+                sc_log(ctx,"Storing uncompressed size '%d' into fci",res);
+                file->prop_attr[3]= (u8)( (res>>8) & 0xff );
+                file->prop_attr[4]= (u8)( res & 0xff );
+            }
             break;
         case 0x38: /* Errata: manual page 35 says wrong 0x34 */
             file->type = SC_FILE_TYPE_DF;

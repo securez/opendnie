@@ -757,7 +757,7 @@ static int cwa_verify_internal_auth(
     if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
-    if (!ifdbuf || ifdlen!=16) {
+    if (!ifdbuf || (ifdlen!=16)) {
         res=SC_ERROR_INVALID_ARGUMENTS;
         msg="Null buffers received as parameters";
         goto verify_internal_done;
@@ -855,7 +855,7 @@ verify_internal_done:
     if (bn) BN_free(bn);
     if (sigbn) BN_free(sigbn);
     if (res!=SC_SUCCESS) sc_log(ctx,msg);    
-    LOG_FUNC_RETURN(ctx,SC_SUCCESS);
+    LOG_FUNC_RETURN(ctx,res);
 }
 
 /**
@@ -1128,7 +1128,7 @@ int cwa_create_secure_channel(
 	icc_pubkey->pkey.rsa,     /* evaluated icc public key */
         ifd_privkey->pkey.rsa,    /* evaluated from DGP's Manual Annex 3 Data */
         rndbuf,         /* RND.IFD || SN.IFD */
-        sizeof(rndbuf), /* rndbuf length; should be 16 */
+        16,             /* rndbuf length; should be 16 */
         sm              /* sm data */
     );    
     if (res!=SC_SUCCESS) { msg="Internal Auth Verify failed"; goto csc_end; }

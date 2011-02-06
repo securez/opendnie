@@ -561,9 +561,7 @@ static int piv_generate_key(sc_card_t *card,
 	int r;
 	u8 *rbuf = NULL; 
 	size_t rbuflen = 0;
-	size_t buf_len = 0;
-	u8 *buf_end;
-	u8 *p, *rp;
+	u8 *p;
 	const u8 *tag;
 	u8 tagbuf[16]; 
 	u8 outdata[3]; /* we could also add tag 81 for exponent */
@@ -609,9 +607,6 @@ static int piv_generate_key(sc_card_t *card,
 
 	memcpy(p, outdata, out_len);
 	p+=out_len;
-
-	rp = rbuf;
-	buf_end = rp + buf_len;
 
 	r = piv_general_io(card, 0x47, 0x00, keydata->key_num, 
 			tagbuf, p - tagbuf, &rbuf, &rbuflen);
@@ -812,6 +807,7 @@ static int piv_read_obj_from_file(sc_card_t * card, char * filename,
 	int r;
 	int f = -1;
 	size_t len;
+	ssize_t res;
 	u8 tagbuf[16];
 	size_t rbuflen;
 	const u8 * body;
@@ -829,12 +825,13 @@ static int piv_read_obj_from_file(sc_card_t * card, char * filename,
 			r = SC_ERROR_FILE_NOT_FOUND; 
 			goto err;
 	}
-	len = read(f, tagbuf, sizeof(tagbuf)); /* get tag and length */
-	if (len < 0) {
+	res = read(f, tagbuf, sizeof(tagbuf)); /* get tag and length */
+	if (res < 0) {
 		sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,"Problem with \"%s\"\n",filename);
 		r =  SC_ERROR_DATA_OBJECT_NOT_FOUND;
 		goto err;
 	}
+	len = res;
 	body = tagbuf;
 	if (sc_asn1_read_tag(&body, 0xfffff, &cla_out, 
 			&tag_out, &bodylen) != SC_SUCCESS) { 
@@ -1122,10 +1119,6 @@ static int piv_read_binary(sc_card_t *card, unsigned int idx,
 	if (priv->selected_obj < 0) 
 		 SC_FUNC_RETURN(card->ctx, SC_LOG_DEBUG_NORMAL, SC_ERROR_INTERNAL);
 	enumtag = piv_objects[priv->selected_obj].enumtag;
-
-	if (priv->rwb_state == 1) {
-		r = 0;
-	}
 
 	if (priv->rwb_state == -1) {
 		r = piv_get_cached_data(card, enumtag, &rbuf, &rbuflen);
@@ -1473,7 +1466,6 @@ static int piv_general_mutual_authenticate(sc_card_t *card,
 	locked = 1;
 
 	p = sbuf;
-	q = rbuf;
 	*p++ = 0x7C;
 	*p++ = 0x02;
 	*p++ = 0x80;
@@ -1623,7 +1615,6 @@ static int piv_general_external_authenticate(sc_card_t *card,
 	locked = 1;
 
 	p = sbuf;
-	q = rbuf;
 	*p++ = 0x7C;
 	*p++ = 0x02;
 	*p++ = 0x81;
@@ -2009,7 +2000,6 @@ static int piv_compute_signature(sc_card_t *card,
 	int r;
 	int i;
 	int nLen;
-	u8 * outp = out;
 	u8 rbuf[128]; /* For EC conversions  384 will fit */
 	size_t rbuflen = sizeof(rbuf);
 	const u8 * body;
@@ -2452,7 +2442,6 @@ static int piv_process_history(sc_card_t *card)
 			sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "got internal r=%d\n",r);
 
 			certobj = NULL;
-			certobjlen = 0;
 
 			sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,
 				"Added from off card file #%d %p:%d 0x%02X \n",

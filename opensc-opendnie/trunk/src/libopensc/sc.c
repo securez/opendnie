@@ -403,13 +403,13 @@ const sc_acl_entry_t * sc_file_get_acl_entry(const sc_file_t *file,
 {
 	sc_acl_entry_t *p;
 	static const sc_acl_entry_t e_never = {
-		SC_AC_NEVER, SC_AC_KEY_REF_NONE, {{0}}, NULL
+		SC_AC_NEVER, SC_AC_KEY_REF_NONE, {{0, 0, 0, {0}}}, NULL
 	};
 	static const sc_acl_entry_t e_none = {
-		SC_AC_NONE, SC_AC_KEY_REF_NONE, {{0}}, NULL
+		SC_AC_NONE, SC_AC_KEY_REF_NONE, {{0, 0, 0, {0}}}, NULL
 	};
 	static const sc_acl_entry_t e_unknown = {
-		SC_AC_UNKNOWN, SC_AC_KEY_REF_NONE, {{0}}, NULL
+		SC_AC_UNKNOWN, SC_AC_KEY_REF_NONE, {{0, 0, 0, {0}}}, NULL
 	};
 
 	assert(file != NULL);
@@ -617,7 +617,7 @@ int _sc_parse_atr(sc_reader_t *reader)
 	u8 *p = reader->atr.value;
 	int atr_len = (int) reader->atr.len;
 	int n_hist, x;
-	int tx[4];
+	int tx[4] = {-1, -1, -1, -1};
 	int i, FI, DI;
 	const int Fi_table[] = {
 		372, 372, 558, 744, 1116, 1488, 1860, -1,

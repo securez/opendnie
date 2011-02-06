@@ -420,8 +420,6 @@ static int
 authentic_init_oberthur_authentic_3_2(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
-	unsigned char resp[0x100];
-	size_t resp_len;
 	unsigned int flags;
 	int rv = 0;
 
@@ -437,7 +435,6 @@ authentic_init_oberthur_authentic_3_2(struct sc_card *card)
 	card->caps |= SC_CARD_CAP_APDU_EXT; 
 	card->caps |= SC_CARD_CAP_USE_FCI_AC;
 
-	resp_len = sizeof(resp);
 	rv = authentic_select_aid(card, aid_AuthentIC_3_2, sizeof(aid_AuthentIC_3_2), NULL, NULL);
 	LOG_TEST_RET(ctx, rv, "AuthentIC application select error");
 
@@ -910,6 +907,12 @@ authentic_read_binary(struct sc_card *card, unsigned int idx,
 		rest -= sz;
 	}
 
+	if (!apdus)
+	{
+		LOG_TEST_RET(ctx, SC_ERROR_INTERNAL, "authentic_read_binary() failed");
+		LOG_FUNC_RETURN(ctx, count);
+	}
+
 	rv = sc_transmit_apdu(card, apdus);
 	if (!rv)
 		rv = sc_check_sw(card, apdus->sw1, apdus->sw2);
@@ -955,6 +958,12 @@ authentic_write_binary(struct sc_card *card, unsigned int idx,
 		rest -= sz;
 	}
 
+	if (!apdus)
+	{
+		LOG_TEST_RET(ctx, SC_ERROR_INTERNAL, "authentic_write_binary() failed");
+		LOG_FUNC_RETURN(ctx, count);
+	}
+
 	rv = sc_transmit_apdu(card, apdus);
 	if (!rv)
 		rv = sc_check_sw(card, apdus->sw1, apdus->sw2);
@@ -998,13 +1007,19 @@ authentic_update_binary(struct sc_card *card, unsigned int idx,
 		rest -= sz;
 	}
 
+	if (!apdus)
+	{
+		LOG_TEST_RET(ctx, SC_ERROR_INTERNAL, "authentic_update_binary() failed");
+		LOG_FUNC_RETURN(ctx, count);
+	}
+
 	rv = sc_transmit_apdu(card, apdus);
 	if (!rv)
 		rv = sc_check_sw(card, apdus->sw1, apdus->sw2);
 
 	authentic_apdus_free(apdus);
 
-	LOG_TEST_RET(ctx, rv, "authentic_write_binary() failed");
+	LOG_TEST_RET(ctx, rv, "authentic_update_binary() failed");
 	LOG_FUNC_RETURN(ctx, count);
 }
 
@@ -1016,15 +1031,12 @@ authentic_process_fci(struct sc_card *card, struct sc_file *file,
 	struct sc_context *ctx = card->ctx;
 	size_t taglen;
 	int rv, ii;
-	const unsigned char *acls = NULL, *tag = NULL;
+	const unsigned char *tag = NULL;
 	unsigned char ops_DF[8] = {
 		SC_AC_OP_CREATE, SC_AC_OP_DELETE, SC_AC_OP_CRYPTO, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 	};
 	unsigned char ops_EF[8] = {
 		SC_AC_OP_READ, SC_AC_OP_DELETE, SC_AC_OP_UPDATE, SC_AC_OP_RESIZE, 0xFF, 0xFF, 0xFF, 0xFF
-	};
-	unsigned char acls_NEVER[8] = {
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 	};
 
 	LOG_FUNC_CALLED(ctx);
@@ -1050,7 +1062,6 @@ authentic_process_fci(struct sc_card *card, struct sc_file *file,
 		sc_log(ctx, "ACLs not found in data(%i) %s", buflen, sc_dump_hex(buf, buflen));
 		sc_log(ctx, "Path:%s; Type:%X; PathType:%X", sc_print_path(&file->path), file->type, file->path.type);
 		if (file->path.type == SC_PATH_TYPE_DF_NAME || file->type == SC_FILE_TYPE_DF)   {
-			acls = acls_NEVER;
 			file->type = SC_FILE_TYPE_DF;
 		}
 		else   {
@@ -1766,7 +1777,7 @@ authentic_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
 }
 
 
-int
+static int
 authentic_manage_sdo_encode_prvkey(struct sc_card *card, struct sc_pkcs15_prkey *prvkey,
 			unsigned char **out, size_t *out_len)
 {
@@ -1828,7 +1839,7 @@ authentic_manage_sdo_encode_prvkey(struct sc_card *card, struct sc_pkcs15_prkey 
 }
 
 
-int
+static int
 authentic_manage_sdo_encode(struct sc_card *card, struct sc_authentic_sdo *sdo, unsigned long cmd,
 			unsigned char **out, size_t *out_len)
 {

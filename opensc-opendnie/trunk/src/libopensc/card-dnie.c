@@ -362,8 +362,10 @@ static int dnie_get_serialnr(sc_card_t *card, sc_serial_number_t *serial) {
 /* Called in sc_connect_card().  Must return 1, if the current
  * card can be handled with this driver, or 0 otherwise.  ATR
  * field of the sc_card struct is filled in before calling
- * this function. */
-static int dnie_match_card(struct sc_card *card){
+ * this function.
+ * do not declare static, as used by pkcs15-dnie module
+ */
+int dnie_match_card(struct sc_card *card){
     int result=0;
     LOG_FUNC_CALLED(card->ctx);
     int matched=_sc_match_atr(card,dnie_atrs,&card->type);

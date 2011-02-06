@@ -1,3 +1,4 @@
 version=3
 
-http://www.opensc-project.org/files/opensc/opensc-([\d\.]+)\.tar\.gz
+http://forja.cenatic.es/frs/?group_id=160&release_id=550 \
+/frs/download.php/.*/opensc-dnie-(.*).tar.gz debian

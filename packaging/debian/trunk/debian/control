@@ -2,12 +2,11 @@ Source: opensc-dnie
 Priority: extra
 Section: utils
 Maintainer: Enrique Hernández Bello <quique@osl.ull.es>
-XSBC-Original-Maintainer: Eric Dorland <eric@debian.org>
 Build-Depends: debhelper (>= 7.0.50), libltdl3-dev, libssl-dev (>= 0.9.7d-3), libpcsclite-dev (>= 1.2.9-beta1), libassuan-dev (>= 0.6.4-2), libopenct1-dev, libxt-dev, flex, pkg-config, automake, autoconf2.64, libtool
 Standards-Version: 3.9.1
-Homepage: http://www.opensc-project.org/
-Vcs-Git: git://git.debian.org/git/pkg-opensc/opensc.git
-Vcs-Browser: http://git.debian.org/?p=pkg-opensc/opensc.git 
+Homepage: http://forja.cenatic.es/projects/opendnie/
+Vcs-Svn: https://svn.forge.morfeo-project.org/opendnie/packaging/debian/
+Vcs-Browser: http://forja.cenatic.es/plugins/scmsvn/viewcvs.php/packaging/debian/?root=opendnie
 
 #Package: opensc
 #Section: utils
@@ -99,9 +98,9 @@ Description: Debugging symbols for libopensc2
 
 Package: dnie-support
 Section: misc
-Architecture: any
+Architecture: all
 Pre-Depends: libnss3-tools, libopensc2
-Depends: firefox, mozilla-opensc, openct, opensc, ${misc:Depends}
+Depends: libacr38u, libccid, firefox, mozilla-opensc, openct, opensc, ${misc:Depends}
 Description: Adds support for Spanish electronic ID card (DNIe)
  This package contains files and installs necessary software for using
  the Spanish electronic ID card with Mozilla Firefox in Linux.

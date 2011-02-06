@@ -1,4 +1,4 @@
-debian/tmp/usr/bin/cardos-info
+#debian/tmp/usr/bin/cardos-info
 debian/tmp/usr/bin/cardos-tool
 debian/tmp/usr/bin/cryptoflex-tool
 debian/tmp/usr/bin/eidenv

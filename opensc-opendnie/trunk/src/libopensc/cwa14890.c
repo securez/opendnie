@@ -757,8 +757,16 @@ static int cwa_verify_internal_auth(
     if( !card || !card->ctx ) return SC_ERROR_INVALID_ARGUMENTS;
     sc_context_t *ctx=card->ctx;
     LOG_FUNC_CALLED(ctx);
-    if (!ifdbuf || ifdlen!=16) res=SC_ERROR_INVALID_ARGUMENTS;
-    if (!icc_pubkey || !ifd_privkey)  res=SC_ERROR_INVALID_ARGUMENTS;
+    if (!ifdbuf || ifdlen!=16) {
+        res=SC_ERROR_INVALID_ARGUMENTS;
+        msg="Null buffers received as parameters";
+        goto verify_internal_done;
+    }
+    if (!icc_pubkey || !ifd_privkey)  {
+        res=SC_ERROR_INVALID_ARGUMENTS;
+        msg="Either provided icc_pubk or ifd_privk are null";
+        goto verify_internal_done;
+    }
     buf1= (u8 *) calloc(128,sizeof(u8)); /* 128: RSA key len in bytes */
     buf2= (u8 *) calloc(128,sizeof(u8)); 
     buf3= (u8 *) calloc(128,sizeof(u8)); 
@@ -1306,6 +1314,10 @@ int cwa_encode_apdu(
     if (from->le>0) {
         u8 le=0xff & from->le;
         res=cwa_compose_tlv(card,0x97,1,&le,&ccbuf,&cclen);
+        if (res!=SC_SUCCESS) {
+            sc_log(ctx,"Encode APDU compose_tlv(0x97) failed");
+            goto encode_end;
+        }
     }
     /* copy current data to apdu buffer (skip header and header padding) */
     memcpy(apdubuf,ccbuf+8,cclen-8);
@@ -1338,6 +1350,10 @@ int cwa_encode_apdu(
 
     /* compose and add computed MAC TLV to result buffer */
     res=cwa_compose_tlv(card,0x8E,4,macbuf,&apdubuf,&apdulen);
+    if (res!=SC_SUCCESS) {
+        sc_log(ctx,"Encode APDU compose_tlv(0x87) failed");
+        goto encode_end;
+    }
 
     /* rewrite resulting header */
     to->lc=apdulen;

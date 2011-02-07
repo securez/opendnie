@@ -1533,6 +1533,11 @@ static int dnie_process_fci(struct sc_card *card,
             break;
         case 0x15: /* EF for keys: linear variable simple TLV */
             file->type = SC_FILE_TYPE_WORKING_EF;
+            /* FCI response for Keys EF returns 3 additional bytes */
+            if (file->prop_attr_len<13) {
+               res=SC_ERROR_WRONG_LENGTH;
+               goto dnie_process_fci_end;
+            }
             break;
         case 0x24: /* EF for compressed certificates */
             file->type = SC_FILE_TYPE_WORKING_EF;

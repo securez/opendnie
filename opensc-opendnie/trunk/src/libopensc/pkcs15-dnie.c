@@ -183,6 +183,13 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t *p15card)
                     // return rv;
                }
           }
+          if (df->type == SC_PKCS15_DODF) {
+               rv = sc_pkcs15_parse_df(p15card, df);
+               if (rv != SC_SUCCESS) {
+                    sc_log(ctx, "Decoding of EF.DODF (%s) failed: %d", sc_print_path(&df->path), rv);
+                    // return rv;
+               }
+          }
      }
 
      /* Perform required fixes */
@@ -225,7 +232,7 @@ int bind(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *options) {
 
      /* Check for correct card */
      if (dnie_match_card(p15card->card) != 1) return SC_ERROR_WRONG_CARD;
-     return sc_pkcs15emu_dnie_init(p15card->card);
+     return sc_pkcs15emu_dnie_init(p15card);
 }
 
 /****************************************/

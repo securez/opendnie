@@ -1125,13 +1125,17 @@ static int dnie_set_security_env(struct sc_card *card,
            *p++ = 0x83; /* Control Reference template tag for Authenticate */
       else *p++ = 0x84; /* Control Reference template tag for Signature */
       /* notice that DNIe uses same key reference for pubk and privk */
-      *p++ = env->key_ref_len;
-      memcpy(p, env->key_ref, env->key_ref_len);
+      /* DNIe key ref are stored at 3f00 3f11 01XX, where xx=key_ref */
+      *p++ = 0x02; /* len  */
+      *p++ = 0x01; /* file ID prefix */
+      memcpy(p, env->key_ref, env->key_ref_len); /* in DNIe key_ref_len=1*/
       p += env->key_ref_len;
     }
 
 #if 0
     /* seems that DNIe does not support file references; so comment */
+    /* revisited:
+     * really DNIe uses file references as keu references. see above */
 
     /* check for file references */
     if (env->flags & SC_SEC_ENV_FILE_REF_PRESENT) {
@@ -1535,6 +1539,7 @@ static int dnie_process_fci(struct sc_card *card,
             file->type = SC_FILE_TYPE_WORKING_EF;
             /* FCI response for Keys EF returns 3 additional bytes */
             if (file->prop_attr_len<13) {
+               sc_log(ctx,"FCI response len for Keys EF should be 13 bytes");
                res=SC_ERROR_WRONG_LENGTH;
                goto dnie_process_fci_end;
             }

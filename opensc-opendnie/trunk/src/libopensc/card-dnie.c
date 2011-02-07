@@ -465,6 +465,7 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
     if (apdu->lc <= card->max_send_size) { 
 
         /* no envelope needed */
+        sc_log(card->ctx,"envelope tx is not required");
 
         int tmp=apdu->cse; /* save original apdu type */
         /* if SM is on, assure rx buffer exists and force get_response */
@@ -482,7 +483,8 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
         apdu->cse=tmp;
     } else {
         
-    /* envelope needed */
+        /* envelope needed */
+        sc_log(card->ctx,"envelope tx required: lc:%d",apdu->lc);
 
         sc_apdu_t *e_apdu=calloc(1,sizeof(sc_apdu_t)); /* enveloped apdu */
         u8 *e_tx=calloc(7+apdu->datalen,sizeof(u8)); /* enveloped data */
@@ -505,11 +507,14 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
         /* split apdu in n chunks of max_send_size len */
         for (index=0 ; index<e_txlen ; index+=card->max_send_size) {
             int len= MIN(card->max_send_size,e_txlen-index);
+            sc_log(card->ctx,"envelope tx offset:%04X size:%02X",index,len);
+
             /* compose envelope apdu command */ 
             sc_format_apdu(card,e_apdu,apdu->cse,0xC2,0x00,0x00);
             e_apdu->cla=0x90; /* propietary CLA */
             e_apdu->data=e_tx+index;
             e_apdu->lc=len;
+            e_apdu->datalen=len;
             e_apdu->le=apdu->le;
             e_apdu->resp=apdu->resp;
             e_apdu->resplen=apdu->resplen;
@@ -526,9 +531,13 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
                 }
             }
             /* send data chunk */
-            res = _sc_transmit_apdu(card,apdu);
+            res = _sc_transmit_apdu(card,e_apdu);
             LOG_TEST_RET(card->ctx,res,"Error in envelope() send apdu");
         } /* for */
+        /* last apdu sent contains response to enveloped cmd */
+        apdu->resp=e_apdu->resp;
+        apdu->resplen=e_apdu->resplen;
+        res=SC_SUCCESS;
     }
     LOG_FUNC_RETURN(card->ctx,res);
 }

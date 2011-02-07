@@ -118,6 +118,9 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t *p15card)
      size_t len = sizeof(buf);
      int rv;
 
+     sc_context_t *ctx= p15card->card->ctx;
+     LOG_FUNC_CALLED(ctx);
+
      /* Check for correct card driver (i.e. iso7816) */
      if (strcmp(p15card->card->driver->short_name, "dnie") != 0)
           return SC_ERROR_WRONG_CARD;
@@ -132,29 +135,29 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t *p15card)
      /* Load TokenInfo */
      rv = dump_ef(p15card->card, "3F0050155032", buf, &len);
      if (rv != SC_SUCCESS) {
-          sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL, "Reading of EF.TOKENINFO failed: %d", rv);
-          return rv;
+          sc_log(ctx, "Reading of EF.TOKENINFO failed: %d", rv);
+          LOG_FUNC_RETURN(ctx, rv);
      }
      rv = sc_pkcs15_parse_tokeninfo(p15card->card->ctx, p15card->tokeninfo, buf, len);
      if (rv != SC_SUCCESS) {
-          sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL, "Decoding of EF.TOKENINFO failed: %d", rv);
-          return rv;
+          sc_log(ctx,"Decoding of EF.TOKENINFO failed: %d", rv);
+          LOG_FUNC_RETURN(ctx, rv);
      }
 
      /* Only accept the original stuff */
      if (strcmp(p15card->tokeninfo->manufacturer_id, "DGP-FNMT") != 0)
-          return SC_ERROR_WRONG_CARD;
+          LOG_FUNC_RETURN(ctx, SC_ERROR_WRONG_CARD);
 
      /* Load ODF */
      rv = dump_ef(p15card->card, "3F0050155031", buf, &len);
      if (rv != SC_SUCCESS) {
-          sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL, "Reading of ODF failed: %d", rv);
-          return rv;
+          sc_log(ctx,"Reading of ODF failed: %d", rv);
+          LOG_FUNC_RETURN(ctx, rv);
      }
      rv = parse_odf(buf, len, p15card);
      if (rv != SC_SUCCESS) {
-          sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL, "Decoding of ODF failed: %d", rv);
-          return rv;
+          sc_log(ctx, "Decoding of ODF failed: %d", rv);
+          LOG_FUNC_RETURN(ctx, rv);
      }
 
      /* Decode EF.PrKDF, EF.PuKDF and EF.CDF */
@@ -162,24 +165,21 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t *p15card)
           if (df->type == SC_PKCS15_PRKDF) {
                rv = sc_pkcs15_parse_df(p15card, df);
                if (rv != SC_SUCCESS) {
-                    sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL,
-                         "Decoding of EF.PrKDF (%s) failed: %d", sc_print_path(&df->path), rv);
+                    sc_log(ctx, "Decoding of EF.PrKDF (%s) failed: %d", sc_print_path(&df->path), rv);
                     // return rv;
                }
           }
           if (df->type == SC_PKCS15_PUKDF) {
                rv = sc_pkcs15_parse_df(p15card, df);
                if (rv != SC_SUCCESS) {
-                    sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL,
-                         "Decoding of EF.PuKDF (%s) failed: %d", sc_print_path(&df->path), rv);
+                    sc_log(ctx, "Decoding of EF.PuKDF (%s) failed: %d", sc_print_path(&df->path), rv);
                     // return rv;
                }
           }
           if (df->type == SC_PKCS15_CDF) {
                rv = sc_pkcs15_parse_df(p15card, df);
                if (rv != SC_SUCCESS) {
-                    sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL,
-                         "Decoding of EF.CDF (%s) failed: %d", sc_print_path(&df->path), rv);
+                    sc_log(ctx, "Decoding of EF.CDF (%s) failed: %d", sc_print_path(&df->path), rv);
                     // return rv;
                }
           }
@@ -207,7 +207,7 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t *p15card)
           p15_obj = p15_obj->next;
      }
 
-     return SC_SUCCESS;
+     LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 }
 
 /********************************************/

@@ -1088,6 +1088,10 @@ static int dnie_set_security_env(struct sc_card *card,
       return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
 
+    /* make sure that Secure Channel is on */
+    result=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_WARM);
+    LOG_TEST_RET(card->ctx,result,"set_security_env(); Cannot establish SM");
+
     /* check for algorithms */
     if (env->flags & SC_SEC_ENV_ALG_REF_PRESENT) {
       switch (env->algorithm) {
@@ -1117,13 +1121,17 @@ static int dnie_set_security_env(struct sc_card *card,
       if (env->key_ref_len!=1) result=SC_ERROR_NOT_SUPPORTED;
       LOG_TEST_RET(card->ctx,result,"Invalid key id");
       /* ok: insert key reference into buffer */
-      if (env->flags & SC_SEC_ENV_KEY_REF_ASYMMETRIC) 
-           *p++ = 0x83;
-      else *p++ = 0x84;
+      if (env->operation == SC_SEC_OPERATION_AUTHENTICATE) 
+           *p++ = 0x83; /* Control Reference template tag for Authenticate */
+      else *p++ = 0x84; /* Control Reference template tag for Signature */
+      /* notice that DNIe uses same key reference for pubk and privk */
       *p++ = env->key_ref_len;
       memcpy(p, env->key_ref, env->key_ref_len);
       p += env->key_ref_len;
     }
+
+#if 0
+    /* seems that DNIe does not support file references; so comment */
 
     /* check for file references */
     if (env->flags & SC_SEC_ENV_FILE_REF_PRESENT) {
@@ -1133,6 +1141,7 @@ static int dnie_set_security_env(struct sc_card *card,
       memcpy(p, env->file_ref.value, env->file_ref.len);
       p += env->file_ref.len;
     }
+#endif
 
     /* create and format apdu */
     sc_format_apdu(card,&apdu,SC_APDU_CASE_3_SHORT,0x22,0x00,0x00);
@@ -1140,18 +1149,18 @@ static int dnie_set_security_env(struct sc_card *card,
     /* check and perform operation */
     switch (env->operation) {
       case SC_SEC_OPERATION_DECIPHER:
-        /* TODO: Manual is unsure about if decipher() is supported */
+        /* TODO: Manual is unsure about if (de)cipher() is supported */
         apdu.p1=0xC1;
         apdu.p2=0xB8;
         break;
       case SC_SEC_OPERATION_SIGN:
-        apdu.p1=0x81;
-        apdu.p2=0xB6;
+        apdu.p1=0x41; /* SET; internal operation */
+        apdu.p2=0xB6; /* CRT for Digital Signature */
         break;
       case SC_SEC_OPERATION_AUTHENTICATE:
         /* TODO: _set_security_env() study diffs on internal/external auth */
-        apdu.p1=0xC1;
-        apdu.p2=0xA4;
+        apdu.p1=0x41; /* SET; internal operation */
+        apdu.p2=0xA4; /* CRT for Auth */
         break;
       default:
         LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
@@ -1605,11 +1614,18 @@ static int dnie_process_fci(struct sc_card *card,
     }
     /* NOTE: Following bytes are described at DNIe manual pg 36, but No 
     documentation about what to do with following data is provided... 
-    logs suggest that they are neither generated nor handled 
-    so we blindy ignore....
+    logs suggest that they are neither generated nor handled.
+
+    UPDATE: these additional bytes are received when FileDescriptor tag
+    is 0x15 (EF for keys)
     */
-    /* byte 10 (if present) shows Control Flags for security files */
-    /* bytes 11 and 12 (if present) states Control bytes for RSA crypto files */
+    if ( file->prop_attr[0] == 0x15) {
+        sc_log(card->ctx,"Processing flags for Cryptographic key files");
+        /* byte 10 (if present) shows Control Flags for security files */
+        /* bytes 11 and 12 (if present) states Control bytes for 
+           RSA crypto files */
+        /* TODO: write when know what to do */
+    }
     res=SC_SUCCESS; /* arriving here means success */
 dnie_process_fci_end:
     LOG_FUNC_RETURN(card->ctx,res);

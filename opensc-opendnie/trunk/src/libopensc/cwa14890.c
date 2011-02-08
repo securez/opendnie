@@ -1211,6 +1211,7 @@ int cwa_encode_apdu(
     u8 macbuf[8]; /* to store and compute CC */
     DES_key_schedule k1;
     DES_key_schedule k2;
+    char *msg=NULL;
 
     int i,j; /* for xor loops */
     int res=SC_SUCCESS;
@@ -1256,8 +1257,8 @@ int cwa_encode_apdu(
     if (provider->cwa_encode_pre_ops) {
         res=provider->cwa_encode_pre_ops(card,provider,from,to);
         if (res!=SC_SUCCESS) {
-            sc_log(ctx,"Encode APDU: provider pre_ops() failed");
-            LOG_FUNC_RETURN(ctx,res);
+            msg="Encode APDU: provider pre_ops() failed";
+            goto encode_end;
         }
     }
     
@@ -1305,7 +1306,7 @@ int cwa_encode_apdu(
         /* compose data TLV and add to result buffer */
         res=cwa_compose_tlv(card,0x87,dlen+1,cryptbuf,&ccbuf,&cclen);
         if (res!=SC_SUCCESS) {
-            sc_log(ctx,"Error in compose tag 8x87 TLV");
+            msg="Error in compose tag 8x87 TLV";
             goto encode_end;
         }
     }
@@ -1316,7 +1317,7 @@ int cwa_encode_apdu(
         u8 le=0xff & from->le;
         res=cwa_compose_tlv(card,0x97,1,&le,&ccbuf,&cclen);
         if (res!=SC_SUCCESS) {
-            sc_log(ctx,"Encode APDU compose_tlv(0x97) failed");
+            msg="Encode APDU compose_tlv(0x97) failed";
             goto encode_end;
         }
     }
@@ -1330,8 +1331,7 @@ int cwa_encode_apdu(
     /* compute MAC Cryptographic Checksum using kmac and increased SSC */
     res=cwa_increase_ssc(card,sm); /* increase send sequence counter */
     if (res!=SC_SUCCESS) {
-    	sc_log(ctx,"Error in computing SSC");
-        free(ccbuf);
+    	msg="Error in computing SSC";
         goto encode_end;
     }
     /* set up keys for mac computing */
@@ -1347,12 +1347,11 @@ int cwa_encode_apdu(
     }
     /* and apply 3DES to result */
     DES_ecb2_encrypt((const_DES_cblock *)macbuf, (DES_cblock *)macbuf, &k1, &k2, DES_ENCRYPT);
-    free(ccbuf); /* ccbuf is no longer needed */
 
     /* compose and add computed MAC TLV to result buffer */
     res=cwa_compose_tlv(card,0x8E,4,macbuf,&apdubuf,&apdulen);
     if (res!=SC_SUCCESS) {
-        sc_log(ctx,"Encode APDU compose_tlv(0x87) failed");
+        msg="Encode APDU compose_tlv(0x87) failed";
         goto encode_end;
     }
 
@@ -1365,7 +1364,7 @@ int cwa_encode_apdu(
     if (provider->cwa_encode_post_ops) {
         res=provider->cwa_encode_post_ops(card,provider,from,to);
         if (res!=SC_SUCCESS) {
-            sc_log(ctx,"Encode APDU: provider post_ops() failed");
+            msg="Encode APDU: provider post_ops() failed";
             goto encode_end;
         }
     }
@@ -1373,8 +1372,7 @@ int cwa_encode_apdu(
     res=SC_SUCCESS;
 
 encode_end:
-    if (msgbuf) free(msgbuf);
-    if (cryptbuf) free(cryptbuf);
+    if (msg) sc_log(ctx,msg);
     LOG_FUNC_RETURN(ctx,res);
 }
 

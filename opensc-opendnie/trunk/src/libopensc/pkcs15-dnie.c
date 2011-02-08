@@ -195,22 +195,11 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t *p15card)
      /* Perform required fixes */
      p15_obj = p15card->obj_list;
      while (p15_obj != NULL) {
-          /* Add 'auth_id' to private keys */
-          if ((p15_obj->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PRKEY) {
+          /* Add missing 'auth_id' to private objects */
+          if ((p15_obj->flags & SC_PKCS15_CO_FLAG_PRIVATE) && (p15_obj->auth_id.len == 0)) {
                p15_obj->auth_id.value[0] = 0x01;
                p15_obj->auth_id.len = 1;
           }
-#if 0
-          /* Unset flags 'private, modifiable' on public keys */
-          if ((p15_obj->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PUBKEY) {
-               p15_obj->flags &= ~(SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE);
-          }
-
-          /* Unset flags 'private, modifiable' on certificates */
-          if ((p15_obj->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_CERT) {
-               p15_obj->flags &= ~(SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE);
-          }
-#endif
           p15_obj = p15_obj->next;
      }
 

@@ -503,7 +503,7 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
         *(e_tx+6)=0xff & apdu->lc;
         memcpy(e_tx+7,apdu->data,apdu->lc);
         e_txlen=7+apdu->lc;
-
+        /* sc_log(card->ctx, "Data to be enveloped & sent: (%d bytes)\n%s\n===============================================================",e_txlen,sc_dump_hex(e_tx,e_txlen)); */
         /* split apdu in n chunks of max_send_size len */
         for (index=0 ; index<e_txlen ; index+=card->max_send_size) {
             int len= MIN(card->max_send_size,e_txlen-index);
@@ -530,7 +530,7 @@ static int dnie_transmit_apdu( sc_card_t *card, sc_apdu_t *apdu) {
                     e_apdu->le=card->max_recv_size;
                 }
             }
-            /* send data chunk */
+            /* send data chunk bypassing apdu wrapping */
             res = _sc_transmit_apdu(card,e_apdu);
             LOG_TEST_RET(card->ctx,res,"Error in envelope() send apdu");
         } /* for */
@@ -1256,7 +1256,7 @@ static int dnie_compute_signature(struct sc_card *card,
     int result=SC_SUCCESS;
     struct sc_apdu apdu;
     u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
-    u8 sbuf[SC_MAX_APDU_BUFFER_SIZE];
+    int hash_done=0;
  
     /* some preliminar checks */
     if ((card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
@@ -1283,28 +1283,86 @@ static int dnie_compute_signature(struct sc_card *card,
        content type (plain, partial, hash) and process it
      */
 
-    memset(&apdu,0,sizeof(struct sc_apdu)); /* clear data */
-    memcpy(sbuf,data,datalen); /* copy data to buffer */
-    /* compose apdu */
-    /* INS: 0x2A  PERFORM SECURITY OPERATION
-     * P1:  0x9E  Resp: Digital Signature
-     * P2:  0x9A  Cmd: Input for Digital Signature */
-    sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x9E, 0x9A);
+    /*
+     Update:
+     - DNIe manual shows a 20bytes sha1 hash+16 bytes sha digest
+       signature by mean of direct use of 2A 9E 9A apdu
+     - But firefox provides data with correct 256 byte pkcs1 
+       padding for 2048 key length. So let split signature
+       command in two separate task: 1-load data and 2-sign
+
+     In this code we take a near approach: 
+     - if provided data matches a pkcs1 padding scheme, use
+       partial hash + sign
+     - if data length is 20+16 bytes use sign directly
+     - else assume plaintext hash + sign
+     
+    */
+
+    /* phase 1: compute hash */
+    if ( (datalen==256) && (data[0]==0x00) && 
+         (data[1]==0x01) && (data[2]==0xff) ) {
+        /* assume pkcs1 padding scheme for 2048 bit keys */
+        /* compose apdu for partial hash */
+        /* INS: 0x2A  PERFORM SECURITY OPERATION
+         * P1:  0x90  Resp: hash
+         * P2:  0xA0  Cmd: Partial hash provided */
+        sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x90, 0xA0);
+    } else if (datalen!=36) { /* 20 bytes sha1 hash + 16 bytes digest */
+        /* compose apdu for plain data hash */
+        /* INS: 0x2A  PERFORM SECURITY OPERATION
+         * P1:  0x90  Resp: hash
+         * P2:  0x80  Cmd: plain text provided */
+        sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x90, 0x80);
+    } else goto no_hash_done;
+
+    /* fill remaining apdu data */
     apdu.resp = rbuf;
     apdu.resplen = sizeof(rbuf);
     apdu.le = outlen;
     
-    apdu.data = sbuf;
+    apdu.data = data;
     apdu.lc = datalen;
     apdu.datalen = datalen;
-    /* tell card to compute signature */
+    /* tell card to compute hash */
     result = sc_transmit_apdu(card, &apdu);
-    LOG_TEST_RET(card->ctx,result,"APDU transmit failed");
+    LOG_TEST_RET(card->ctx,result,"plaintext_hash() failed");
     /* check response */
     result=sc_check_sw(card,apdu.sw1,apdu.sw2);
-    LOG_TEST_RET(card->ctx,result,"APDU response error");
+    LOG_TEST_RET(card->ctx,result,"plaintext_hash() response error");
+
+    /* ok: tell sign apdu to dont't provide any data for sign procedure*/
+    apdu.data=NULL;
+    apdu.datalen=0;
+    apdu.lc=0;
+    hash_done=1;
+
+no_hash_done:
+
+    /* phase 2: compute signature */
+
+    /* INS: 0x2A  PERFORM SECURITY OPERATION
+    * P1:  0x9E  Resp: Digital Signature
+    * P2:  0x9A  Cmd: Input for Digital Signature */
+    sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0x2A, 0x9E, 0x9A);
+    apdu.resp = rbuf;
+    apdu.resplen = sizeof(rbuf);
+    apdu.le = outlen;
+    if (!hash_done) {
+        apdu.cse=SC_APDU_CASE_4_SHORT;
+        apdu.data = data;
+        apdu.lc = datalen; 
+        apdu.datalen = datalen;
+    }
+    /* tell card to compute signature */
+    result = sc_transmit_apdu(card, &apdu);
+    LOG_TEST_RET(card->ctx,result,"compute_signature() failed");
+    /* check response */
+    result=sc_check_sw(card,apdu.sw1,apdu.sw2);
+    LOG_TEST_RET(card->ctx,result,"compute_signature() response error");
+
     /* ok: copy result from buffer */
-    memcpy(out,rbuf,outlen);
+    memcpy(out,apdu.resp,apdu.resplen);
     /* and return response length */
     LOG_FUNC_RETURN(card->ctx,apdu.resplen);
 }

@@ -786,18 +786,9 @@ static int dnie_select_file(struct sc_card *card,
 
     LOG_FUNC_CALLED(ctx);
 
-#if 0
-    /* rewrite path if needed */
-    if(in_path->type==SC_PATH_TYPE_PATH) {
-        pathlen= dnie_rewrite_path(card,path,in_path->value,in_path->len);
-    } else {
-        memcpy(path, in_path->value, in_path->len);
-        pathlen=in_path->len;
-    }
-#else
-        memcpy(path, in_path->value, in_path->len);
-        pathlen=in_path->len;
-#endif
+    memcpy(path, in_path->value, in_path->len);
+    pathlen=in_path->len;
+
     sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0xA4, 0, 0);
 
     /* SELECT file in DNIe is a bit tricky: 
@@ -1200,8 +1191,6 @@ static int dnie_compute_signature(struct sc_card *card,
     /* more checks */
     if ( (data==NULL) || (out==NULL))
       LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
-    if (datalen > SC_MAX_APDU_BUFFER_SIZE || outlen > SC_MAX_APDU_BUFFER_SIZE)
-      LOG_FUNC_RETURN(card->ctx,SC_ERROR_BUFFER_TOO_SMALL);
 
     /* ensure that secure channel is stablished */
     result=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_WARM);

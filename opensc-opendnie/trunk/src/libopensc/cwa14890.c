@@ -1264,9 +1264,10 @@ int cwa_encode_apdu(
     /* trace APDU before encoding process */
     cwa_trace_apdu(card,from,0); 
 
-    /* allocate result apdu data buffer */
-    apdubuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
-    ccbuf=calloc(SC_MAX_APDU_BUFFER_SIZE,sizeof(u8));
+    /* reserve enougth space for apdulen+tlv bytes 
+     * to-be-crypted buffer and result apdu buffer */
+    apdubuf=calloc(MAX(SC_MAX_APDU_BUFFER_SIZE,20+from->datalen),sizeof(u8));
+    ccbuf=calloc(MAX(SC_MAX_APDU_BUFFER_SIZE,20+from->datalen),sizeof(u8));
     if (!apdubuf || !ccbuf ) LOG_FUNC_RETURN(ctx,SC_ERROR_OUT_OF_MEMORY);
 
     /* set up data on destination apdu */

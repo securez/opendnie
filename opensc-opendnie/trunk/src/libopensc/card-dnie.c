@@ -1094,7 +1094,7 @@ static int dnie_set_security_env(struct sc_card *card,
       case SC_SEC_OPERATION_AUTHENTICATE:
         /* TODO: _set_security_env() study diffs on internal/external auth */
         apdu.p1=0x41; /* SET; internal operation */
-        apdu.p2=0xA4; /* CRT for Auth */
+        apdu.p2=0xB6; /* CRT for Auth ¿what about 0x41,0xA4 */
         break;
       default:
         LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
@@ -1169,8 +1169,31 @@ static int dnie_decipher(struct sc_card *card,
     LOG_FUNC_RETURN(card->ctx, len);
 }
 
-/* compute_signature:  Generates a digital signature on the card.  Similiar
- *   to the function decipher. */
+/**
+ * Compute_signature:  
+ *
+ * Generates a digital signature on the card.  
+ * This function handles the process of hash + sign 
+ * with previously selected keys (by mean of set_security environment
+ *
+ * AS iso7816 and DNIe Manual states there are 3 ways to perform 
+ * this operation:
+ *
+ * - (plaintext) Hash on plaintext + sign
+ * - (partial hash) Send a externally evaluated pkcs1 hash + sign
+ * - (hash) directly sign a given sha1 hash
+ *
+ * So the code analyze incoming data, decide which method to be used
+ * and applies
+ *
+ *@param card pointer to sc_card_t structure
+ *@param data data to be hased/signed
+ *@param datalen length of provided data
+ *@param out buffer to store results into
+ *@param outlen available space in result buffer
+ *@return if positive: Size of data stored in out buffer when no error
+ *        if negative: error code
+ */
 static int dnie_compute_signature(struct sc_card *card,
                                    const u8 * data, size_t datalen,
                                    u8 * out, size_t outlen){
@@ -1195,6 +1218,7 @@ static int dnie_compute_signature(struct sc_card *card,
     /* ensure that secure channel is stablished */
     result=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_WARM);
     LOG_TEST_RET(card->ctx,result,"decipher(); Cannot establish SM");
+
     /* (Requested by DGP): on signature operation, ask user consent */
     if (dnie_priv.rsa_key_ref==0x02) { /* TODO: revise key ID handling */
         result=ask_user_consent(card);
@@ -1219,6 +1243,12 @@ static int dnie_compute_signature(struct sc_card *card,
     } else { 
         /* arriving here means assume plain text hash */
         sc_log(card->ctx,"Using plaintext hash scheme");
+        /* Manual states that plaintext cannot be longer 
+         * than 40% of keylength */
+         if (datalen>100) {
+             sc_log(card->ctx,"Text too long for plaintext signing");
+             LOG_FUNC_RETURN(card->ctx,SC_ERROR_WRONG_LENGTH);
+         }
         /* compose apdu for plain data hash */
         /* INS: 0x2A  PERFORM SECURITY OPERATION
          * P1:  0x90  Resp: hash
@@ -1257,7 +1287,7 @@ no_hash_done:
     sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0x2A, 0x9E, 0x9A);
     apdu.resp = rbuf;
     apdu.resplen = sizeof(rbuf);
-    apdu.le = outlen;
+    apdu.le = sizeof(rbuf);
     if (!hash_done) {
         apdu.cse=SC_APDU_CASE_4_SHORT;
         apdu.data = data;
@@ -1274,6 +1304,7 @@ no_hash_done:
     /* ok: copy result from buffer */
     memcpy(out,apdu.resp,apdu.resplen);
     /* and return response length */
+    sc_log(card->ctx,"compute signature returns: '%d' bytes:\n%s\n====================================================================",apdu.resplen,sc_dump_hex(out,apdu.resplen));
     LOG_FUNC_RETURN(card->ctx,apdu.resplen);
 }
 

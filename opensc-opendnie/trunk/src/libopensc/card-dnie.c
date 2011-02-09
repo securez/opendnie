@@ -1024,6 +1024,7 @@ static int dnie_set_security_env(struct sc_card *card,
 
     /* check for algorithms */
     if (env->flags & SC_SEC_ENV_ALG_REF_PRESENT) {
+      sc_log(card->ctx,"checking algorithms");
       switch (env->algorithm) {
         case SC_ALGORITHM_RSA: result=SC_SUCCESS; break;
         case SC_ALGORITHM_DSA: 
@@ -1048,12 +1049,14 @@ static int dnie_set_security_env(struct sc_card *card,
 
     /* check for key references */
     if (env->flags & SC_SEC_ENV_KEY_REF_PRESENT) {
+      sc_log(card->ctx,"checking key references");
       if (env->key_ref_len!=1) result=SC_ERROR_NOT_SUPPORTED;
       LOG_TEST_RET(card->ctx,result,"Invalid key id");
       /* ok: insert key reference into buffer */
+      /* see cwa14890-2 sect B.1 about Control Reference Template Tags */
       if (env->operation == SC_SEC_OPERATION_AUTHENTICATE) 
-           *p++ = 0x83; /* Control Reference template tag for Authenticate */
-      else *p++ = 0x84; /* Control Reference template tag for Signature */
+           *p++ = 0x83; /* CRT Tag for reference to public/symetric keys */
+      else *p++ = 0x84; /* CRT Tag tor reference to private keys */
       /* notice that DNIe uses same key reference for pubk and privk */
       /* DNIe key ref are stored at 3f00 3f11 01XX, where xx=key_ref */
       *p++ = 0x02; /* len  */
@@ -1069,6 +1072,7 @@ static int dnie_set_security_env(struct sc_card *card,
 
     /* check for file references */
     if (env->flags & SC_SEC_ENV_FILE_REF_PRESENT) {
+      sc_log(card->ctx,"checking file references");
       /* insert file reference into buffer */
       *p++ = 0x81;
       *p++ = env->file_ref.len;
@@ -1089,12 +1093,12 @@ static int dnie_set_security_env(struct sc_card *card,
         break;
       case SC_SEC_OPERATION_SIGN:
         apdu.p1=0x41; /* SET; internal operation */
-        apdu.p2=0xB6; /* CRT for Digital Signature */
+        apdu.p2=0xB6; /* Template for Digital Signature */
         break;
       case SC_SEC_OPERATION_AUTHENTICATE:
         /* TODO: _set_security_env() study diffs on internal/external auth */
         apdu.p1=0x41; /* SET; internal operation */
-        apdu.p2=0xB6; /* CRT for Auth ¿what about 0x41,0xA4 */
+        apdu.p2=0xA4; /* Template for Authenticate */
         break;
       default:
         LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
@@ -1199,7 +1203,8 @@ static int dnie_compute_signature(struct sc_card *card,
                                    u8 * out, size_t outlen){
     int result=SC_SUCCESS;
     struct sc_apdu apdu;
-    u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
+    u8 sbuf[SC_MAX_APDU_BUFFER_SIZE]; /* for compute partial hash data */
+    u8 rbuf[SC_MAX_APDU_BUFFER_SIZE]; /* to receive (unused) hash response */
     u8 pkcs1_sig [] = { /* DSI pkcs#1 v2.x padding header */
         0x00, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
     u8 sha1_digest[] = { /* sha1 ASN.1 oid sequence */
@@ -1217,7 +1222,7 @@ static int dnie_compute_signature(struct sc_card *card,
 
     /* ensure that secure channel is stablished */
     result=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_WARM);
-    LOG_TEST_RET(card->ctx,result,"decipher(); Cannot establish SM");
+    LOG_TEST_RET(card->ctx,result,"compute_signature(); Cannot establish SM");
 
     /* (Requested by DGP): on signature operation, ask user consent */
     if (dnie_priv.rsa_key_ref==0x02) { /* TODO: revise key ID handling */
@@ -1226,7 +1231,8 @@ static int dnie_compute_signature(struct sc_card *card,
     }
 
     /* phase 1: compute hash if required */
-
+    sc_log(card->ctx,"Compute hash if required");
+    memset(sbuf,0,sizeof(sbuf));
     /* decide which hash method to be used */
     if ( (datalen==256) && (memcmp(data,pkcs1_sig,8)==0) ) {
         /* assume pkcs1 padding scheme for 2048 bit keys */
@@ -1236,6 +1242,18 @@ static int dnie_compute_signature(struct sc_card *card,
          * P1:  0x90  Resp: hash
          * P2:  0xA0  Cmd: Partial hash provided */
         sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x90, 0xA0);
+        /* according with cwa14890-2 sect 8.1 partial hash scheme allow
+         * inserting 2 values: pre-evaluated hash and new data to be hashed
+         * OpenSC does not handle last item, as hash is made externally
+         * and assume "intermediate hash" == "external hash"
+         * So compose buffer according standard
+         */
+         sbuf[0] = 0x90; /* tag for intermediate hash */
+         sbuf[1] = 0xff & datalen;
+         memcpy(&sbuf[2],data,datalen);
+         apdu.data = sbuf;
+         apdu.lc = datalen+2;
+         apdu.datalen = datalen+2;
     } else if ((datalen==25) && (memcmp(data,sha1_digest,15)==0)) {
         sc_log(card->ctx,"Using direct hash+sign scheme");
         /* 15 bytes sha1 digest + 20 bytes sha1 hash */
@@ -1244,16 +1262,19 @@ static int dnie_compute_signature(struct sc_card *card,
         /* arriving here means assume plain text hash */
         sc_log(card->ctx,"Using plaintext hash scheme");
         /* Manual states that plaintext cannot be longer 
-         * than 40% of keylength */
-         if (datalen>100) {
-             sc_log(card->ctx,"Text too long for plaintext signing");
-             LOG_FUNC_RETURN(card->ctx,SC_ERROR_WRONG_LENGTH);
-         }
+        * than 40% of keylength */
+        if (datalen>100) {
+            sc_log(card->ctx,"Text too long for plaintext signing");
+            LOG_FUNC_RETURN(card->ctx,SC_ERROR_WRONG_LENGTH);
+        }
         /* compose apdu for plain data hash */
         /* INS: 0x2A  PERFORM SECURITY OPERATION
-         * P1:  0x90  Resp: hash
-         * P2:  0x80  Cmd: plain text provided */
+        * P1:  0x90  Resp: hash
+        * P2:  0x80  Cmd: plain text provided */
         sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x90, 0x80);
+        apdu.data = data;
+        apdu.lc = datalen;
+        apdu.datalen = datalen;
     } 
 
     /* fill remaining apdu data */
@@ -1261,9 +1282,6 @@ static int dnie_compute_signature(struct sc_card *card,
     apdu.resplen = sizeof(rbuf);
     apdu.le = outlen;
     
-    apdu.data = data;
-    apdu.lc = datalen;
-    apdu.datalen = datalen;
     /* tell card to compute hash */
     result = sc_transmit_apdu(card, &apdu);
     LOG_TEST_RET(card->ctx,result,"hash() failed");

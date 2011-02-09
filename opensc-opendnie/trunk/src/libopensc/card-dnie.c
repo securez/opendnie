@@ -1050,17 +1050,18 @@ static int dnie_set_security_env(struct sc_card *card,
     /* check for key references */
     if (env->flags & SC_SEC_ENV_KEY_REF_PRESENT) {
       sc_log(card->ctx,"checking key references");
-      if (env->key_ref_len!=1) result=SC_ERROR_NOT_SUPPORTED;
-      LOG_TEST_RET(card->ctx,result,"Invalid key id");
+      if (env->key_ref_len!=1) {
+         sc_log(card->ctx,"Null or invalid key ID reference");
+         result=SC_ERROR_INVALID_ARGUMENTS;
+      }
+      sc_log(card->ctx,"Using key reference '%s'",sc_dump_hex(env->key_ref, env->key_ref_len));
       /* ok: insert key reference into buffer */
-      /* see cwa14890-2 sect B.1 about Control Reference Template Tags */
-      if (env->operation == SC_SEC_OPERATION_AUTHENTICATE) 
-           *p++ = 0x83; /* CRT Tag for reference to public/symetric keys */
-      else *p++ = 0x84; /* CRT Tag tor reference to private keys */
       /* notice that DNIe uses same key reference for pubk and privk */
-      /* DNIe key ref are stored at 3f00 3f11 01XX, where xx=key_ref */
+
+      /* see cwa14890-2 sect B.1 about Control Reference Template Tags */
+      *p++ = 0x84; /* TODO: make proper detection of 0x83 /0x84 tag usage */
       *p++ = 0x02; /* len  */
-      *p++ = 0x01; /* file ID prefix */
+      *p++ = 0x01; /* key ID prefix (MSB byte of keyFile ID) */
       memcpy(p, env->key_ref, env->key_ref_len); /* in DNIe key_ref_len=1*/
       p += env->key_ref_len;
     }

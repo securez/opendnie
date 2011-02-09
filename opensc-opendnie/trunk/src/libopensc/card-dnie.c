@@ -1203,22 +1203,18 @@ static int dnie_compute_signature(struct sc_card *card,
                                    u8 * out, size_t outlen){
     int result=SC_SUCCESS;
     struct sc_apdu apdu;
-    u8 sbuf[SC_MAX_APDU_BUFFER_SIZE]; /* for compute partial hash data */
-    u8 rbuf[SC_MAX_APDU_BUFFER_SIZE]; /* to receive (unused) hash response */
-    u8 pkcs1_sig [] = { /* DSI pkcs#1 v2.x padding header */
-        0x00, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-    u8 sha1_digest[] = { /* sha1 ASN.1 oid sequence */
-        0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e,
-        0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14 };
-    int hash_done=0;
- 
+    u8 sbuf[SC_MAX_APDU_BUFFER_SIZE]; /* to compose digest+hash data */
+    u8 rbuf[SC_MAX_APDU_BUFFER_SIZE]; /* to receive sign response */
+
     /* some preliminar checks */
     if ((card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     /* OK: start working */
     LOG_FUNC_CALLED(card->ctx);
     /* more checks */
     if ( (data==NULL) || (out==NULL))
-      LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
+    if (datalen > SC_MAX_APDU_BUFFER_SIZE) /* should be 256 */
+        LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 
     /* ensure that secure channel is stablished */
     result=cwa_create_secure_channel(card,dnie_priv.provider,CWA_SM_WARM);
@@ -1230,88 +1226,30 @@ static int dnie_compute_signature(struct sc_card *card,
         LOG_TEST_RET(card->ctx,result,"User consent denied");
     }
 
-    /* phase 1: compute hash if required */
-    sc_log(card->ctx,"Compute hash if required");
+    /*
+    Seems that OpenSC already provides pkcs#1 v1.5 DigestInfo structure 
+    with pre-calculated hash. So no need to to any Hash calculation, 
+
+    So just extract 15+20 DigestInfo+Hash info from ASN.1 provided
+    data and feed them into sign() command
+    */
+    if (datalen!=256) {
+        sc_log(card->ctx,"Expected pkcs#1 v1.5 DigestInfo data");
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_WRONG_LENGTH);
+    }
     memset(sbuf,0,sizeof(sbuf));
-    /* decide which hash method to be used */
-    if ( (datalen==256) && (memcmp(data,pkcs1_sig,8)==0) ) {
-        /* assume pkcs1 padding scheme for 2048 bit keys */
-        sc_log(card->ctx,"Using partial hash scheme");
-        /* compose apdu for partial hash */
-        /* INS: 0x2A  PERFORM SECURITY OPERATION
-         * P1:  0x90  Resp: hash
-         * P2:  0xA0  Cmd: Partial hash provided */
-        sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x90, 0xA0);
-        /* according with cwa14890-2 sect 8.1 partial hash scheme allow
-         * inserting 2 values: pre-evaluated hash and new data to be hashed
-         * OpenSC does not handle last item, as hash is made externally
-         * and assume "intermediate hash" == "external hash"
-         * So compose buffer according standard
-         */
-         sbuf[0] = 0x90; /* tag for intermediate hash */
-         sbuf[1] = 0xff & datalen;
-         memcpy(&sbuf[2],data,datalen);
-         apdu.data = sbuf;
-         apdu.lc = datalen+2;
-         apdu.datalen = datalen+2;
-    } else if ((datalen==25) && (memcmp(data,sha1_digest,15)==0)) {
-        sc_log(card->ctx,"Using direct hash+sign scheme");
-        /* 15 bytes sha1 digest + 20 bytes sha1 hash */
-        goto no_hash_done;
-    } else { 
-        /* arriving here means assume plain text hash */
-        sc_log(card->ctx,"Using plaintext hash scheme");
-        /* Manual states that plaintext cannot be longer 
-        * than 40% of keylength */
-        if (datalen>100) {
-            sc_log(card->ctx,"Text too long for plaintext signing");
-            LOG_FUNC_RETURN(card->ctx,SC_ERROR_WRONG_LENGTH);
-        }
-        /* compose apdu for plain data hash */
-        /* INS: 0x2A  PERFORM SECURITY OPERATION
-        * P1:  0x90  Resp: hash
-        * P2:  0x80  Cmd: plain text provided */
-        sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x90, 0x80);
-        apdu.data = data;
-        apdu.lc = datalen;
-        apdu.datalen = datalen;
-    } 
+    memcpy(sbuf,data+221,35); /* extract digest+hash into buffer */
 
-    /* fill remaining apdu data */
-    apdu.resp = rbuf;
-    apdu.resplen = sizeof(rbuf);
-    apdu.le = outlen;
-    
-    /* tell card to compute hash */
-    result = sc_transmit_apdu(card, &apdu);
-    LOG_TEST_RET(card->ctx,result,"hash() failed");
-    /* check response */
-    result=sc_check_sw(card,apdu.sw1,apdu.sw2);
-    LOG_TEST_RET(card->ctx,result,"hash() response error");
-
-    /* ok: tell sign apdu to dont't provide any data for sign procedure*/
-    apdu.data=NULL;
-    apdu.datalen=0;
-    apdu.lc=0;
-    hash_done=1;
-
-no_hash_done:
-
-    /* phase 2: compute signature */
-
-    /* INS: 0x2A  PERFORM SECURITY OPERATION
+    /*INS: 0x2A  PERFORM SECURITY OPERATION
     * P1:  0x9E  Resp: Digital Signature
     * P2:  0x9A  Cmd: Input for Digital Signature */
-    sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0x2A, 0x9E, 0x9A);
+    sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x9E, 0x9A);
     apdu.resp = rbuf;
     apdu.resplen = sizeof(rbuf);
-    apdu.le = sizeof(rbuf);
-    if (!hash_done) {
-        apdu.cse=SC_APDU_CASE_4_SHORT;
-        apdu.data = data;
-        apdu.lc = datalen; 
-        apdu.datalen = datalen;
-    }
+    apdu.le = 256; /* signature response size */
+    apdu.data = sbuf;
+    apdu.lc = 35; /* 15 SHA1 DigestInfo + 20 SHA1 computed Hash */
+    apdu.datalen = sizeof(sbuf);
     /* tell card to compute signature */
     result = sc_transmit_apdu(card, &apdu);
     LOG_TEST_RET(card->ctx,result,"compute_signature() failed");
@@ -1322,7 +1260,6 @@ no_hash_done:
     /* ok: copy result from buffer */
     memcpy(out,apdu.resp,apdu.resplen);
     /* and return response length */
-    sc_log(card->ctx,"compute signature returns: '%d' bytes:\n%s\n====================================================================",apdu.resplen,sc_dump_hex(out,apdu.resplen));
     LOG_FUNC_RETURN(card->ctx,apdu.resplen);
 }
 

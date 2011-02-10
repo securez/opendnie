@@ -164,6 +164,10 @@ static sc_card_driver_t dnie_driver  = {
 static int dnie_get_environment(sc_context_t *ctx,dnie_private_data_t *priv) {
     int i;
     scconf_block **blocks, *blk;
+    /* set default values */
+    priv->user_consent_app = USER_CONSENT_CMD;
+    priv->user_consent_enabled = 1;
+    /* look for sc block in opensc.conf */
     for (i = 0; ctx->conf_blocks[i]; i++) {
         blocks = scconf_find_blocks(ctx->conf, ctx->conf_blocks[i],"card_driver","dnie");
         if (!blocks) continue;
@@ -189,7 +193,7 @@ static int dnie_get_environment(sc_context_t *ctx,dnie_private_data_t *priv) {
  */
 static int ask_user_consent(sc_card_t *card) {
    if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
-   sc_log(card->ctx,,"Libassuan support is off. User Consent disabled");
+   sc_log(card->ctx,"Libassuan support is off. User Consent disabled");
    return SC_SUCCESS;
 }
 
@@ -1064,6 +1068,8 @@ static int dnie_set_security_env(struct sc_card *card,
       *p++ = 0x01; /* key ID prefix (MSB byte of keyFile ID) */
       memcpy(p, env->key_ref, env->key_ref_len); /* in DNIe key_ref_len=1*/
       p += env->key_ref_len;
+      /* store key reference into private data */
+      dnie_priv.rsa_key_ref= 0xff & env->key_ref[0];
     }
 
 #if 0

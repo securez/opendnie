@@ -1211,6 +1211,7 @@ static int dnie_compute_signature(struct sc_card *card,
     int result=SC_SUCCESS;
     struct sc_apdu apdu;
     u8 sbuf[SC_MAX_APDU_BUFFER_SIZE]; /* to compose digest+hash data */
+    size_t sbuflen=0;
     u8 rbuf[SC_MAX_APDU_BUFFER_SIZE]; /* to receive sign response */
 
     /* some preliminar checks */
@@ -1240,12 +1241,21 @@ static int dnie_compute_signature(struct sc_card *card,
     So just extract 15+20 DigestInfo+Hash info from ASN.1 provided
     data and feed them into sign() command
     */
+    sc_log(card->ctx,"Compute signature len: '%d' bytes:\n%s\n============================================================",datalen,sc_dump_hex(data,datalen));
     if (datalen!=256) {
         sc_log(card->ctx,"Expected pkcs#1 v1.5 DigestInfo data");
         LOG_FUNC_RETURN(card->ctx,SC_ERROR_WRONG_LENGTH);
     }
-    memset(sbuf,0,sizeof(sbuf));
-    memcpy(sbuf,data+221,35); /* extract digest+hash into buffer */
+
+    /* try to strip pkcs1 padding */
+    sbuflen=sizeof(sbuf);
+    memset(sbuf,0,sbuflen);
+    result=sc_pkcs1_strip_01_padding(data,datalen,sbuf,&sbuflen);
+    if (result!=SC_SUCCESS) {
+        sc_log(card->ctx,"Provided data is not pkcs#1 padded");
+        /* TODO: study what to do on plain data */
+        LOG_FUNC_RETURN(card->ctx,SC_ERROR_WRONG_PADDING);
+    }
 
     /*INS: 0x2A  PERFORM SECURITY OPERATION
     * P1:  0x9E  Resp: Digital Signature
@@ -1255,7 +1265,7 @@ static int dnie_compute_signature(struct sc_card *card,
     apdu.resplen = sizeof(rbuf);
     apdu.le = 256; /* signature response size */
     apdu.data = sbuf;
-    apdu.lc = 35; /* 15 SHA1 DigestInfo + 20 SHA1 computed Hash */
+    apdu.lc = sbuflen; /* 15 SHA1 DigestInfo + 20 SHA1 computed Hash */
     apdu.datalen = sizeof(sbuf);
     /* tell card to compute signature */
     result = sc_transmit_apdu(card, &apdu);

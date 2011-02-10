@@ -293,9 +293,10 @@ app default {
 		# the normal pkcs15 processing.
 		# Some cards (like esteid and pteid) work in emu-only mode,
 		# and do not depend on this option.
+		# DNIe requires it
 		#
 		# Default: no
-		# try_emulation_first = yes;
+		try_emulation_first = yes;
 		
 		# Enable builtin emulators.
 		# Default: yes

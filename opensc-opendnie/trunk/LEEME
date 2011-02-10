@@ -129,12 +129,12 @@ el driver DNIe está integrado dentro de /usr/lib/libopensc.so
 módulo pkcs#11 en Firefox/Mozilla, etc siguiendo los procedimientos
 habituales descritos en la Web http://www.dnielectronico.es
 
-7- Nota sobre "pinentry"
+7- Modificaciones al fichero de configuracion /etc/opensc.conf
 
-En función de la distribución de Linux, es posible que la aplicación
-"/usr/bin/pinentry" no esté instalada o tenga distinto nombre
-Para obviar este problema, será necesario editar el fichero de
-configuración /etc/opensc.conf.
+7.1 - En función de la distribución de Linux, es posible que la 
+aplicación "/usr/bin/pinentry" no esté instalada o tenga distinto 
+nombre Para obviar este problema, será necesario editar el fichero 
+de configuración /etc/opensc.conf.
 
 Para ello se busca y edita la entrada:
 ....
@@ -148,3 +148,44 @@ Para ello se busca y edita la entrada:
 Se descomenta dicha entrada, y se ajusta el valor de user_consent_app al
 correspondiente a nuestro sistema
 
+7.2 - El uso de un sistema de Secure Messaging por parte del DNI
+electrónico, impide el acceso concurrente de dos aplicaciones a la
+tarjeta. 
+Del mismo modo, y en el caso de que user_consent_enabled esté
+activado, hay que deshabilitar el soporte de pinpad
+
+Por ello hay que configurar la entrada asociada a la 
+configuracion de pcsc-lite como sigue:
+
+....
+    reader_driver pcsc {
+        ....
+        # Connect to reader in exclusive mode?
+        # Default: false
+        connect_exclusive = true;
+        .....
+        # Enable pinpad if detected (PC/SC v2.0.2 Part 10)
+        # Default: true
+        enable_pinpad = false;
+        .....
+     }
+....
+
+7.3 - Por último hay que habilitar la capa de emulación PKCS#15 de
+manera que se ejecute _antes_ de proseguir la ejecución normal
+de las aplicaciones:
+
+.........
+    # PKCS #15
+    framework pkcs15 {
+    ....
+        # Prefer pkcs15 emulation code before
+        # the normal pkcs15 processing.
+        # Some cards (like esteid and pteid) work in emu-only mode,
+        # and do not depend on this option.
+        #
+        # Default: no
+        try_emulation_first = yes;
+    ....
+    }
+........

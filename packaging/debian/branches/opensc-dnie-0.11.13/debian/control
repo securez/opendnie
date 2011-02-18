@@ -2,32 +2,32 @@ Source: opensc-dnie
 Priority: extra
 Section: utils
 Maintainer: Enrique Hernández Bello <quique@osl.ull.es>
-Build-Depends: debhelper (>= 7.0.50), libltdl3-dev, libssl-dev (>= 0.9.7d-3), libpcsclite-dev (>= 1.2.9-beta1), libassuan-dev (>= 0.6.4-2), libopenct1-dev, libxt-dev, flex, pkg-config, automake, autoconf2.64, libtool
+Build-Depends: debhelper (>= 7.0.50), libltdl3-dev, libssl-dev (>= 0.9.7d-3), libpcsclite-dev (>= 1.2.9-beta1), libassuan-dev (>= 0.6.4-2), libopenct1-dev, libxt-dev, flex, pkg-config, automake, autoconf2.64, libtool, xsltproc, docbook-xsl
 Standards-Version: 3.9.1
 Homepage: http://forja.cenatic.es/projects/opendnie/
 Vcs-Svn: https://svn.forge.morfeo-project.org/opendnie/packaging/debian/
 Vcs-Browser: http://forja.cenatic.es/plugins/scmsvn/viewcvs.php/packaging/debian/?root=opendnie
 
-#Package: opensc
-#Section: utils
-#Architecture: any
-#Depends: ${shlibs:Depends}, ${misc:Depends}
-#Description: Smart card utilities with support for PKCS#15 compatible cards
-# OpenSC provides a set of libraries and utilities to access smart
-# cards.  It mainly focuses on cards that support cryptographic
-# operations. It facilitates their use in security applications such as
-# mail encryption, authentication, and digital signature. OpenSC
-# implements the PKCS#11 API. Applications supporting this API, such as
-# Iceweasel and Icedove, can use it. OpenSC implements the PKCS#15
-# standard and aims to be compatible with all software that does so as
-# well.
-# .
-# Before purchasing any cards, please read carefully documentation in
-# /usr/share/doc/opensc/html/wiki/index.html - only some cards are
-# supported. Not only does card type matters, but also card version,
-# card OS version and preloaded applet. Only a subset of possible
-# operations may be supported for your card. Card initialization may
-# require third party proprietary software.
+Package: opensc
+Section: utils
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Smart card utilities with support for PKCS#15 compatible cards
+ OpenSC provides a set of libraries and utilities to access smart
+ cards.  It mainly focuses on cards that support cryptographic
+ operations. It facilitates their use in security applications such as
+ mail encryption, authentication, and digital signature. OpenSC
+ implements the PKCS#11 API. Applications supporting this API, such as
+ Iceweasel and Icedove, can use it. OpenSC implements the PKCS#15
+ standard and aims to be compatible with all software that does so as
+ well.
+ .
+ Before purchasing any cards, please read carefully documentation in
+ /usr/share/doc/opensc/html/wiki/index.html - only some cards are
+ supported. Not only does card type matters, but also card version,
+ card OS version and preloaded applet. Only a subset of possible
+ operations may be supported for your card. Card initialization may
+ require third party proprietary software.
 
 Package: libopensc2-dev
 Section: libdevel
@@ -84,17 +84,17 @@ Description: Debugging symbols for libopensc2
  .
  Card initialization can be performed by utilities in the opensc package.
 
-#Package: mozilla-opensc
-#Section: web
-#Architecture: any
-#Depends: ${shlibs:Depends}, ${misc:Depends}
-#Recommends: pinentry-gtk2 | pinentry-x11
-#Replaces: libopensc-openssl (<< 0.9.4-6)
-#Description: Mozilla plugin for authentication using OpenSC
-# A plugin for mozilla that allows S/MIME and SSL authentication using
-# OpenSC.
-# .
-# Card initialization can be performed by utilities in the opensc package. 
+Package: mozilla-opensc
+Section: web
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: pinentry-gtk2 | pinentry-x11
+Replaces: libopensc-openssl (<< 0.9.4-6)
+Description: Mozilla plugin for authentication using OpenSC
+ A plugin for mozilla that allows S/MIME and SSL authentication using
+ OpenSC.
+ .
+ Card initialization can be performed by utilities in the opensc package. 
 
 Package: dnie-support
 Section: misc

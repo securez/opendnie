@@ -58,7 +58,11 @@ extern cwa_provider_t *dnie_get_cwa_provider(sc_card_t *card);
 #define DNIE_MF_NAME "Master.File"
 
 /* default user consent program (if required) */
+#ifdef _WIN32
+#define USER_CONSENT_CMD "C:\\Program Files\\GNU\\GnuPG\\pinentry.exe"
+#else
 #define USER_CONSENT_CMD "/usr/bin/pinentry"
+#endif
 
 /* Undeclared dnie APDU responses in iso7816.c */
 static struct sc_card_error dnie_errors[] = {

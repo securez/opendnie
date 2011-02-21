@@ -70,7 +70,6 @@ En sistemas Fedora, RedHat, Mandriva o CentOS
 * libtool
 * libtool-ltdl-devel
 * libccid 
-* pinentry + pinentry-gtk / pinentry-qt
 
 En sistemas Debian o derivados como Ubuntu
 
@@ -87,7 +86,12 @@ En sistemas Debian o derivados como Ubuntu
 * libtool
 * libltdl-dev
 * libccid
-* pinentry-qt4 o pinentry-gtk2
+
+los paquetes -dev / -devel son necesarios para compilar e instalar
+la aplicación. Los otros son necesarios para la ejecución
+
+Además para su ejecución, deberá tener instalada la aplicación 
+"pinentry" o alguna de sus versiones "pinentry-gtk", "pinentry-qt"...
 
 1 - Crear un directorio de trabajo
 
@@ -139,8 +143,10 @@ Para ello se busca y edita la entrada:
         #       user_consent_enabled = true;
         #       # Program to be used for ask confirmation (default: pinentry)
         #       user_consent_app = /usr/bin/pinentry;
+        #       user_consent_app = c:\Program Files\GNU\GnuPG\pinentry.exe;
         # }
 ....
+
 Se descomenta dicha entrada, y se ajusta el valor de user_consent_app al
 correspondiente a nuestro sistema
 

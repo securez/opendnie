@@ -116,6 +116,7 @@ app default {
         #       user_consent_enabled = true;
         #       # Program to be used for ask confirmation (default: pinentry)
         #       user_consent_app = /usr/bin/pinentry;
+        #       user_consent_app = c:\Program Files\GNU\GnuPG\pinentry.exe;
         # }
         #
 	# Force using specific card driver

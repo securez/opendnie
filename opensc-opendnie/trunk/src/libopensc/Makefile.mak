@@ -23,11 +23,13 @@ OBJECTS			= \
 	card-rtecp.obj card-westcos.obj card-myeid.obj card-ias.obj \
 	card-javacard.obj card-itacns.obj card-authentic.obj \
 	card-iasecc.obj iasecc-sdo.obj \
+	cwa14890.obj cwa-dnie.obj card-dnie.obj \
 	\
 	pkcs15-openpgp.obj pkcs15-infocamere.obj pkcs15-starcert.obj \
 	pkcs15-tcos.obj pkcs15-esteid.obj pkcs15-postecert.obj pkcs15-gemsafeGPK.obj \
 	pkcs15-actalis.obj pkcs15-atrust-acos.obj pkcs15-tccardos.obj pkcs15-piv.obj \
 	pkcs15-esinit.obj pkcs15-westcos.obj pkcs15-pteid.obj pkcs15-oberthur.obj \
+	pkcs15-dnie.obj \
 	pkcs15-itacns.obj \
 	compression.obj p15card-helper.obj \
 	$(TOPDIR)\win32\versioninfo.res

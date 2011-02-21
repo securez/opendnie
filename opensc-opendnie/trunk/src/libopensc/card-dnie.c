@@ -35,18 +35,6 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 
-#ifdef HAVE_LIBASSUAN
-# include <assuan.h>
-/* check for libassuan version */
-# ifndef ASSUAN_No_Error
-#  define HAVE_LIBASSUAN_2
-#  define _gpg_error(t) gpg_strerror((t))
-# else
-#  define HAVE_LIBASSUAN_1
-#  define _gpg_error(t) assuan_strerror( (AssuanError) (t) )
-# endif
-#endif
-
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
@@ -183,34 +171,30 @@ static int dnie_get_environment(sc_context_t *ctx,dnie_private_data_t *priv) {
     return SC_SUCCESS;
 }
 
-#ifndef HAVE_LIBASSUAN
-
-/**
- * Stripped down function for user consent
- * Will be called instead of real if opensc is compiled without libassuan
- *@param card pointer to sc_card structure
- *@return SC_SUCCESS if ok, error code if bad parameters
- */
-static int ask_user_consent(sc_card_t *card) {
-   if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
-   sc_log(card->ctx,"Libassuan support is off. User Consent disabled");
-   return SC_SUCCESS;
-}
-
-#else
+char *user_consent_msgs[] = {
+    "SETTITLE Signature requested\n",
+    "SETDESC Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n",
+    "CONFIRM\n",
+    "BYE\n",
+    NULL
+};
 
 /**
  * Ask for user consent on signature operation
- * Requires libassuan to compile
  *@param card pointer to sc_card structure
  *@return SC_SUCCESS if ok, else error code
  */
 static int ask_user_consent(sc_card_t *card) {
-    int res;
-    struct stat buf;
-    const char *argv[3];
-    assuan_fd_t noclosefds[2];
-    assuan_context_t ctx; 
+    int res=SC_ERROR_INTERNAL; /* by default error :-( */
+    int srv_send[2]; /* to send data from server to client */
+    int srv_recv[2]; /* to receive data from client to server */
+    pid_t pid;       /* child process id */
+    char buf[1024];  /* to store client responses */
+    char *msg=NULL;  /* to makr errors */
+    int n=0;         /* to iterate on to-be-sent messages */
+    FILE *fin,*fout; /* to handle pipes as streams */
+    struct stat st_file; /* to verify that executable exists */
+
     if ( (card==NULL) || (card->ctx==NULL)) return SC_ERROR_INVALID_ARGUMENTS;
     LOG_FUNC_CALLED(card->ctx);
     
@@ -219,64 +203,72 @@ static int ask_user_consent(sc_card_t *card) {
         sc_log(card->ctx,"User Consent is disabled in configuration file");
         return SC_SUCCESS;
     }
-    res=stat(dnie_priv.user_consent_app,&buf);
+    res=stat(dnie_priv.user_consent_app,&st_file);
     if (res!=0) {
       /* TODO: check that pinentry file is executable */
       sc_log(card->ctx,"Invalid pinentry application: %s\n",dnie_priv.user_consent_app);
        LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
     }
-    argv[0]=dnie_priv.user_consent_app;
-    argv[1]=NULL;
-    argv[2]=NULL;
-    noclosefds[0]= fileno(stderr);
-    noclosefds[1]= ASSUAN_INVALID_FD;
-#ifdef HAVE_LIBASSUAN_2
-    res = assuan_new(&ctx);
-    if (res!=0) {
-      sc_log(card->ctx,"Can't create the User Consent environment: %s\n",_gpg_error(res));
-      LOG_FUNC_RETURN(card->ctx,SC_ERROR_INTERNAL);
-    }
-    res = assuan_pipe_connect(ctx,dnie_priv.user_consent_app,argv,noclosefds,NULL,NULL,0);
-#else 
-    res = assuan_pipe_connect(&ctx,dnie_priv.user_consent_app,argv,0);
-#endif
-    if (res!=0) {
-        sc_log(card->ctx,"Can't connect to the User Consent module: %s\n",_gpg_error(res));
-        res=SC_ERROR_INVALID_ARGUMENTS; /* invalid or not available pinentry */
-        goto exit;
-    }
-    res = assuan_transact(
-       ctx, 
-       "SETDESC Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?", 
-       NULL, NULL, NULL, NULL, NULL, NULL);
-    if (res!=0) {
-       sc_log(card->ctx,"SETDESC: %s\n", _gpg_error(res));
-       res=SC_ERROR_CARD_CMD_FAILED; /* perhaps should use a better errcode */
-       goto exit;
-    }
-    res = assuan_transact(ctx,"CONFIRM",NULL,NULL,NULL,NULL,NULL,NULL);
-#ifdef HAVE_LIBASSUAN_1
-    if (res == ASSUAN_Canceled) {
-       sc_log(card->ctx,"CONFIRM: signature cancelled by user");
-       res= SC_ERROR_NOT_ALLOWED;
-       goto exit;
-    }
-#endif
-    if (res) {
-       sc_log(card->ctx,"SETERROR: %s\n",_gpg_error(res));
-       res=SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
-     } else {
-       res=SC_SUCCESS;
-     }
-exit:
-#ifdef HAVE_LIBASSUAN_2
-    assuan_release(ctx);
-#else
-    assuan_disconnect(ctx);
-#endif
+
+    /* just a simple bidirectional pipe+fork+exec implementation */
+    /* In a pipe, xx[0] is for reading, xx[1] is for writing */
+    if (pipe(srv_send) < 0) { msg="pipe(srv_send)"; goto do_error; }
+    if (pipe(srv_recv) < 0) { msg="pipe(srv_recv)"; goto do_error; }
+    pid=fork();
+    switch(pid) {
+        case -1: /* error  */
+            msg="fork()";
+            goto do_error;
+        case 0:  /* child  */
+            /* make our pipes, our new stdin & stderr, closing older ones */
+            dup2(srv_send[0],STDIN_FILENO); /* map srv send for input */
+            dup2(srv_recv[1],STDOUT_FILENO);/* map srv_recv for output */
+            /* once dup2'd pipes are no longer needed on client; so close */
+            close(srv_send[0]);
+            close(srv_send[1]);
+            close(srv_recv[0]);
+            close(srv_recv[1]);
+            /* call exec() with proper user_consent_app from configuration */
+            execlp(
+                dnie_priv.user_consent_app, 
+                dnie_priv.user_consent_app,
+                (char *)NULL
+            ); /* if ok should never return */
+            msg="execlp() error"; /* exec() failed */
+            goto do_error;
+        default: /* parent */
+           /* Close the pipe ends that the child uses to read from / write to 
+            * so when we close the others, an EOF will be transmitted properly.
+            */
+            close(srv_send[0]);
+            close(srv_recv[1]);
+            /* use iostreams to take care on newlines and text based data */
+            fin=fdopen(srv_recv[0],"r");
+            if (fin==NULL) { msg="fdopen(in)"; goto do_error; }
+            fout=fdopen(srv_send[1],"w");
+            if (fout==NULL) { msg="fdopen(out)"; goto do_error; }
+            /* read and ignore first line */
+            fflush(stdin);
+            for (n=0; user_consent_msgs[n] != NULL ; n++) {
+                /* send message */
+                fputs(user_consent_msgs[n],fout);
+                fflush(fout);
+                /* get response */
+                memset(buf,0,sizeof(buf));
+                fgets(buf,sizeof(buf)-1,fin);
+                if (strstr(buf,"OK")==NULL) {msg="fail/cancel";goto do_error;}
+             }
+             /* close out channel to force client receive EOF and also die */
+             fclose(fout);
+             fclose(fin);
+    } /* switch */
+    /* arriving here means signature has been accepted by user */
+    res=SC_SUCCESS;
+    msg=NULL;
+do_error:
+    if (msg!=NULL) sc_log(card->ctx,"%s",msg);
     LOG_FUNC_RETURN(card->ctx,res);
 }
-#endif
 
 /************************** cardctl defined operations *******************/
 

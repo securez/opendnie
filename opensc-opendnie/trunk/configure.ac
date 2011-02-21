@@ -478,14 +478,6 @@ if test "${enable_pcsc}" = "yes"; then
 	AC_DEFINE([ENABLE_PCSC], [1], [Define if PC/SC is to be enabled])
 fi
 
-dnl AM_PATH_LIBASSUAN([MINIMUM-VERSION,
-dnl                   [ACTION-IF-FOUND [, ACTION-IF-NOT-FOUND ]]])
-dnl Test for libassuan and define LIBASSUAN_CFLAGS and LIBASSUAN_LIBS
-AM_PATH_LIBASSUAN(
-        1.0.0,
-        [AC_DEFINE([HAVE_LIBASSUAN],[1],[Define if you have ASSUAN libraries and header files])]
-)
-
 if test "${enable_man}" = "detect"; then
 	if test "${WIN32}" = "yes"; then
 		enable_man="no"
@@ -649,8 +641,6 @@ OPENSSL_LIBS:            ${OPENSSL_LIBS}
 OPENCT_CFLAGS:           ${OPENCT_CFLAGS}
 OPENCT_LIBS:             ${OPENCT_LIBS}
 PCSC_CFLAGS:             ${PCSC_CFLAGS}
-LIBASSUAN_CFLAGS:        ${LIBASSUAN_CFLAGS}
-LIBASSUAN_LIBS:          ${LIBASSUAN_LIBS}
 
 EOF
 

@@ -70,8 +70,6 @@ En sistemas Fedora, RedHat, Mandriva o CentOS
 * libtool
 * libtool-ltdl-devel
 * libccid 
-* libassuan
-* libassuan-devel
 * pinentry + pinentry-gtk / pinentry-qt
 
 En sistemas Debian o derivados como Ubuntu
@@ -89,8 +87,6 @@ En sistemas Debian o derivados como Ubuntu
 * libtool
 * libltdl-dev
 * libccid
-* libassuan
-* libassuan-dev
 * pinentry-qt4 o pinentry-gtk2
 
 1 - Crear un directorio de trabajo

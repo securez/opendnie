@@ -364,6 +364,7 @@ static void sc_detect_apdu_cse(const sc_card_t *card, sc_apdu_t *apdu)
 	}
 }
 
+
 /** Sends a single APDU to the card reader and calls 
  *  GET RESPONSE to get the return data if necessary.
  *  @param  card  sc_card_t object for the smartcard
@@ -376,10 +377,21 @@ static int do_single_transmit(sc_card_t *card, sc_apdu_t *apdu)
 	size_t       olen  = apdu->resplen;
 	sc_context_t *ctx  = card->ctx;
 
+        /* XXX: insert secure messaging here (?), i.e. something like
+         if (card->sm_ctx->use_sm != 0) {
+                 r = card->ops->sm_transform(...);
+                 if (r != SC_SUCCESS)
+                         ...
+                 r = sc_check_apdu(...);
+                 if (r != SC_SUCCESS)
+                         ...
+        }
+        */
+
 	/* send APDU to the reader driver */
 	if (card->reader->ops->transmit == NULL)
 		return SC_ERROR_NOT_SUPPORTED;
-        r = card->reader->ops->transmit(card->reader,apdu);
+        r = card->reader->ops->transmit(card->reader, apdu);
 	if (r != 0) {
 		sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "unable to transmit APDU");
 		return r;
@@ -404,7 +416,7 @@ static int do_single_transmit(sc_card_t *card, sc_apdu_t *apdu)
 			if (card->wait_resend_apdu != 0)
 				msleep(card->wait_resend_apdu);
 			/* re-transmit the APDU with new Le length */
-                        r= card->reader->ops->transmit(card->reader,apdu);
+                        r = card->reader->ops->transmit(card->reader, apdu);
 			if (r != SC_SUCCESS) {
 				sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "unable to transmit APDU");
 				return r;

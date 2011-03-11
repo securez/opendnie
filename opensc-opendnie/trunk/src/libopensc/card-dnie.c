@@ -826,12 +826,51 @@ static int dnie_read_binary(struct sc_card *card,
 }
 
 /**
+ * Invalidate pathfile cache
+ *@param card pointer to card structure
+ */
+static void dnie_invalidate_path(sc_card_t *card) {
+	memset(&card->cache, 0, sizeof(card->cache));
+        card->cache.valid = 0;
+}
+
+/**
+ * tracks current path to avoid extra filesystem operation
+ *
+ * Gets
+ *@param card card pointer structure
+ *@param file current DF to be cached
+ */
+static int dnie_cache_path(sc_card_t *card, struct sc_file *file)
+{
+	u8 path[] = {0x00,0x00};
+	LOG_FUNC_CALLED(card->ctx);
+        path[0]=(u8) (0xff & (file->id >>8));
+        path[1]=(u8) (0xff & (file->id >>0));
+        if (path[0]==0x3F && path[1]==0x00) {
+        	/* if absolute path, just copy data */
+		dnie_invalidate_path(card);
+		card->cache.current_path.value[0]=path[0];
+		card->cache.current_path.value[1]=path[1];
+		card->cache.current_path.len=2;
+	} else {
+		/* if relative path add to current */
+		int curlen=card->cache.current_path.len;
+		card->cache.current_path.value[curlen+0] =path[0];
+		card->cache.current_path.value[curlen+1] =path[1];
+		card->cache.current_path.len += 2;
+	}
+	card->cache.current_path.type=SC_PATH_TYPE_PATH;
+        card->cache.valid=1;
+	LOG_FUNC_RETURN(card->ctx,SC_SUCCESS);
+}
+
+/**
  * Check proposed path against current (cached) one
  *
  * This code compares proposed path to stored one, evaluating required path
  * ID to be selected if finally select_file() is required,
  *
- * Code mostly copied from card-flex.c
  *@param card card pointer structure
  *@param pathptr pointer to proposed path
  *@param pathlen len of proposed path
@@ -841,83 +880,21 @@ static int dnie_read_binary(struct sc_card *card,
 static int dnie_check_path(sc_card_t *card, u8 **pathptr, size_t *pathlen,
                       int need_info)
 {
-        u8 *curptr = card->cache.current_path.value;
-        u8 *ptr = *pathptr;
-        size_t curlen = card->cache.current_path.len;
+        u8 *cacheptr = card->cache.current_path.value;
+        size_t cachelen = card->cache.current_path.len;
         size_t len = *pathlen;
-        if (card->cache.valid==0) return 0; /* no valid cache */
-        if (curlen < 2)           return 0; /* no data cached */
-        if (len < 2)              return 0; /* no proposed path */
-        if (memcmp(ptr, "\x3F\x00", 2) != 0) {
-                /* Skip the MF id */
-                curptr += 2;
-                curlen -= 2;
-        }
-        if (len == curlen && memcmp(ptr, curptr, len) == 0) {
-		/* path matches; check for need of process_fci() */
-                if (need_info) return 0; 
-                *pathptr = ptr + len;
-                *pathlen = 0;
-                return 1; 
-        }
-        if (curlen < len && memcmp(ptr, curptr, curlen) == 0) {
-                /* path startswith current path: optimize path*/
-                *pathptr = ptr + curlen;
-                *pathlen = len - curlen;
-                return 1;
-        }
-        return 0; /* no match */
-}
-
-/**
- * tracks current path to avoid extra filesystem operation
- *
- * Code mostly copied from card-flex.c
- *@param card card pointer structure
- *@param path current path to be cached
- */
-static void dnie_cache_path(sc_card_t *card, const struct sc_path *path)
-{
-        sc_path_t *curpath = &card->cache.current_path;
-
-        switch (path->type) {
-        case SC_PATH_TYPE_FILE_ID:
-                if (path->value[0] == 0x3F && path->value[1] == 0x00)
-                        sc_format_path("3F00", curpath);
-                else {
-                        if (curpath->len + 2 > SC_MAX_PATH_SIZE) {
-                                curpath->len = 0;
-                                return;
-                        }
-                        memcpy(curpath->value + curpath->len, path->value, 2);
-                        curpath->len += 2;
-                }
-                break;
-        case SC_PATH_TYPE_PATH:
-                curpath->len = 0;
-                if (path->value[0] != 0x3F || path->value[1] != 0)
-                        sc_format_path("3F00", curpath);
-                if (curpath->len + path->len > SC_MAX_PATH_SIZE) {
-                        curpath->len = 0;
-                        return;
-                }
-                memcpy(curpath->value + curpath->len, path->value, path->len);
-                curpath->len += path->len;
-                break;
-        case SC_PATH_TYPE_DF_NAME:
-                /* All bets are off */
-                curpath->len = 0;
-                break;
-        }
-}
-
-/**
- * Invalidate pathfile cache
- *@param card pointer to card structure
- */
-static void dnie_invalidate_path(sc_card_t *card) {
-	memset(&card->cache, 0, sizeof(card->cache));
-        card->cache.valid = 0;
+        u8 *ptr = *pathptr;
+        int hit=1;
+        if (card->cache.valid==0) hit = 0; /* no valid cache */
+        if (cachelen < 2)         hit = 0; /* no data cached */
+        if (len < 2)              hit = 0; /* no proposed path */
+        if (len<cachelen)         hit = 0; /* length missmatch */
+        if (memcmp(ptr,cacheptr,cachelen)!=0 ) hit = 0; /* path missmatch */
+        if (!hit) return 0;
+	*pathptr = ptr + cachelen;
+        *pathlen = len - cachelen;
+	if (need_info) return 0;
+	return 1;
 }
 
 /* select_file: Does the equivalent of SELECT FILE command specified
@@ -943,11 +920,7 @@ static int dnie_select_file(struct sc_card *card,
 		return SC_ERROR_INVALID_ARGUMENTS;
 	sc_context_t *ctx = card->ctx;
 
-	res = sc_path_print(pbuf, sizeof(pbuf), &card->cache.current_path);
-        if (res != SC_SUCCESS)
-                pbuf[0] = '\0';
-	/* LOG_FUNC_CALLED(ctx); */
-	sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "called, cached path=%s\n", pbuf);
+	LOG_FUNC_CALLED(ctx);
 
 	memcpy(path, in_path->value, in_path->len);
 	pathlen = in_path->len;
@@ -990,21 +963,30 @@ static int dnie_select_file(struct sc_card *card,
 	case SC_PATH_TYPE_PATH:
 		if ((pathlen & 1) != 0) /* not divisible by 2 */
 			LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-		sc_log(ctx, "select_file(PATH): %s",
-		       sc_dump_hex(path, pathlen));
 
-                /* check pathfile cache */
+                /* evaluate current patch from cache */
+		res = sc_path_print(pbuf, sizeof(pbuf), &card->cache.current_path);
+        	if (res != SC_SUCCESS) pbuf[0] = '\0';
+		sc_log(ctx, "select_file(PATH): requested:%s cached:%s",
+		       sc_dump_hex(path, pathlen),pbuf);
+
+                /* check pathfile cache 
+		* cached returns true if:
+		* - path matches cache
+		* - path starts with cache
+		* remember that only DF's are cached
+		*/
 		cached = dnie_check_path(card, &path, &pathlen, file_out != NULL);
                 if (pathlen == 0) {
-			/* cached */
-			sc_log(ctx,"PathFile Cache hit");
+			/* request to select_file on current df */
+			sc_log(ctx,"Cache hit: already on cached DF");
 			LOG_FUNC_RETURN(ctx,SC_SUCCESS);
 		}
 
 		/* convert to SC_PATH_TYPE_FILE_ID */
 		while (pathlen > 0) {
 			sc_path_t tmpp;
-			if ( !cached && memcmp(path, "\x3F\x00", 2) == 0) {
+			if ( memcmp(path, "\x3F\x00", 2) == 0) {
 				/* if MF, use their name as path */
 				tmpp.type = SC_PATH_TYPE_DF_NAME;
 				strcpy((char *)tmpp.value, DNIE_MF_NAME);
@@ -1058,7 +1040,6 @@ static int dnie_select_file(struct sc_card *card,
 	if (res!=SC_SUCCESS) 
 		dnie_invalidate_path(card); /* failed: invalidate cache */
 	LOG_TEST_RET(ctx, res, "SelectFile() APDU transmit failed");
-        dnie_cache_path(card,in_path); /* success: update path cache */
 	if (file_out == NULL) {
 		if (apdu.sw1 == 0x61)
 			SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_VERBOSE, 0);
@@ -1085,6 +1066,8 @@ static int dnie_select_file(struct sc_card *card,
 	}
 	res = card->ops->process_fci(card, file, apdu.resp + 2, apdu.resp[1]);
 	*file_out = file;
+        /* if file is a DF, store it into DF cache */
+	if (file->type==SC_FILE_TYPE_DF) dnie_cache_path(card,file);
 	/* as last step clear data cache and return */
 	dnie_clear_cache();
 	LOG_FUNC_RETURN(ctx, res);

@@ -35,6 +35,7 @@
 
 #include "pkcs11/pkcs11.h"
 #include "pkcs11/pkcs11-opensc.h"
+#include "pkcs11/sc-pkcs11.h"
 #include "util.h"
 
 extern void *C_LoadModule(const char *name, CK_FUNCTION_LIST_PTR_PTR);
@@ -163,7 +164,8 @@ static const char *	app_name = "pkcs11-tool"; /* for utils.c */
 static int		verbose = 0;
 static const char *	opt_input = NULL;
 static const char *	opt_output = NULL;
-static const char *	opt_module = NULL;
+/* static const char *	opt_module = NULL; */
+static const char *	opt_module = PKCS11_DEFAULT_MODULE_NAME;
 static int		opt_slot_set = 0;
 static CK_SLOT_ID	opt_slot = 0;
 static const char *	opt_slot_label = NULL;

@@ -1861,8 +1861,12 @@ static int dnie_pin_cmd(struct sc_card *card,
 		return SC_ERROR_INVALID_ARGUMENTS;
 	LOG_FUNC_CALLED(card->ctx);
 
-	/* some flags and settings from documentation */
-	data->flags &= ~SC_PIN_CMD_NEED_PADDING;	/* no pin padding */
+	/* 
+	* some flags and settings from documentation 
+	* No (easy) way to handle pinpad throught SM, so disable it
+	*/
+	data->flags &= ~SC_PIN_CMD_NEED_PADDING; /* no pin padding */
+	data->flags &= ~SC_PIN_CMD_USE_PINPAD;	 /* cannot handle pinpad */
 	data->apdu = &apdu;	/* prepare apdu struct */
 
 	/* ensure that card is in USER Lifecycle */
@@ -1875,15 +1879,6 @@ static int dnie_pin_cmd(struct sc_card *card,
 	/* ensure that secure channel is established from reset */
 	res = cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_COLD);
 	LOG_TEST_RET(card->ctx, res, "Establish SM failed");
-
-	/* what about pinpad support? */
-	/* NOTE: 
-	 * don't know how to handle pinpad throught SM channel.
-	 * as a temporary solution, mark use pinpad as an error 
-	 */
-	if (data->flags & SC_PIN_CMD_USE_PINPAD) {
-		LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_SUPPORTED);
-	}
 
 	/* only allow changes on CHV pin ) */
 	switch (data->pin_type) {

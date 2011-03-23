@@ -153,8 +153,8 @@ correspondiente a nuestro sistema
 7.2 - El uso de un sistema de Secure Messaging por parte del DNI
 electrónico, impide el acceso concurrente de dos aplicaciones a la
 tarjeta. 
-Del mismo modo, y en el caso de que user_consent_enabled esté
-activado, hay que deshabilitar el soporte de pinpad
+Del mismo modo dado que el sistema de SM obliga a enviar el pin
+desde el ordenador, hay que deshabilitar el soporte de pinpad
 
 Por ello hay que configurar la entrada asociada a la 
 configuracion de pcsc-lite como sigue:

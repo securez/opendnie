@@ -341,11 +341,11 @@ static char *findPattern(sc_card_t *card, u8 *pat, u8 *buf, size_t len)
 
 data_found:
 	/* assume length is less than 128 bytes, so is coded in 1 byte */
-	size = 0x000000ff & (int) *(from+7);
+	size = 0x000000ff & (int) *(from+6);
 	if ( size == 0 ) return NULL; /* empty data */
 	res = calloc( size+1, sizeof(char) );
 	if ( res == NULL) return NULL; /* calloc() error */
-	memcpy(res,from+8,size);
+	memcpy(res,from+7,size);
 	return res;
 }
 
@@ -1363,7 +1363,7 @@ static int dnie_set_security_env(struct sc_card *card,
 #if 0
 	/* seems that DNIe does not support file references; so comment */
 	/* revisited:
-	 * really DNIe uses file references as keu references. see above */
+	 * really DNIe uses file references as key references. see above */
 
 	/* check for file references */
 	if (env->flags & SC_SEC_ENV_FILE_REF_PRESENT) {

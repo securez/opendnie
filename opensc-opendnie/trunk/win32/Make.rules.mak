@@ -34,7 +34,7 @@ OPENSSL_LIB = C:\openssl\out32dll\libeay32.lib
 #OPENSSL_LIB = C:\openssl\lib\VC\static\libeay32MT.lib C:\openssl\lib\VC\static\ssleay32MT.lib user32.lib advapi32.lib
 !ENDIF
 
-PROGRAMS_OPENSSL = pkcs15-init.exe cryptoflex-tool.exe netkey-tool.exe piv-tool.exe westcos-tool.exe
+PROGRAMS_OPENSSL = pkcs15-init.exe cryptoflex-tool.exe netkey-tool.exe piv-tool.exe westcos-tool.exe dnie-tool.exe
 OPENSC_FEATURES = $(OPENSC_FEATURES) openssl
 !ENDIF
 

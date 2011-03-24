@@ -318,22 +318,104 @@ static int dnie_generate_key(sc_card_t * card, void *data)
 }
 
 /*
+ * Analyze a buffer looking for provided data pattern
+ * Assume that a TLV is found, evaluate length
+ * and return found value
+ *@param card pointer to card info data
+ *@param pat data pattern to find in buffer
+ *@param buf where to look for pattern
+ *@param len buffer length
+ *@return retrieved value or NULL if pattern not found
+ */
+static char *findPattern(sc_card_t *card, u8 *pat, u8 *buf, size_t len)
+{
+	char *res = NULL;
+	u8 *from = buf;
+	int size = 0;
+	/* Locate pattern. Assume pattern length=6 */
+	for ( from = buf; from < buf+len-6; from++) {
+		if (memcmp(from,pat,6) == 0 ) goto data_found;
+	}
+	/* arriving here means pattern not found */
+	return NULL;
+
+data_found:
+	/* assume length is less than 128 bytes, so is coded in 1 byte */
+	size = 0x000000ff & (int) *(from+7);
+	if ( size == 0 ) return NULL; /* empty data */
+	res = calloc( size+1, sizeof(char) );
+	if ( res == NULL) return NULL; /* calloc() error */
+	memcpy(res,from+8,size);
+	return res;
+}
+
+/*
  * Retrieve name, surname, and DNIe number
  * This is done by mean of reading and parsing CDF file
  * at address 3F0050156004
  * No need to enter pin nor use Secure Channel
- *@param card pointer to card info data (name,surname,number)
- *@param data where to store function results
+ *
+ * Notice that this is done by mean of a dirty trick: instead
+ * of parsing ASN1 data on EF(CDF), 
+ * we look for desired patterns in binary array
+ *
+ *@param card pointer to card info data 
+ *@param data where to store function results (name,surname,number)
  *@return SC_SUCCESS if ok, else error code
  */
 static int dnie_get_info(sc_card_t * card, char *data[])
 {
+	sc_file_t *file = NULL;
+        sc_path_t *path = NULL;
+        u8 *buffer = NULL;
+	size_t bufferlen = 0;
+	char *msg = NULL;
+	u8 SerialNumber [] = { 0x06, 0x03, 0x55, 0x04, 0x05, 0x13 };
+	u8 Name [] = { 0x06, 0x03, 0x55, 0x04, 0x04, 0x0C };
+	u8 GivenName [] = { 0x06, 0x03, 0x55, 0x04, 0x2A, 0x0C };
+
         if ((card == NULL) || (data == NULL))
                 return SC_ERROR_INVALID_ARGUMENTS;
-        int result = SC_ERROR_NOT_SUPPORTED;
+        int res = SC_ERROR_NOT_SUPPORTED;
         LOG_FUNC_CALLED(card->ctx);
-	/* TODO: write get_info() */
-        LOG_FUNC_RETURN(card->ctx, result);
+	/* read EF(CDF) at 3F0050156004 */
+	path = (sc_path_t *) calloc(1, sizeof(sc_path_t));
+	if (!path) {
+		msg = "Cannot allocate path data for EF(CDF) read";
+		res = SC_ERROR_OUT_OF_MEMORY;
+		goto get_info_end;
+	}
+	sc_format_path("3F0050156004", path);
+	res = dnie_read_file(card, path, &file, &buffer, &bufferlen);
+	if (res != SC_SUCCESS) {
+		msg = "Cannot read EF(CDF)";
+		goto get_info_end;
+	}
+	/* locate OID 2.5.4.5 (SerialNumber) - DNIe number*/
+	data[0]= findPattern(card,SerialNumber,buffer,bufferlen);
+	/* locate OID 2.5.4.4 (Name)         - Apellidos */
+	data[1]= findPattern(card,Name,buffer,bufferlen);
+	/* locate OID 2.5.4.42 (GivenName)   - Nombre */
+	data[2]= findPattern(card,GivenName,buffer,bufferlen);
+	if ( ! data[0] || !data[1] || !data[2] ) {
+		res = SC_ERROR_INVALID_DATA;
+		msg = "Cannot retrieve info from EF(CDF)";
+		goto get_info_end;
+        }
+	/* arriving here means ok */
+	res = SC_SUCCESS;
+	msg = NULL;
+get_info_end:
+	if (file) {
+		sc_file_free(file);
+		free(buffer);
+		file = NULL;
+		buffer = NULL;
+		bufferlen = 0;
+	}
+	if (msg)
+		sc_log(card->ctx,msg);
+        LOG_FUNC_RETURN(card->ctx, res);
 }
 
 /**

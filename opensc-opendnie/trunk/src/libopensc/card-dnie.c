@@ -303,6 +303,9 @@ static int ask_user_consent(sc_card_t * card)
  * Notice that write operations are not supported, so we can't use 
  * created keys to generate and store new certificates into the card.
  * TODO: copy code from card-jcop.c::jcop_generate_keys()
+ *@param card pointer to card info data
+ *@param data where to store function results
+ *@return SC_SUCCESS if ok, else error code
  */
 static int dnie_generate_key(sc_card_t * card, void *data)
 {
@@ -312,6 +315,25 @@ static int dnie_generate_key(sc_card_t * card, void *data)
 	LOG_FUNC_CALLED(card->ctx);
 	/* TODO: write dnie_generate_key() */
 	LOG_FUNC_RETURN(card->ctx, result);
+}
+
+/*
+ * Retrieve name, surname, and DNIe number
+ * This is done by mean of reading and parsing CDF file
+ * at address 3F0050156004
+ * No need to enter pin nor use Secure Channel
+ *@param card pointer to card info data (name,surname,number)
+ *@param data where to store function results
+ *@return SC_SUCCESS if ok, else error code
+ */
+static int dnie_get_info(sc_card_t * card, char *data[])
+{
+        if ((card == NULL) || (data == NULL))
+                return SC_ERROR_INVALID_ARGUMENTS;
+        int result = SC_ERROR_NOT_SUPPORTED;
+        LOG_FUNC_CALLED(card->ctx);
+	/* TODO: write get_info() */
+        LOG_FUNC_RETURN(card->ctx, result);
 }
 
 /**
@@ -1609,6 +1631,10 @@ static int dnie_card_ctl(struct sc_card *card,
 	case SC_CARDCTL_DNIE_GENERATE_KEY:
 		/* some reports says that this card supports genkey */
 		result = dnie_generate_key(card, data);
+		LOG_FUNC_RETURN(card->ctx, result);
+	case SC_CARDCTL_DNIE_GET_INFO:
+		/* retrieve name, surname and eid number */
+		result = dnie_get_info(card, data);
 		LOG_FUNC_RETURN(card->ctx, result);
 	default:
 		/* default: unsupported function */

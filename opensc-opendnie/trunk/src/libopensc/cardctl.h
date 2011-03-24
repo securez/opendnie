@@ -212,6 +212,7 @@ enum {
 	 */
 	SC_CARDCTL_DNIE_BASE = _CTL_PREFIX('D', 'N', 'I'),
 	SC_CARDCTL_DNIE_GENERATE_KEY,
+	SC_CARDCTL_DNIE_GET_INFO,
 
         /*
  	 * AuthentIC v3

@@ -360,7 +360,7 @@ data_found:
  * we look for desired patterns in binary array
  *
  *@param card pointer to card info data 
- *@param data where to store function results (name,surname,number)
+ *@param data where to store function results (number,name,surname,idesp,version)
  *@return SC_SUCCESS if ok, else error code
  */
 static int dnie_get_info(sc_card_t * card, char *data[])
@@ -378,6 +378,9 @@ static int dnie_get_info(sc_card_t * card, char *data[])
                 return SC_ERROR_INVALID_ARGUMENTS;
         int res = SC_ERROR_NOT_SUPPORTED;
         LOG_FUNC_CALLED(card->ctx);
+
+	/* phase 1: get DNIe number, Name and GivenName */
+
 	/* read EF(CDF) at 3F0050156004 */
 	path = (sc_path_t *) calloc(1, sizeof(sc_path_t));
 	if (!path) {
@@ -402,6 +405,55 @@ static int dnie_get_info(sc_card_t * card, char *data[])
 		msg = "Cannot retrieve info from EF(CDF)";
 		goto get_info_end;
         }
+
+	/* phase 2: get IDESP */
+	sc_format_path("3F000006", path);
+	if (file) {
+		sc_file_free(file);
+		file = NULL;
+	}
+	if (buffer) {
+		free(buffer); 
+		buffer=NULL; 
+		bufferlen=0;
+	}
+	res = dnie_read_file(card, path, &file, &buffer, &bufferlen);
+	if (res != SC_SUCCESS) {
+		msg = "Cannot read IDESP EF";
+		goto get_info_end;
+	}
+	data[3]=calloc(bufferlen+1,sizeof(char));
+	if ( !data[3] ) {
+		msg = "Cannot allocate memory for IDESP data";
+		res = SC_ERROR_OUT_OF_MEMORY;
+		goto get_info_end;
+	}
+	memcpy(data[3],buffer,bufferlen);
+
+	/* phase 3: get DNIe software version */
+	sc_format_path("3F002F03", path);
+	if (file) {
+		sc_file_free(file);
+		file = NULL;
+	}
+	if (buffer) {
+		free(buffer); 
+		buffer=NULL; 
+		bufferlen=0;
+	}
+	res = dnie_read_file(card, path, &file, &buffer, &bufferlen);
+	if (res != SC_SUCCESS) {
+		msg = "Cannot read DNIe Version EF";
+		goto get_info_end;
+	}
+	data[4]=calloc(bufferlen+1,sizeof(char));
+	if ( !data[4] ) {
+		msg = "Cannot allocate memory for DNIe Version data";
+		res = SC_ERROR_OUT_OF_MEMORY;
+		goto get_info_end;
+	}
+	memcpy(data[4],buffer,bufferlen);
+
 	/* arriving here means ok */
 	res = SC_SUCCESS;
 	msg = NULL;

@@ -53,19 +53,21 @@ static const char *app_name = "dnie-tool";
 
 static const struct option options[] = {
 	{"reader",      1, NULL, 'r'},
+	{"driver",      1, NULL, 'c'},
 	{"wait",	0, NULL, 'w'},
-	{"pin",	        1, NULL, 'p'},
+	{"pin",		1, NULL, 'p'},
 	{"idesp",       0, NULL, 'i'},
 	{"version",     0, NULL, 'V'},
 	{"data",	0, NULL, 'd'},
 	{"serial",      0, NULL, 's'},
-	{"all",         0, NULL, 'a'},
+	{"all",	 	0, NULL, 'a'},
 	{"verbose",     0, NULL, 'v'},
-	{NULL,	  0, NULL,  0 }
+	{NULL,	  	0, NULL,  0 }
 };
 
 static const char *option_help[] = {
 	"Uses reader number <arg> [0]",
+	"Uses reader driver <arg> [auto-detect]",
 	"Wait for a card to be inserted",
 	"Specify PIN",
 	"Retrieve IDESP",
@@ -83,6 +85,7 @@ int main(int argc, char* argv[])
 	int	     opt_wait = 0;
 	const char  *opt_pin = NULL;
 	const char  *opt_reader = NULL;
+	const char  *opt_driver = NULL;
 	int	     opt_operation = OP_NONE;
 	int	     opt_debug = 0;
 	
@@ -96,7 +99,7 @@ int main(int argc, char* argv[])
 	sc_serial_number_t serial;
 
 	while (1) {
-		c = getopt_long(argc, argv, "r:wp:iVdsav",
+		c = getopt_long(argc, argv, "r:c:wp:iVdsav",
 				options, &long_optind);
 		if (c == -1)
 			break;
@@ -105,6 +108,9 @@ int main(int argc, char* argv[])
 			util_print_usage_and_die(app_name, options, option_help);
 		case 'r':
 			opt_reader = optarg;
+			break;
+		case 'c':
+			opt_driver = optarg;
 			break;
 		case 'w':
 			opt_wait = 1;
@@ -147,9 +153,19 @@ int main(int argc, char* argv[])
 		ctx->debug_file = stderr;
 	}
 
+	if (opt_driver != NULL) {
+		err = sc_set_card_driver(ctx, opt_driver);
+		if (err) {
+			fprintf(stderr, "Driver '%s' not found!\n",
+				opt_driver);
+			err = -1;
+			goto dnie_tool_end;
+		}
+	}
+	
 	if (util_connect_card(ctx, &card, opt_reader, opt_wait, opt_debug) ) {
 		fprintf(stderr, "Error: Cannot connect with card\n");
-		err=-1;
+		err = -1;
 		goto dnie_tool_end;
 	}
 
@@ -190,10 +206,10 @@ int main(int argc, char* argv[])
 	if (opt_operation & OP_GET_DATA) {
 		printf("DNIe Number:   %s\n",data[0]);
 		printf("SurName:       %s\n",data[1]);
-		printf("Name:          %s\n",data[2]);
+		printf("Name:	  %s\n",data[2]);
 	}
 	if (opt_operation & OP_GET_IDESP) {
-		printf("IDESP:         %s\n",data[3]);
+		printf("IDESP:	 %s\n",data[3]);
 	}
 	if (opt_operation & OP_GET_VERSION) {
 		printf("DNIe Version:  %s\n",data[4]);

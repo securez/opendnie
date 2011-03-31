@@ -212,8 +212,12 @@ static int ask_user_consent(sc_card_t * card)
 	if (dnie_priv.user_consent_enabled == 0) {
 		sc_log(card->ctx,
 		       "User Consent is disabled in configuration file");
-		return SC_SUCCESS;
+		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 	}
+#ifdef _WIN32
+	sc_log(card->ctx, "User Consent is not (yet) supported in Windows");
+	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+#else
 	res = stat(dnie_priv.user_consent_app, &st_file);
 	if (res != 0) {
 		/* TODO: check that pinentry file is executable */
@@ -292,6 +296,7 @@ static int ask_user_consent(sc_card_t * card)
 	if (msg != NULL)
 		sc_log(card->ctx, "%s", msg);
 	LOG_FUNC_RETURN(card->ctx, res);
+#endif
 }
 
 /************************** cardctl defined operations *******************/

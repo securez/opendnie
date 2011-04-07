@@ -422,10 +422,6 @@ struct sc_reader_operations {
  * is made. */
 #define SC_CARD_CAP_APDU_EXT		0x00000001
 
-/* Card can handle operations specified in the
- * EMV 4.0 standard. */
-#define SC_CARD_CAP_EMV			0x00000002
-
 /* Card has on-board random number source. */
 #define SC_CARD_CAP_RNG			0x00000004
 
@@ -435,9 +431,6 @@ struct sc_reader_operations {
 /* Use the card's ACs in sc_pkcs15init_authenticate(),
  * instead of relying on the ACL info in the profile files. */
 #define SC_CARD_CAP_USE_FCI_AC		0x00000010
-
-/* The card supports 2048 bit RSA keys */
-#define SC_CARD_CAP_RSA_2048		0x00000020
 
 /* D-TRUST CardOS cards special flags */
 #define SC_CARD_CAP_ONLY_RAW_HASH		0x00000040

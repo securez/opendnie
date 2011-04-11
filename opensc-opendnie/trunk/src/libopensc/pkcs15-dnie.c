@@ -113,7 +113,7 @@ int parse_odf(const u8 * buf, size_t buflen, struct sc_pkcs15_card *p15card)
 		r = sc_pkcs15_make_absolute_path(path_prefix, &path);
 		if (r < 0)
 			return r;
-		r = sc_pkcs15_add_df(p15card, odf_indexes[type], &path, NULL);
+		r = sc_pkcs15_add_df(p15card, odf_indexes[type], &path);
 		if (r)
 			return r;
 	}

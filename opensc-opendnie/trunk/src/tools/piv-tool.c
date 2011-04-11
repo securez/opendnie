@@ -65,9 +65,9 @@ enum {
 static const struct option options[] = {
 	{ "serial",		0, NULL,	OPT_SERIAL  },
 	{ "name",		0, NULL,		'n' },
-	{ "admin",		0, NULL, 		'A' },
+	{ "admin",		1, NULL, 		'A' },
 	{ "usepin",		0, NULL,		'P' }, /* some beta cards want user pin for put_data */
-	{ "genkey",		0, NULL,		'G' },
+	{ "genkey",		1, NULL,		'G' },
 	{ "object",		1, NULL,		'O' },
 	{ "cert",		1, NULL,		'C' },
 	{ "compresscert", 1, NULL,		'Z' },
@@ -374,7 +374,7 @@ static int send_apdu(void)
 {
 	sc_apdu_t apdu;
 	u8 buf[SC_MAX_APDU_BUFFER_SIZE+3], sbuf[SC_MAX_APDU_BUFFER_SIZE],
-	   rbuf[SC_MAX_APDU_BUFFER_SIZE], *p;
+	   rbuf[SC_MAX_APDU_BUFFER_SIZE*3], *p;
 	size_t len, len0, r;
 	int c;
 

@@ -425,7 +425,8 @@ static int dnie_get_info(sc_card_t * card, char *data[])
 	res = dnie_read_file(card, path, &file, &buffer, &bufferlen);
 	if (res != SC_SUCCESS) {
 		msg = "Cannot read IDESP EF";
-		goto get_info_end;
+		data[3]=NULL;
+		goto get_info_ph3;
 	}
 	data[3]=calloc(bufferlen+1,sizeof(char));
 	if ( !data[3] ) {
@@ -435,6 +436,7 @@ static int dnie_get_info(sc_card_t * card, char *data[])
 	}
 	memcpy(data[3],buffer,bufferlen);
 
+get_info_ph3:
 	/* phase 3: get DNIe software version */
 	sc_format_path("3F002F03", path);
 	if (file) {
@@ -449,6 +451,8 @@ static int dnie_get_info(sc_card_t * card, char *data[])
 	res = dnie_read_file(card, path, &file, &buffer, &bufferlen);
 	if (res != SC_SUCCESS) {
 		msg = "Cannot read DNIe Version EF";
+		data[4]=NULL;
+		res = SC_SUCCESS; /* let function return successfully */
 		goto get_info_end;
 	}
 	data[4]=calloc(bufferlen+1,sizeof(char));
@@ -462,6 +466,7 @@ static int dnie_get_info(sc_card_t * card, char *data[])
 	/* arriving here means ok */
 	res = SC_SUCCESS;
 	msg = NULL;
+
 get_info_end:
 	if (file) {
 		sc_file_free(file);

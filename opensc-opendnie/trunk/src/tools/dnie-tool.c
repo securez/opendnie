@@ -209,10 +209,14 @@ int main(int argc, char* argv[])
 		printf("Name:	  %s\n",data[2]);
 	}
 	if (opt_operation & OP_GET_IDESP) {
-		printf("IDESP:	 %s\n",data[3]);
+		if (data[3]==NULL) 
+			printf("IDESP:	 (No disponible)\n");
+		else 	printf("IDESP:	 %s\n",data[3]);
 	}
 	if (opt_operation & OP_GET_VERSION) {
-		printf("DNIe Version:  %s\n",data[4]);
+		if (data[4]==NULL)
+			printf("DNIe Version:  (No disponible)\n");
+		else 	printf("DNIe Version:  %s\n",data[4]);
 	}
 	if (opt_operation & OP_GET_SERIALNR) {
 		r = sc_card_ctl(card, SC_CARDCTL_GET_SERIALNR, &serial);

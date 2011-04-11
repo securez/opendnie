@@ -114,9 +114,8 @@ app default {
         # card_driver dnie {
         #       # Enable/Disable user consent on signing (default: enable)
         #       user_consent_enabled = true;
-        #       # Program to be used for ask confirmation (default: pinentry)
+        #       # Path to pinentry application ( ignored for Windows build )
         #       user_consent_app = /usr/bin/pinentry;
-        #       user_consent_app = c:\Program Files\GNU\GnuPG\pinentry.exe;
         # }
         #
 	# Force using specific card driver

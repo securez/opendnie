@@ -34,12 +34,16 @@
 #include <string.h>
 #include <stdarg.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
 #include "compression.h"
 #include "cwa14890.h"
+
 
 typedef struct dnie_private_data_st {
 	char *user_consent_app;
@@ -215,8 +219,15 @@ static int ask_user_consent(sc_card_t * card)
 		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 	}
 #ifdef _WIN32
-	sc_log(card->ctx, "User Consent is not (yet) supported in Windows");
-	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+	/* in Windows, do not use pinentry, but MessageBox system call */
+	res = MessageBox (
+		NULL,
+		(LPCWSTR)L"Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n",
+		(LPCWSTR)L"Signature Requested",
+		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
+		);
+	if ( res == IDOK ) LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+	LOG_FUNC_RETURN(card->ctx, SC_ERROR_INTERNAL);
 #else
 	res = stat(dnie_priv.user_consent_app, &st_file);
 	if (res != 0) {

@@ -254,7 +254,7 @@ int bind(sc_pkcs15_card_t * p15card, sc_pkcs15emu_opt_t * options)
 int sc_pkcs15emu_dnie_init_ex(sc_pkcs15_card_t * p15card,
 			      sc_pkcs15emu_opt_t * opts)
 {
-
+	int r=SC_SUCCESS;
 	sc_context_t *ctx = p15card->card->ctx;
 	LOG_FUNC_CALLED(ctx);
 
@@ -262,7 +262,7 @@ int sc_pkcs15emu_dnie_init_ex(sc_pkcs15_card_t * p15card,
 	if (opts && opts->flags & SC_PKCS15EMU_FLAGS_NO_CHECK)
 		LOG_FUNC_RETURN(ctx, sc_pkcs15emu_dnie_init(p15card));
 	/* check for proper card */
-	int r = dnie_match_card(p15card->card);
+	r = dnie_match_card(p15card->card);
 	if (r == 0)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_WRONG_CARD);
 	/* ok: initialize and return */

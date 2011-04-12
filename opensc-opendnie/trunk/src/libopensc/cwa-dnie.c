@@ -170,9 +170,11 @@ int dnie_read_file(sc_card_t * card,
 	char *msg = NULL;
 	int res = SC_SUCCESS;
 	unsigned int fsize = 0;	/* file size */
+	sc_context_t *ctx = NULL;
+
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(card->ctx);
 	if (!buffer || !length || !path)	/* check received arguments */
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
@@ -278,6 +280,7 @@ static int dnie_read_certificate(sc_card_t * card, char *certpath, X509 ** cert)
 
 static int dnie_get_root_ca_pubkey(sc_card_t * card, EVP_PKEY ** root_ca_key)
 {
+	int res=SC_SUCCESS;
 	LOG_FUNC_CALLED(card->ctx);
 
 	/* compose root_ca_public key with data provided by Dnie Manual */
@@ -292,7 +295,7 @@ static int dnie_get_root_ca_pubkey(sc_card_t * card, EVP_PKEY ** root_ca_key)
 	root_ca_rsa->e = BN_bin2bn(icc_root_ca_public_exponent,
 				   sizeof(icc_root_ca_public_exponent),
 				   root_ca_rsa->e);
-	int res = EVP_PKEY_assign_RSA(*root_ca_key, root_ca_rsa);
+	res = EVP_PKEY_assign_RSA(*root_ca_key, root_ca_rsa);
 	if (!res) {
 		if (*root_ca_key)
 			EVP_PKEY_free(*root_ca_key);	/*implies root_ca_rsa free() */
@@ -322,12 +325,14 @@ static int dnie_get_cvc_ifd_cert(sc_card_t * card, u8 ** cert, size_t * length)
 
 static int dnie_get_ifd_privkey(sc_card_t * card, EVP_PKEY ** ifd_privkey)
 {
+	RSA *ifd_rsa=NULL;
+	int res=SC_SUCCESS;
 
 	LOG_FUNC_CALLED(card->ctx);
 
 	/* compose ifd_private key with data provided in Annex 3 of DNIe Manual */
 	*ifd_privkey = EVP_PKEY_new();
-	RSA *ifd_rsa = RSA_new();
+	ifd_rsa = RSA_new();
 	if (!*ifd_privkey || !ifd_rsa) {
 		sc_log(card->ctx, "Cannot create data for IFD private key");
 		return SC_ERROR_OUT_OF_MEMORY;
@@ -339,7 +344,7 @@ static int dnie_get_ifd_privkey(sc_card_t * card, EVP_PKEY ** ifd_privkey)
 	ifd_rsa->d =
 	    BN_bin2bn(ifd_private_exponent, sizeof(ifd_private_exponent),
 		      ifd_rsa->d);
-	int res = EVP_PKEY_assign_RSA(*ifd_privkey, ifd_rsa);
+	res = EVP_PKEY_assign_RSA(*ifd_privkey, ifd_rsa);
 	if (!res) {
 		if (*ifd_privkey)
 			EVP_PKEY_free(*ifd_privkey);	/* implies ifd_rsa free() */
@@ -405,8 +410,10 @@ static int dnie_get_sn_ifd(sc_card_t * card, u8 ** buf)
 /* Retrieve SN.ICC (8 bytes left padded with zeroes if needed) */
 static int dnie_get_sn_icc(sc_card_t * card, u8 ** buf)
 {
+	int res=SC_SUCCESS;
 	sc_serial_number_t serial;
-	int res = sc_card_ctl(card, SC_CARDCTL_GET_SERIALNR, &serial);
+
+	res = sc_card_ctl(card, SC_CARDCTL_GET_SERIALNR, &serial);
 	LOG_TEST_RET(card->ctx, res, "Error in gettting serial number");
 	/* copy into sn_icc buffer.Remember that dnie sn has 7 bytes length */
 	memset(&sn_icc[0], 0, sizeof(sn_icc));

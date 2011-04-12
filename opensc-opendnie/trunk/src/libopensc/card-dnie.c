@@ -36,7 +36,6 @@
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <windows.h>
-#include <sys/types.h>
 #endif
 
 #include "opensc.h"
@@ -202,12 +201,14 @@ static int ask_user_consent(sc_card_t * card)
 	int res = SC_ERROR_INTERNAL;	/* by default error :-( */
 	int srv_send[2];	/* to send data from server to client */
 	int srv_recv[2];	/* to receive data from client to server */
-	pid_t pid;		/* child process id */
 	char buf[1024];		/* to store client responses */
 	char *msg = NULL;	/* to makr errors */
 	int n = 0;		/* to iterate on to-be-sent messages */
+#ifndef _WIN32
+	pid_t pid;
 	FILE *fin, *fout;	/* to handle pipes as streams */
 	struct stat st_file;	/* to verify that executable exists */
+#endif
 
 	if ((card == NULL) || (card->ctx == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;

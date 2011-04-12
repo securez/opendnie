@@ -281,8 +281,8 @@ static int dnie_read_certificate(sc_card_t * card, char *certpath, X509 ** cert)
 static int dnie_get_root_ca_pubkey(sc_card_t * card, EVP_PKEY ** root_ca_key)
 {
 	int res=SC_SUCCESS;
-	LOG_FUNC_CALLED(card->ctx);
 	RSA *root_ca_rsa=NULL;
+	LOG_FUNC_CALLED(card->ctx);
 
 	/* compose root_ca_public key with data provided by Dnie Manual */
 	*root_ca_key = EVP_PKEY_new();

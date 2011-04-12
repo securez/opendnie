@@ -122,6 +122,15 @@ standard son:
         --infodir=/usr/share/info \
         --mandir=/usr/share/man
 
+4b- En el caso de no utilizar estas opciones, los ejecutables se
+instalan por defecto en /usr/local/bin, y las bibliotecas en
+/usr/local/lib, por lo que será preciso garantizar que el cargador
+dinámico incluye /usr/local/lib en el path de busqueda de bibliotecas
+
+En caso necesario, editar /etc/ld.so.conf o /etc/ld.so.conf.d/opensc.conf
+(según la distribución) y añadir "/usr/local/lib"; ejecutando a 
+continuación "ldconfig -v"
+
 5- Esta versión no genera un fichero /usr/lib/libopensc-dnie.so, sino que
 el driver DNIe está integrado dentro de /usr/lib/libopensc.so
 

@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "../config.h"
+#include "config.h"
 #include "libopensc/log.h"
 #include "libopensc/asn1.h"
 #include "libopensc/pkcs15.h"

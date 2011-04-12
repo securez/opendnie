@@ -327,9 +327,9 @@ static int ask_user_consent(sc_card_t * card)
  */
 static int dnie_generate_key(sc_card_t * card, void *data)
 {
+	int result = SC_ERROR_NOT_SUPPORTED;
 	if ((card == NULL) || (data == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
-	int result = SC_ERROR_NOT_SUPPORTED;
 	LOG_FUNC_CALLED(card->ctx);
 	/* TODO: write dnie_generate_key() */
 	LOG_FUNC_RETURN(card->ctx, result);

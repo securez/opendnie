@@ -573,6 +573,7 @@ static int dnie_init(struct sc_card *card)
 {
 	int result = SC_SUCCESS;
 	unsigned long algoflags;
+	cwa_provider_t *p=NULL;
 
 	if ((card == NULL) || (card->ctx == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
@@ -594,7 +595,7 @@ static int dnie_init(struct sc_card *card)
 		goto dnie_init_error;
 
 	/* initialize cwa-dnie provider */
-	cwa_provider_t *p = dnie_get_cwa_provider(card);
+	p = dnie_get_cwa_provider(card);
 	if (!p) {
 		sc_log(card->ctx, "Error in initialize cwa-dnie provider");
 		result = SC_ERROR_OUT_OF_MEMORY;
@@ -664,11 +665,11 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 
 	/* check if envelope is needed */
 	if (apdu->lc <= card->max_send_size) {
-
+		int tmp;
 		/* no envelope needed */
 		sc_log(card->ctx, "envelope tx is not required");
 
-		int tmp = apdu->cse;	/* save original apdu type */
+		tmp = apdu->cse;	/* save original apdu type */
 		/* if SM is on, assure rx buffer exists and force get_response */
 		if (provider->status.state == CWA_SM_ACTIVE) {
 			if (tmp == SC_APDU_CASE_3_SHORT)
@@ -687,11 +688,14 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 
 		size_t e_txlen = 0;
 		size_t index = 0;
+		sc_apdu_t *e_apdu = NULL;
+		u8 *e_tx = NULL;
+
 		/* envelope needed */
 		sc_log(card->ctx, "envelope tx required: lc:%d", apdu->lc);
 
-		sc_apdu_t *e_apdu = calloc(1, sizeof(sc_apdu_t));	/* enveloped apdu */
-		u8 *e_tx = calloc(7 + apdu->datalen, sizeof(u8));	/* enveloped data */
+		e_apdu = calloc(1, sizeof(sc_apdu_t));	/* enveloped apdu */
+		e_tx = calloc(7 + apdu->datalen, sizeof(u8));	/* enveloped data */
 		if (!e_apdu || !e_tx)
 			LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
 
@@ -890,10 +894,11 @@ static int dnie_fill_cache(sc_card_t * card)
 	int len = 0;
 	u8 *buffer = NULL;
 	u8 *pt = NULL;
+	sc_context_t *ctx = NULL;
 
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -1671,7 +1676,7 @@ static int dnie_list_files(sc_card_t * card, u8 * buf, size_t buflen)
 	int res = SC_SUCCESS;
 	int id1 = 0;
 	int id2 = 0;
-	int count = 0;
+	size_t count = 0;
 	u8 data[2];
 	sc_apdu_t apdu;
 	if (!card || !card->ctx)
@@ -1819,10 +1824,11 @@ static int dnie_read_header(struct sc_card *card)
 	u8 buf[SC_MAX_APDU_BUFFER_SIZE];
 	unsigned long uncompressed = 0L;
 	unsigned long compressed = 0L;
+	sc_context_t *ctx = NULL;
 
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 
 	/* initialize apdu */

@@ -48,7 +48,7 @@
 static char *cwa_hexdump(const u8 * buf, size_t len)
 {
 	int j;
-	int count = 0;
+	size_t count = 0;
 	static char res[16384];
 	memset(res, 0, sizeof(res));
 	len = MIN(len, sizeof(res));
@@ -221,7 +221,7 @@ static int cwa_parse_tlv(sc_card_t * card,
 			 u8 * data, size_t datalen, cwa_tlv_t tlv_array[]
     )
 {
-	int n = 0;
+	size_t n = 0;
 	size_t next = 0;
 	sc_context_t *ctx = NULL;
 	u8 *buffer = NULL;
@@ -2043,10 +2043,11 @@ static cwa_provider_t default_cwa_provider = {
  */
 cwa_provider_t *cwa_get_default_provider(sc_card_t * card)
 {
+	cwa_provider_t *res = NULL;
 	if (!card || !card->ctx)
 		return NULL;
 	LOG_FUNC_CALLED(card->ctx);
-	cwa_provider_t *res = calloc(1, sizeof(cwa_provider_t));
+	res = calloc(1, sizeof(cwa_provider_t));
 	if (!res) {
 		sc_log(card->ctx, "Cannot allocate space for cwa_provider");
 		return NULL;

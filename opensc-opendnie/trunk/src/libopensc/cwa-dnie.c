@@ -282,10 +282,11 @@ static int dnie_get_root_ca_pubkey(sc_card_t * card, EVP_PKEY ** root_ca_key)
 {
 	int res=SC_SUCCESS;
 	LOG_FUNC_CALLED(card->ctx);
+	RSA *root_ca_rsa=NULL;
 
 	/* compose root_ca_public key with data provided by Dnie Manual */
 	*root_ca_key = EVP_PKEY_new();
-	RSA *root_ca_rsa = RSA_new();
+	root_ca_rsa = RSA_new();
 	if (!*root_ca_key || !root_ca_rsa) {
 		sc_log(card->ctx, "Cannot create data for root CA public key");
 		return SC_ERROR_OUT_OF_MEMORY;

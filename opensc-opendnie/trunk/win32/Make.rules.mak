@@ -1,7 +1,7 @@
 OPENSC_FEATURES = pcsc
 
-#Include support of minidriver 'cardmod'
-MINIDRIVER_DEF = /DENABLE_CARDMOD
+#Include support for minidriver
+MINIDRIVER_DEF = /DENABLE_MINIDRIVER
 
 #Build MSI with the Windows Installer XML (WIX) toolkit, requires WIX >= 3.6
 !IF "$(BUILD_ON)" == "WIN64"
@@ -31,14 +31,14 @@ OPENSC_FEATURES = $(OPENSC_FEATURES) openssl
 
 
 # If you want support for zlib (Used for PIV, infocamere and actalis):
-# - Download zlib and build
+# - Download zlib and build with "nmake /f win32\Makefile.msc zlib.lib"
 # - uncomment the line starting with ZLIB_DEF 
 # - set the ZLIB_INCL_DIR below to the zlib include lib proceeded by "/I"
 # - set the ZLIB_LIB  below to your zlib lib file
-#ZLIB_DEF = /DENABLE_ZLIB
+ZLIB_DEF = /DENABLE_ZLIB
 !IF "$(ZLIB_DEF)" == "/DENABLE_ZLIB"
-ZLIB_INCL_DIR = /IC:\ZLIB\INCLUDE
-ZLIB_LIB = C:\ZLIB\LIB\zlib.lib 
+ZLIB_INCL_DIR = /IC:\zlib-1.2.5
+ZLIB_LIB = C:\zlib-1.2.5\zlib.lib
 OPENSC_FEATURES = $(OPENSC_FEATURES) zlib
 !ENDIF
 
@@ -57,9 +57,11 @@ COPTS =  /W3 /D_CRT_SECURE_NO_DEPRECATE /MT /nologo /DHAVE_CONFIG_H $(ALL_INCLUD
 !IF "$(BUILD_FOR)" == "WIN64"
 LINKFLAGS = /NOLOGO /INCREMENTAL:NO /MACHINE:X64 /MANIFEST:NO /NODEFAULTLIB:MSVCRTD  /NODEFAULTLIB:MSVCRT /NODEFAULTLIB:LIBCMTD
 LIBFLAGS =  /nologo /machine:x64
+CANDLEFLAGS = -dPlatform=x64
 !ELSE
 LINKFLAGS = /NOLOGO /INCREMENTAL:NO /MACHINE:X86 /MANIFEST:NO /NODEFAULTLIB:MSVCRTD  /NODEFAULTLIB:MSVCRT /NODEFAULTLIB:LIBCMTD
 LIBFLAGS =  /nologo /machine:x86
+CANDLEFLAGS = -dPlatform=x86
 !ENDIF
 .c.obj::
 	cl $(COPTS) /c $<

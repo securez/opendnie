@@ -456,6 +456,7 @@ app tokend {
 	}
 }
 
+# XXX: remove cardmod pseudodriver
 app cardmod {
 	# cardmod app name use special pcsc reader subset 
 	# fix options for this reader driver here. 
@@ -466,4 +467,3 @@ app cardmod {
 		# enable_pinpad = false;
 	}
 }
-

@@ -1358,7 +1358,7 @@ int cwa_encode_apdu(sc_card_t * card,
 	DES_key_schedule k2;
 	char *msg = NULL;
 
-	int i, j;		/* for xor loops */
+	size_t i, j;		/* for xor loops */
 	int res = SC_SUCCESS;
 	sc_context_t *ctx = NULL;
 	cwa_sm_status_t *sm = NULL;

@@ -26,7 +26,7 @@ cp ${build_dir}/image/opensc/etc/opensc.conf win32
 
 mkdir -p win32/opensc
 cp ${build_dir}/image/opensc/bin/*.dll ${build_dir}/image/opensc/bin/*.exe win32/opensc
-cp ${build_dir}/image/opensc/share/opensc-opendnie/*.profile win32/opensc
+cp ${build_dir}/image/opensc/share/opensc/*.profile win32/opensc
 
 mkdir -p win32/engine_pkcs11
 cp ${build_dir}/image/engine_pkcs11/bin/libp11-1.dll ${build_dir}/image/engine_pkcs11/lib/engines/engine_pkcs11.dll win32/engine_pkcs11

@@ -36,6 +36,7 @@
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <windows.h>
+#include <sys/types.h>
 #endif
 
 #include "opensc.h"
@@ -389,10 +390,10 @@ static int dnie_get_info(sc_card_t * card, char *data[])
 	u8 SerialNumber [] = { 0x06, 0x03, 0x55, 0x04, 0x05, 0x13 };
 	u8 Name [] = { 0x06, 0x03, 0x55, 0x04, 0x04, 0x0C };
 	u8 GivenName [] = { 0x06, 0x03, 0x55, 0x04, 0x2A, 0x0C };
+	int res = SC_ERROR_NOT_SUPPORTED;
 
         if ((card == NULL) || (data == NULL))
                 return SC_ERROR_INVALID_ARGUMENTS;
-        int res = SC_ERROR_NOT_SUPPORTED;
         LOG_FUNC_CALLED(card->ctx);
 
 	/* phase 1: get DNIe number, Name and GivenName */
@@ -558,8 +559,9 @@ static int dnie_get_serialnr(sc_card_t * card, sc_serial_number_t * serial)
 int dnie_match_card(struct sc_card *card)
 {
 	int result = 0;
+	int matched = -1;
 	LOG_FUNC_CALLED(card->ctx);
-	int matched = _sc_match_atr(card, dnie_atrs, &card->type);
+	matched = _sc_match_atr(card, dnie_atrs, &card->type);
 	result = (matched >= 0) ? 1 : 0;
 	LOG_FUNC_RETURN(card->ctx, result);
 }
@@ -570,6 +572,8 @@ int dnie_match_card(struct sc_card *card)
 static int dnie_init(struct sc_card *card)
 {
 	int result = SC_SUCCESS;
+	unsigned long algoflags;
+
 	if ((card == NULL) || (card->ctx == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
 	LOG_FUNC_CALLED(card->ctx);
@@ -608,7 +612,7 @@ static int dnie_init(struct sc_card *card)
 	card->max_send_size = 0xf0;	/* manual says 255, but to be safe... */
 	card->max_recv_size = 0xf0;
 
-	unsigned long algoflags = SC_ALGORITHM_RSA_RAW;	/* RSA support */
+	algoflags = SC_ALGORITHM_RSA_RAW;	/* RSA support */
 	algoflags |= SC_ALGORITHM_RSA_HASH_NONE;
 	_sc_card_add_rsa_alg(card, 1024, algoflags, 0);
 	_sc_card_add_rsa_alg(card, 2048, algoflags, 0);
@@ -681,13 +685,13 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 		apdu->cse = tmp;
 	} else {
 
+		size_t e_txlen = 0;
+		size_t index = 0;
 		/* envelope needed */
 		sc_log(card->ctx, "envelope tx required: lc:%d", apdu->lc);
 
 		sc_apdu_t *e_apdu = calloc(1, sizeof(sc_apdu_t));	/* enveloped apdu */
 		u8 *e_tx = calloc(7 + apdu->datalen, sizeof(u8));	/* enveloped data */
-		size_t e_txlen = 0;
-		size_t index = 0;
 		if (!e_apdu || !e_tx)
 			LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
 
@@ -978,10 +982,11 @@ static int dnie_read_binary(struct sc_card *card,
 			    u8 * buf, size_t count, unsigned long flags)
 {
 	int res = 0;
+	sc_context_t *ctx = NULL;
 	/* preliminary checks */
 	if (!card || !card->ctx || !buf || (count <= 0))
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 
 	LOG_FUNC_CALLED(ctx);
 	if (idx == 0 || dnie_priv.cache == NULL) {
@@ -1092,10 +1097,11 @@ static int dnie_select_file(struct sc_card *card,
 	sc_file_t *file = NULL;
 	int res = SC_SUCCESS;
 	sc_apdu_t apdu;
+	sc_context_t *ctx = NULL;
 
 	if (!card || !card->ctx || !in_path)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -1352,11 +1358,13 @@ static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len)
 /* logout: Resets all access rights that were gained. */
 static int dnie_logout(struct sc_card *card)
 {
+	int result = SC_SUCCESS;
+
 	if ((card == NULL) || (card->ctx == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
 	LOG_FUNC_CALLED(card->ctx);
 	/* disable and free any sm channel related data */
-	int result =
+	result =
 	    cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_OFF);
 	/* TODO: _logout() see comments.txt on what to do here */
 	LOG_FUNC_RETURN(card->ctx, result);
@@ -1883,9 +1891,10 @@ static int dnie_process_fci(struct sc_card *card,
 	int res = SC_SUCCESS;
 	int *op = df_acl;
 	int n = 0;
+	sc_context_t *ctx = NULL;
 	if ((card == NULL) || (card->ctx == NULL) || (file == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 	/* first of all, let iso do the hard work */
 	res = iso_ops->process_fci(card, file, buf, buflen);
@@ -1953,9 +1962,10 @@ static int dnie_process_fci(struct sc_card *card,
 	 * card drivers and pray... */
 	op = (file->type == SC_FILE_TYPE_DF) ? df_acl : ef_acl;
 	for (n = 0; n < 5; n++) {
+		int key_ref = 0;
 		if (*(op + n) == -1)
 			continue;	/* unused entry: skip */
-		int key_ref = file->prop_attr[5 + n] & 0x0F;
+		key_ref = file->prop_attr[5 + n] & 0x0F;
 		switch (0xF0 & file->prop_attr[5 + n]) {
 		case 0x00:
 			sc_file_add_acl_entry(file, *(op + n), SC_AC_NONE,

@@ -56,6 +56,11 @@ typedef struct dnie_private_data_st {
 } dnie_private_data_t;
 
 extern cwa_provider_t *dnie_get_cwa_provider(sc_card_t * card);
+extern int dnie_read_file(
+	sc_card_t * card, 
+	const sc_path_t * path, 
+	sc_file_t ** file, 
+	u8 ** buffer, size_t * length);
 
 #define DNIE_CHIP_NAME "DNIe: Spanish eID card"
 #define DNIE_CHIP_SHORTNAME "dnie"
@@ -198,17 +203,17 @@ char *user_consent_msgs[] = {
  */
 static int ask_user_consent(sc_card_t * card)
 {
-	int res = SC_ERROR_INTERNAL;	/* by default error :-( */
-	int srv_send[2];	/* to send data from server to client */
-	int srv_recv[2];	/* to receive data from client to server */
-	char buf[1024];		/* to store client responses */
-	char *msg = NULL;	/* to makr errors */
-	int n = 0;		/* to iterate on to-be-sent messages */
 #ifndef _WIN32
 	pid_t pid;
 	FILE *fin, *fout;	/* to handle pipes as streams */
 	struct stat st_file;	/* to verify that executable exists */
+	int srv_send[2];	/* to send data from server to client */
+	int srv_recv[2];	/* to receive data from client to server */
+	char buf[1024];		/* to store client responses */
 #endif
+	int res = SC_ERROR_INTERNAL;	/* by default error :-( */
+	char *msg = NULL;	/* to makr errors */
+	int n = 0;		/* to iterate on to-be-sent messages */
 
 	if ((card == NULL) || (card->ctx == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
@@ -224,8 +229,8 @@ static int ask_user_consent(sc_card_t * card)
 	/* in Windows, do not use pinentry, but MessageBox system call */
 	res = MessageBox (
 		NULL,
-		(LPCWSTR)L"Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n",
-		(LPCWSTR)L"Signature Requested",
+		(LPCSTR)L"Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n",
+		(LPCSTR)L"Signature Requested",
 		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
 		);
 	if ( res == IDOK ) LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);

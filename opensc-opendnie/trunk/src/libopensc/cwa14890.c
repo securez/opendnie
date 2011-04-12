@@ -1563,7 +1563,7 @@ int cwa_decode_response(sc_card_t * card,
 			cwa_provider_t * provider,
 			sc_apdu_t * from, sc_apdu_t * to)
 {
-	int i, j;
+	size_t i, j;
 	cwa_tlv_t tlv_array[4];
 	cwa_tlv_t *p_tlv = &tlv_array[0];	/* to store plain data (Tag 0x81) */
 	cwa_tlv_t *e_tlv = &tlv_array[1];	/* to store pad encoded data (Tag 0x87) */

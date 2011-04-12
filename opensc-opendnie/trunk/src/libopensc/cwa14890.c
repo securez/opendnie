@@ -114,19 +114,17 @@ static int cwa_increase_ssc(sc_card_t * card, cwa_sm_status_t * sm)
 	/* preliminary checks */
 	if (!card || !card->ctx || !sm)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	/* comodity vars */
-	sc_context_t *ctx = card->ctx;
 
-	LOG_FUNC_CALLED(ctx);
+	LOG_FUNC_CALLED(card->ctx);
 	/* u8 arithmetic; exit loop if no carry */
-	sc_log(ctx, "Curr SSC: '%s'", sc_dump_hex(sm->ssc, 8));
+	sc_log(card->ctx, "Curr SSC: '%s'", sc_dump_hex(sm->ssc, 8));
 	for (n = 7; n >= 0; n--) {
 		sm->ssc[n]++;
 		if ((sm->ssc[n]) != 0x00)
 			break;
 	}
-	sc_log(ctx, "Next SSC: '%s'", sc_dump_hex(sm->ssc, 8));
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	sc_log(card->ctx, "Next SSC: '%s'", sc_dump_hex(sm->ssc, 8));
+	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
 /**
@@ -169,11 +167,13 @@ static int cwa_compose_tlv(sc_card_t * card,
 {
 	u8 *pt;
 	size_t size;
+	sc_context_t *ctx;
 	/* preliminary checks */
 	if (!card || !card->ctx || !out || !outlen)
 		return SC_ERROR_INVALID_ARGUMENTS;
 	/* comodity vars */
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
+
 	LOG_FUNC_CALLED(ctx);
 	pt = *out;
 	size = *outlen;
@@ -223,17 +223,21 @@ static int cwa_parse_tlv(sc_card_t * card,
 {
 	int n = 0;
 	size_t next = 0;
+	sc_context_t *ctx = NULL;
+	u8 *buffer = NULL;
+
 	/* preliminary checks */
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
 	/* comodity vars */
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
+
 	LOG_FUNC_CALLED(ctx);
 	if (!data || !tlv_array)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
 	/* create buffer and copy data into */
-	u8 *buffer = calloc(datalen, sizeof(u8));
+	buffer = calloc(datalen, sizeof(u8));
 	if (!buffer)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 	memcpy(buffer, data, datalen);
@@ -320,10 +324,12 @@ static int cwa_verify_icc_certificates(sc_card_t * card,
 	int res = SC_SUCCESS;
 	EVP_PKEY *root_ca_key = NULL;
 	EVP_PKEY *sub_ca_key = NULL;
+	sc_context_t *ctx = NULL;
+
 	/* safety check */
 	if (!card || !card->ctx || !provider)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 	if (!sub_ca_cert || !icc_cert)	/* check received arguments */
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
@@ -380,10 +386,12 @@ static int cwa_verify_cvc_certificate(sc_card_t * card,
 {
 	sc_apdu_t apdu;
 	int result = SC_SUCCESS;
+	sc_context_t *ctx = NULL;
+
 	/* safety check */
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 	if (!cert || (len <= 0))	/* check received arguments */
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
@@ -420,10 +428,12 @@ static int cwa_set_security_env(sc_card_t * card,
 {
 	sc_apdu_t apdu;
 	int result = SC_SUCCESS;
+	sc_context_t *ctx = NULL;
+
 	/* safety check */
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 	if (!buffer || (length <= 0))	/* check received arguments */
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
@@ -458,10 +468,12 @@ static int cwa_internal_auth(sc_card_t * card,
 	sc_apdu_t apdu;
 	u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
 	int result = SC_SUCCESS;
+	sc_context_t *ctx = NULL;
+
 	/* safety check */
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 	if (!data || (datalen <= 0))	/* check received arguments */
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
@@ -533,11 +545,12 @@ static int cwa_prepare_external_auth(sc_card_t * card,
 	BIGNUM *bn = NULL;
 	BIGNUM *bnsub = NULL;
 	BIGNUM *bnres = NULL;
+	sc_context_t *ctx = NULL;
 
 	/* safety check */
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 	/* check received arguments */
 	if (!icc_pubkey || !ifd_privkey || !sn_icc || !sm)
@@ -658,10 +671,12 @@ static int cwa_external_auth(sc_card_t * card, cwa_sm_status_t * sm)
 {
 	sc_apdu_t apdu;
 	int result = SC_SUCCESS;
+	sc_context_t *ctx = NULL;
+
 	/* safety check */
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 
 	/* compose apdu for External Authenticate cmd */
@@ -698,11 +713,12 @@ static int cwa_compute_session_keys(sc_card_t * card, cwa_sm_status_t * sm)
 	u8 *sha_data;		/* to store hash result */
 	u8 kenc[4] = { 0x00, 0x00, 0x00, 0x01 };
 	u8 kmac[4] = { 0x00, 0x00, 0x00, 0x02 };
+	sc_context_t *ctx = NULL;
 
 	/* safety check */
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 	/* Just a literal transcription of cwa14890-1 sections 8.7.2 to 8.9 */
 	kseed = calloc(32, sizeof(u8));
@@ -820,9 +836,11 @@ static int cwa_verify_internal_auth(sc_card_t * card,
 	int len3 = 0;
 	BIGNUM *bn = NULL;
 	BIGNUM *sigbn = NULL;
+	sc_context_t *ctx = NULL;
+
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	LOG_FUNC_CALLED(ctx);
 	if (!ifdbuf || (ifdlen != 16)) {
 		res = SC_ERROR_INVALID_ARGUMENTS;
@@ -962,20 +980,23 @@ int cwa_create_secure_channel(sc_card_t * card,
 	X509 *ca_cert = NULL;
 	EVP_PKEY *icc_pubkey = NULL;
 	EVP_PKEY *ifd_privkey = NULL;
+	sc_context_t *ctx = NULL;
+	cwa_sm_status_t *sm = NULL;
 
 	/* several buffer and buffer pointers */
 	u8 *buffer;
 	size_t bufferlen;
 	u8 *tlv = NULL;		/* buffer to compose TLV messages */
 	size_t tlvlen = 0;
+	u8 *rndbuf=NULL;
 
 	/* preliminary checks */
 	if (!card || !card->ctx || !provider)
 		return SC_ERROR_INVALID_ARGUMENTS;
 
 	/* comodity vars */
-	sc_context_t *ctx = card->ctx;
-	cwa_sm_status_t *sm = &(provider->status);
+	ctx = card->ctx;
+	sm = &(provider->status);
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -1214,7 +1235,7 @@ int cwa_create_secure_channel(sc_card_t * card,
 		msg = "Cannot get ifd serial number from provider";
 		goto csc_end;
 	}
-	u8 *rndbuf = calloc(8 /*RND.IFD */  + 8 /*SN.IFD */ , sizeof(u8));
+	rndbuf = calloc(8 /*RND.IFD */  + 8 /*SN.IFD */ , sizeof(u8));
 	if (!rndbuf) {
 		msg = "Cannot calloc for RND.IFD+SN.IFD";
 		res = SC_ERROR_OUT_OF_MEMORY;
@@ -1339,15 +1360,20 @@ int cwa_encode_apdu(sc_card_t * card,
 
 	int i, j;		/* for xor loops */
 	int res = SC_SUCCESS;
+	sc_context_t *ctx = NULL;
+	cwa_sm_status_t *sm = NULL;
+	u8 *msgbuf = NULL;	/* to encrypt apdu data */
+	u8 *cryptbuf = NULL;
+
 	/* reserve extra bytes for padding and tlv header */
-	u8 *msgbuf = calloc(12 + from->lc, sizeof(u8));	/* to encrypt apdu data */
-	u8 *cryptbuf = calloc(12 + from->lc, sizeof(u8));
+	msgbuf = calloc(12 + from->lc, sizeof(u8));	/* to encrypt apdu data */
+	cryptbuf = calloc(12 + from->lc, sizeof(u8));
 
 	/* mandatory check */
 	if (!card || !card->ctx || !provider)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
-	cwa_sm_status_t *sm = &(provider->status);
+	ctx = card->ctx;
+	sm = &(provider->status);
 
 	LOG_FUNC_CALLED(ctx);
 	/* check remaining arguments */
@@ -1551,12 +1577,14 @@ int cwa_decode_response(sc_card_t * card,
 	DES_key_schedule k2;
 	int res = SC_SUCCESS;
 	char *msg = NULL;	/* to store error messages */
+	sc_context_t *ctx = NULL;
+	cwa_sm_status_t *sm = NULL;
 
 	/* mandatory check */
 	if (!card || !card->ctx || !provider)
 		return SC_ERROR_INVALID_ARGUMENTS;
-	sc_context_t *ctx = card->ctx;
-	cwa_sm_status_t *sm = &(provider->status);
+	ctx = card->ctx;
+	sm = &(provider->status);
 
 	LOG_FUNC_CALLED(ctx);
 	/* check remaining arguments */

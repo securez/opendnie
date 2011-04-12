@@ -11,13 +11,15 @@ fi
 rm -f opensc-*.tar.gz
 make dist
 rm -f ${build_dir}/sources/opensc*.tar.gz
-cp opensc-opendnie-0.12.*.tar.gz ${build_dir}/sources/
+cp opensc-0.12.*.tar.gz ${build_dir}/sources/
 
 # use mingw to generate binaries
-# Ubuntu 10.10
-# (cd ${build_dir}; CHOST=i586-mingw32msvc CBUILD=i686-pc-linux-gnu ./build)
-# Fedora 14
-(cd ${build_dir}; CHOST=i686-pc-mingw32 CBUILD=i686-pc-linux-gnu ./build)
+DistID=`lsb_release -is`
+case $DistID in
+	Fedora ) prefix=i686-pc-mingw32 ;;
+	* ) 	prefix=i586-mingw32msv ;;
+esac
+(cd ${build_dir}; CHOST=${prefix} CBUILD=i686-pc-linux-gnu ./build)
 
 # Copy files
 cp ${build_dir}/image/opensc/etc/opensc.conf win32

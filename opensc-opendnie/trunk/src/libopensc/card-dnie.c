@@ -292,12 +292,17 @@ static int ask_user_consent(sc_card_t * card)
 		/* read and ignore first line */
 		fflush(stdin);
 		for (n = 0; user_consent_msgs[n] != NULL; n++) {
+			char *pt;
 			/* send message */
 			fputs(user_consent_msgs[n], fout);
 			fflush(fout);
 			/* get response */
 			memset(buf, 0, sizeof(buf));
-			fgets(buf, sizeof(buf) - 1, fin);
+			pt=fgets(buf, sizeof(buf) - 1, fin);
+			if (pt==NULL) {
+				msg = "fgets() Unexpected IOError/EOF";
+				goto do_error;
+			}
 			if (strstr(buf, "OK") == NULL) {
 				msg = "fail/cancel";
 				goto do_error;
@@ -1102,7 +1107,7 @@ static int dnie_select_file(struct sc_card *card,
 	u8 pathbuf[SC_MAX_PATH_SIZE];
 	char pbuf[SC_MAX_PATH_STRING_SIZE];
         u8 *path = pathbuf;
-	int pathlen;
+	size_t pathlen;
         int cached=0;
 
 	sc_file_t *file = NULL;

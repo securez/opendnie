@@ -67,11 +67,7 @@ extern int dnie_read_file(
 #define DNIE_MF_NAME "Master.File"
 
 /* default user consent program (if required) */
-#ifdef _WIN32
-#define USER_CONSENT_CMD "C:\\Program Files\\GNU\\GnuPG\\pinentry.exe"
-#else
 #define USER_CONSENT_CMD "/usr/bin/pinentry"
-#endif
 
 /* Undeclared dnie APDU responses in iso7816.c */
 static struct sc_card_error dnie_errors[] = {
@@ -229,8 +225,8 @@ static int ask_user_consent(sc_card_t * card)
 	/* in Windows, do not use pinentry, but MessageBox system call */
 	res = MessageBox (
 		NULL,
-		(LPCSTR)L"Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n",
-		(LPCSTR)L"Signature Requested",
+		TEXT("Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n"),
+		TEXT("Signature Requested"),
 		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
 		);
 	if ( res == IDOK ) LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);

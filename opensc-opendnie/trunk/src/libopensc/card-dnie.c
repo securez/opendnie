@@ -35,6 +35,7 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 #ifdef _WIN32
+#define UNICODE
 #include <windows.h>
 #endif
 
@@ -225,7 +226,7 @@ static int ask_user_consent(sc_card_t * card)
 	/* in Windows, do not use pinentry, but MessageBox system call */
 	res = MessageBox (
 		NULL,
-		TEXT("Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n"),
+		TEXT("Está a punto de realizar una firma electrónica\n con su clave de FIRMA del DNI electrónico.\n ¿Desea permitir esta operación?\n"),
 		TEXT("Signature Requested"),
 		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
 		);

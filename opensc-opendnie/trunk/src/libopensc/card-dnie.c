@@ -226,7 +226,7 @@ static int ask_user_consent(sc_card_t * card)
 	/* in Windows, do not use pinentry, but MessageBox system call */
 	res = MessageBox (
 		NULL,
-		TEXT("Está a punto de realizar una firma electrónica\n con su clave de FIRMA del DNI electrónico.\n ¿Desea permitir esta operación?\n"),
+		TEXT("Est\u00E1 a punto de realizar una firma digital\n con su clave de FIRMA del DNI electr\u00F3nico.\n\u00BFDesea permitir esta operaci\u00F3n?\n"),
 		TEXT("Signature Requested"),
 		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
 		);

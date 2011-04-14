@@ -1022,6 +1022,10 @@ int cwa_create_secure_channel(sc_card_t * card,
 
 	/* OK: lets start process */
 
+	/* reset card (warm reset, do not unpower card) */
+	sc_log(ctx, "Resseting card");
+	sc_reset(card, 0);
+
 	/* mark SM status as in progress */
 	provider->status.state = CWA_SM_INPROGRESS;
 
@@ -1030,7 +1034,8 @@ int cwa_create_secure_channel(sc_card_t * card,
 	if (provider->cwa_create_pre_ops) {
 		res = provider->cwa_create_pre_ops(card, provider);
 		if (res != SC_SUCCESS) {
-			sc_log(ctx, "Create SM: provider pre_ops() failed");
+			msg = "Create SM: provider pre_ops() failed";
+			sc_log(ctx, msg);
 			goto csc_end;
 		}
 	}
@@ -1040,18 +1045,16 @@ int cwa_create_secure_channel(sc_card_t * card,
 	if (provider->cwa_get_sn_icc) {
 		res = provider->cwa_get_sn_icc(card, &sn_icc);
 		if (res != SC_SUCCESS) {
-			sc_log(ctx, "Retrieve ICC failed");
+			msg = "Retrieve ICC failed";
+			sc_log(ctx, msg);
 			goto csc_end;
 		}
 	} else {
-		sc_log(ctx, "Don't know how to obtain ICC serial number");
+		msg = "Don't know how to obtain ICC serial number";
+		sc_log(ctx, msg);
 		res = SC_ERROR_INTERNAL;
 		goto csc_end;
 	}
-
-	/* reset card (warm reset, do not unpower card) */
-	sc_log(ctx, "Resseting card");
-	sc_reset(card, 0);
 
 	/* 
 	 * Notice that this code inverts ICC and IFD certificate standard

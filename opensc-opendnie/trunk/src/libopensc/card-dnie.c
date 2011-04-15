@@ -2162,49 +2162,50 @@ static sc_card_driver_t *get_dnie_driver(void)
 	dnie_ops = *iso_drv->ops;
 
 	/* fill card specific function pointers */
+	/* NULL means that function is not supported neither by DNIe nor iso7816.c */
 	/* if pointer is omitted, default ISO7816 function will be used */
 
 	/* initialization */
-	dnie_ops.match_card = dnie_match_card;
-	dnie_ops.init = dnie_init;
-	dnie_ops.finish = dnie_finish;
-	dnie_ops.wrap_apdu = dnie_wrap_apdu;
+	dnie_ops.match_card	= dnie_match_card;
+	dnie_ops.init		= dnie_init;
+	dnie_ops.finish		= dnie_finish;
+	dnie_ops.wrap_apdu	= dnie_wrap_apdu;
 
 	/* iso7816-4 functions */
-	dnie_ops.read_binary = dnie_read_binary;
-	/* dnie_ops.write_binary */
-	/* dnie_ops.update_binary */
-	/* dnie_ops.erase_binary */
-	/* dnie_ops.read_record */
-	/* dnie_ops.write_record */
-	/* dnie_ops.append_record */
-	/* dnie_ops.update_record */
-	dnie_ops.select_file = dnie_select_file;
-	dnie_ops.get_response = dnie_get_response;
-	dnie_ops.get_challenge = dnie_get_challenge;
+	dnie_ops.read_binary	= dnie_read_binary;
+	dnie_ops.write_binary	= NULL;
+	dnie_ops.update_binary	= NULL;
+	dnie_ops.erase_binary	= NULL;
+	dnie_ops.read_record	= NULL;
+	dnie_ops.write_record	= NULL;
+	dnie_ops.append_record	= NULL;
+	dnie_ops.update_record	= NULL;
+	dnie_ops.select_file	= dnie_select_file;
+	dnie_ops.get_response	= dnie_get_response;
+	dnie_ops.get_challenge	= dnie_get_challenge;
 
 	/* iso7816-8 functions */
-	/* dnie_ops.verify */
-	dnie_ops.logout = dnie_logout;
+	dnie_ops.verify		= NULL;
+	dnie_ops.logout		= dnie_logout;
 	/* dnie_ops.restore_security_env */
 	dnie_ops.set_security_env = dnie_set_security_env;
-	dnie_ops.decipher = dnie_decipher;
+	dnie_ops.decipher	= dnie_decipher;
 	dnie_ops.compute_signature = dnie_compute_signature;
-	/* dnie_ops.change_reference_data */
-	/* dnie_ops.reset_retry_counter */
+	dnie_ops.change_reference_data = NULL;
+	dnie_ops.reset_retry_counter = NULL;
 
 	/* iso7816-9 functions */
-	dnie_ops.create_file = NULL;	/* not allowed on DNIe user mode */
-	dnie_ops.delete_file = NULL;
-	dnie_ops.list_files = dnie_list_files;
-	dnie_ops.check_sw = dnie_check_sw;
-	dnie_ops.card_ctl = dnie_card_ctl;
-	dnie_ops.process_fci = dnie_process_fci;
+	dnie_ops.create_file	= NULL;
+	dnie_ops.delete_file	= NULL;
+	dnie_ops.list_files	= dnie_list_files;
+	dnie_ops.check_sw	= dnie_check_sw;
+	dnie_ops.card_ctl	= dnie_card_ctl;
+	dnie_ops.process_fci	= dnie_process_fci;
 	/* dnie_ops.construct_fci */
-	dnie_ops.pin_cmd = dnie_pin_cmd;
-	/* dnie_ops.get_data */
-	/* dnie_ops.put_data */
-	/* dnie_ops.delete_record */
+	dnie_ops.pin_cmd	= dnie_pin_cmd;
+	dnie_ops.get_data	= NULL;
+	dnie_ops.put_data	= NULL;
+	dnie_ops.delete_record	= NULL;
 
 	return &dnie_driver;
 }

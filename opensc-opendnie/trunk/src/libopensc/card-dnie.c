@@ -70,10 +70,11 @@ extern int dnie_read_file(
 /* default user consent program (if required) */
 #define USER_CONSENT_CMD "/usr/bin/pinentry"
 
-/* Undeclared dnie APDU responses in iso7816.c */
+/* override APDU response error codes from iso7816.c to allow handling of SM specific error*/
 static struct sc_card_error dnie_errors[] = {
-	{0x6688, SC_ERROR_UNKNOWN, "Secure Message value is incorrect"},
-	{0x6A89, SC_ERROR_FILE_ALREADY_EXISTS, "File/Key already exists"},
+	{0x6688, SC_ERROR_SECURE_MESSAGING_FAILURE, "Cryptographic checksum invalid"},
+	{0x6987, SC_ERROR_SECURE_MESSAGING_FAILURE, "Expected SM Data Object missing"},
+	{0x6988, SC_ERROR_SECURE_MESSAGING_FAILURE, "SM Data Object incorrect"},
 	{0, 0, NULL}
 };
 
@@ -628,8 +629,8 @@ static int dnie_init(struct sc_card *card)
 
 	/* initialize SM state to NONE */
 	/* TODO: change to CWA_SM_OFF when SM testing get done */
-	result = cwa_create_secure_channel(card, p, CWA_SM_COLD);
-	// result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
+	// result = cwa_create_secure_channel(card, p, CWA_SM_COLD);
+	result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
 
  dnie_init_error:
 	LOG_FUNC_RETURN(card->ctx, result);
@@ -643,7 +644,7 @@ static int dnie_finish(struct sc_card *card)
 	LOG_FUNC_CALLED(card->ctx);
 
 	/* disable sm channel if stablished */
-	cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_OFF);
+	result = cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_OFF);
 
 	LOG_FUNC_RETURN(card->ctx, result);
 }

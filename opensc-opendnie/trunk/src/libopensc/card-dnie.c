@@ -776,35 +776,64 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 {
 	int res = SC_SUCCESS;
-	cwa_provider_t *provider = dnie_priv.provider;
 	sc_apdu_t wrapped;
-	sc_apdu_t *to_be_sent = apdu;
+	sc_context_t *ctx;
+	cwa_provider_t *provider = dnie_priv.provider;
+	int retries = 3;
+
 	if ((card == NULL) || (card->ctx == NULL) || (apdu == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
-	LOG_FUNC_CALLED(card->ctx);
+	ctx=card->ctx;
+	LOG_FUNC_CALLED(ctx);
 
-	/* SM is active, encode apdu */
-	if (provider->status.state == CWA_SM_ACTIVE) {
+	for (retries=3; retries>0; retries--) {
+		/* preserve original apdu to take care of retransmission */
 		memcpy(&wrapped, apdu, sizeof(sc_apdu_t));
-		wrapped.resp = NULL;
-		wrapped.resplen = 0;	/* let get_response() assign space */
-		res = cwa_encode_apdu(card, provider, apdu, &wrapped);
-		LOG_TEST_RET(card->ctx, res,
-			     "Error in cwa_encode_apdu process");
-		to_be_sent = &wrapped;
+		/* SM is active, encode apdu */
+		if (provider->status.state == CWA_SM_ACTIVE) {
+			wrapped.resp = NULL;
+			wrapped.resplen = 0;	/* let get_response() assign space */
+			res = cwa_encode_apdu(card, provider, apdu, &wrapped);
+			LOG_TEST_RET(ctx, res,
+				     "Error in cwa_encode_apdu process");
+		}
+		/* send apdu via envelope() cmd if needed */
+		res = dnie_transmit_apdu(card, &wrapped);
+		/* check for tx errors */
+		LOG_TEST_RET(ctx, res, "Error in dnie_transmit_apdu process");
+
+		/* parse response and handle SM related errors */
+		res=card->ops->check_sw(card,wrapped.sw1,wrapped.sw2);
+		if ( res == SC_ERROR_SECURE_MESSAGING_FAILURE ) {
+			sc_log(ctx,"Detected SM error/collision. Try %d",retries);
+			switch(provider->status.state) {
+				/* No SM or creating: collision with other process
+				   just retry as SM error reset ICC SM state */
+				case CWA_SM_NONE: 
+				case CWA_SM_INPROGRESS: 
+					continue;
+				/* SM was active: force restart SM and retry */
+				case CWA_SM_ACTIVE:
+					res=cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_COLD);
+					LOG_TEST_RET(ctx,res,"Cannot re-enable SM");
+					continue;
+			}
+		}
+
+		/* if SM is active; decode apdu */
+		if (provider->status.state == CWA_SM_ACTIVE) {
+			apdu->resp = NULL;
+			apdu->resplen = 0;	/* let cwa_decode_response() eval & create size */
+			res = cwa_decode_response(card, provider, &wrapped, apdu);
+			LOG_TEST_RET(ctx, res, "Error in cwa_decode_response process");
+		} else {
+			/* memcopy result to original apdu */
+			memcpy(apdu, &wrapped, sizeof(sc_apdu_t));
+		}
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	}
-	/* send apdu via envelope() cmd if needed */
-	res = dnie_transmit_apdu(card, to_be_sent);
-	LOG_TEST_RET(card->ctx, res, "Error in dnie_transmit_apdu process");
-	/* if SM is active; decode apdu */
-	if (provider->status.state == CWA_SM_ACTIVE) {
-		apdu->resp = NULL;
-		apdu->resplen = 0;	/* let cwa_decode_response() eval & create size */
-		res = cwa_decode_response(card, provider, &wrapped, apdu);
-		LOG_TEST_RET(card->ctx, res,
-			     "Error in cwa_decode_response process");
-	}
-	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+	sc_log(ctx,"Too many retransmissions. Abort and return");
+	LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 }
 
 /* ISO 7816-4 functions */

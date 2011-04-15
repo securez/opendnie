@@ -67,6 +67,7 @@ const char *sc_strerror(int error)
 		"File already exists",
 		"Data object not found",
 		"Not enough memory on card",
+		"Secure Message handling failure",
 	};
 	const int card_base = -SC_ERROR_CARD_CMD_FAILED;
 	const char *arg_errors[] = {

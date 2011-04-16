@@ -1210,6 +1210,8 @@ static int dnie_select_file(struct sc_card *card,
 		}
 
 		/* convert to SC_PATH_TYPE_FILE_ID */
+		res = sc_lock(card); /* lock to ensure path traversal */
+		LOG_TEST_RET(ctx, res, "sc_lock() failed");
 		while (pathlen > 0) {
 			sc_path_t tmpp;
 			if ( memcmp(path, "\x3F\x00", 2) == 0) {
@@ -1226,10 +1228,15 @@ static int dnie_select_file(struct sc_card *card,
 			}
 			/* recursively call to select_file */
 			res = card->ops->select_file(card, &tmpp, file_out);
-			LOG_TEST_RET(ctx, res, "select_file(PATH) failed");
+			if (res != SC_SUCCESS) {
+				sc_unlock(card);
+				sc_log(ctx,"select_file(PATH) failed");
+				LOG_FUNC_RETURN(ctx,res);
+			}
 			pathlen -= 2;
 			path += 2;
 		}
+		sc_unlock(card);
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 		break;
 	case SC_PATH_TYPE_FROM_CURRENT:

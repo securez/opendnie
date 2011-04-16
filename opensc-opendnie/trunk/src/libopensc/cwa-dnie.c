@@ -178,9 +178,6 @@ int dnie_read_file(sc_card_t * card,
 	LOG_FUNC_CALLED(card->ctx);
 	if (!buffer || !length || !path)	/* check received arguments */
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-	// /* try to adquire lock on card */
-	// res=sc_lock(card);
-	// LOG_TEST_RET(ctx, res, "sc_lock() failed");
 	/* select file by mean of iso7816 ops */
 	res = card->ops->select_file(card, path, file);
 	if (res != SC_SUCCESS) {
@@ -228,7 +225,6 @@ int dnie_read_file(sc_card_t * card,
 	if (*file)
 		sc_file_free(*file);
  dnie_read_file_end:
-	// sc_unlock(card);
 	if (msg)
 		sc_log(ctx, msg);
 	LOG_FUNC_RETURN(ctx, res);

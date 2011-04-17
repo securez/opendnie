@@ -7,6 +7,7 @@
 <?else ?>
   <?define ProductName = "OpenSC" ?>
   <?define Win64YesNo="no" ?>
+  <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
   <?define PlatformSystemFolder = "SystemFolder" ?>
 <?endif ?>
 
@@ -61,7 +62,7 @@
             <Component Id="opensc.conf" Guid="*" Win64="$(var.Win64YesNo)">
               <File Source="$(var.SOURCE_DIR)\etc\opensc.conf.in" KeyPath="yes"/>
               <!-- -->
-              <RegistryKey Id="OpenscRegs" Root="HKLM" Key="Software\[Manufacturer]\[ProductName]" Action="createAndRemoveOnUninstall">
+              <RegistryKey Id="OpenscRegs" Root="HKLM" Key="Software\[Manufacturer]\OpenSC" Action="createAndRemoveOnUninstall">
                 <RegistryValue Type="string" Name="ConfigFile" Value="[INSTALLDIR]opensc.conf"/>
                 <RegistryValue Type="string" Name="ProfileDir" Value="[INSTALLDIR]profiles"/>
               </RegistryKey>

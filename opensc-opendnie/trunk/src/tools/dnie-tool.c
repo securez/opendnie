@@ -34,6 +34,7 @@
 #include <fcntl.h>
 
 #include "libopensc/opensc.h"
+#include "libopensc/errors.h"
 #include "libopensc/cardctl.h"
 #include "libopensc/pkcs15.h"
 #include "util.h"
@@ -87,7 +88,7 @@ int main(int argc, char* argv[])
 	const char  *opt_reader = NULL;
 	const char  *opt_driver = NULL;
 	int	     opt_operation = OP_NONE;
-	int	     opt_debug = 0;
+	int	     verbose = 0;
 	
 	int err = 0;
 	sc_context_t *ctx = NULL;
@@ -134,7 +135,7 @@ int main(int argc, char* argv[])
 			opt_operation = OP_GET_IDESP | OP_GET_VERSION | OP_GET_DATA | OP_GET_SERIALNR;
 			break;
 		case 'v':
-			opt_debug++;
+			verbose++;
 			break;
 		}
 	}
@@ -148,9 +149,9 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	if (opt_debug > 1) {
-		ctx->debug = opt_debug;
-		ctx->debug_file = stderr;
+	if (verbose > 1) {
+		ctx->debug = verbose;
+		sc_ctx_log_to_file(ctx,"stderr");
 	}
 
 	if (opt_driver != NULL) {
@@ -163,7 +164,7 @@ int main(int argc, char* argv[])
 		}
 	}
 	
-	if (util_connect_card(ctx, &card, opt_reader, opt_wait, opt_debug) ) {
+	if (util_connect_card(ctx, &card, opt_reader, opt_wait, verbose) ) {
 		fprintf(stderr, "Error: Cannot connect with card\n");
 		err = -1;
 		goto dnie_tool_end;

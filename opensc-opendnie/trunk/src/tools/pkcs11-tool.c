@@ -1977,7 +1977,9 @@ VARATTR_METHOD(APPLICATION, char);
 VARATTR_METHOD(ID, unsigned char);
 VARATTR_METHOD(OBJECT_ID, unsigned char);
 VARATTR_METHOD(MODULUS, CK_BYTE);
+#ifdef ENABLE_OPENSSL
 VARATTR_METHOD(PUBLIC_EXPONENT, CK_BYTE);
+#endif
 VARATTR_METHOD(VALUE, unsigned char);
 VARATTR_METHOD(GOSTR3410_PARAMS, unsigned char);
 VARATTR_METHOD(EC_POINT, unsigned char);
@@ -1999,7 +2001,7 @@ static void list_objects(CK_SESSION_HANDLE sess, CK_OBJECT_CLASS  object_class)
 			p11_fatal("C_FindObjects", rv);
 		if (count == 0)
 			break;
-		if (object_class == -1 || object_class == getCLASS(sess, object))
+		if ((int) object_class == -1 || object_class == getCLASS(sess, object))
 			show_object(sess, object);
 	}
 	p11->C_FindObjectsFinal(sess);

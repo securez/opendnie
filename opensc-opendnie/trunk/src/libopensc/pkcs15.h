@@ -149,18 +149,26 @@ struct sc_pkcs15_prkey_dsa {
 	sc_pkcs15_bignum_t priv;
 };
 
-	/* The ecParameters are kept in DER format
-	 * as certificates, and pkcs11 process them as DER 
-	 * If needed, they can be parsed
-	 */ 
+/* 
+ * The ecParameters can be presented as
+ * - named curve;
+ * - OID of named curve;
+ * - implicit parameters.
+ */
+struct sc_pkcs15_ec_parameters {
+	char *named_curve;
+	struct sc_object_id id;
+	sc_pkcs15_der_t der;
+	size_t field_length; /* in bits */
+};
+
 struct sc_pkcs15_pubkey_ec {
-	sc_pkcs15_der_t		ecparameters;
+	struct sc_pkcs15_ec_parameters params;
 	sc_pkcs15_der_t		ecpointQ; /* note this is der */
-	size_t 				field_length; /* in bits */
 };
 
 struct sc_pkcs15_prkey_ec {
-	sc_pkcs15_der_t     ecparameters;
+	struct sc_pkcs15_ec_parameters params;
 	sc_pkcs15_bignum_t	privateD; /* note this is bignum */
 };
 
@@ -794,6 +802,8 @@ struct sc_supported_algo_info *sc_pkcs15_get_supported_algo(struct sc_pkcs15_car
 		unsigned, unsigned);
 int sc_pkcs15_add_supported_algo_ref(struct sc_pkcs15_object *,
 		struct sc_supported_algo_info *);
+
+int sc_pkcs15_fix_ec_parameters(struct sc_context *, struct sc_pkcs15_ec_parameters *);
 
 /* New object search API.
  * More complex, but also more powerful.

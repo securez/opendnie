@@ -49,7 +49,7 @@ app default {
 		#
 		# Connect to reader in exclusive mode?
 		# Default: false
-		connect_exclusive = true;
+		# connect_exclusive = true;
 		#
 		# What to do when disconnecting from a card (SCardDisconnect)
 		# Valid values: leave, reset, unpower.

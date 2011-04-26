@@ -221,9 +221,17 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t * p15card)
 			p15_obj->auth_id.value[0] = 0x01;
 			p15_obj->auth_id.len = 1;
 		}
-		p15_obj = p15_obj->next;
+		/* Remove found public keys as cannot be read_binary()'d */
+		if ( p15_obj->df && (p15_obj->df->type == SC_PKCS15_PUKDF) ) {
+			sc_pkcs15_object_t *puk = p15_obj;
+			p15_obj = p15_obj->next;
+			sc_pkcs15_remove_object(p15card, puk);
+			sc_pkcs15_free_object(puk);
+                } else {
+			p15_obj = p15_obj->next;
+		}
 	}
-
+	
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 

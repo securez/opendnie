@@ -830,7 +830,7 @@ static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 			/* memcopy result to original apdu */
 			memcpy(apdu, &wrapped, sizeof(sc_apdu_t));
 		}
-		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+		LOG_FUNC_RETURN(ctx, res);
 	}
 	sc_log(ctx,"Too many retransmissions. Abort and return");
 	LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -1983,6 +1983,9 @@ static int dnie_process_fci(struct sc_card *card,
 		file->ef_structure = SC_FILE_EF_TRANSPARENT;
 		/* evaluate real length by reading first 8 bytes from file */
 		res = dnie_read_header(card);
+		/* Hey!, we need pin to read certificates... */
+		if (res == SC_ERROR_SECURITY_STATUS_NOT_SATISFIED)
+			goto dnie_process_fci_end;
 		if (res <= 0) {
 			sc_log(ctx,
 			       "Cannot evaluate uncompressed size. use fci length");
@@ -2001,9 +2004,11 @@ static int dnie_process_fci(struct sc_card *card,
 		goto dnie_process_fci_end;
 	}
 	/* bytes 1 and 2 stores file ID */
-	file->id = (file->prop_attr[1] << 8) | file->prop_attr[2];
+	file->id = ( ( 0xff & (int)file->prop_attr[1] ) << 8 ) | 
+			( 0xff & (int)file->prop_attr[2] ) ;
 	/* bytes 3 and 4 states file length */
-	file->size = (file->prop_attr[3] << 8) | file->prop_attr[4];
+	file->size = ( ( 0xff & (int)file->prop_attr[3] ) << 8 ) | 
+			( 0xff & (int)file->prop_attr[4] ) ;
 	/* bytes 5 to 9 states security attributes */
 	/* NOTE: 
 	 * seems that these 5 bytes are handled according iso7816-9 sect 8.

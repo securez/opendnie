@@ -110,6 +110,8 @@ static int iasecc_sdo_get_data(struct sc_card *card, struct iasecc_sdo *sdo);
 static int iasecc_pin_get_policy (struct sc_card *card, struct sc_pin_cmd_data *data);
 static int iasecc_pin_is_verified(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left);
 static int iasecc_get_free_reference(struct sc_card *card, struct iasecc_ctl_get_free_reference *ctl_data);
+static int iasecc_sdo_put_data(struct sc_card *card, struct iasecc_sdo_update *update);
+
 
 static int 
 iasecc_chv_cache_verified(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd)
@@ -2253,7 +2255,9 @@ iasecc_sdo_create(struct sc_card *card, struct iasecc_sdo *sdo)
 {
 	struct sc_context *ctx = card->ctx;
 	struct sc_apdu apdu;
-	unsigned char *data = NULL;
+	unsigned char *data = NULL, sdo_class = sdo->sdo_class;
+	struct iasecc_sdo_update update;
+	struct iasecc_extended_tlv *field = NULL;
 	int rv = SC_ERROR_NOT_SUPPORTED, data_len;
 
 	LOG_FUNC_CALLED(ctx);
@@ -2277,6 +2281,34 @@ iasecc_sdo_create(struct sc_card *card, struct iasecc_sdo *sdo)
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 	LOG_TEST_RET(ctx, rv, "iasecc_sdo_create() SDO put data error");
+
+	memset(&update, 0, sizeof(update));
+	update.magic = SC_CARDCTL_IASECC_SDO_MAGIC_PUT_DATA;
+	update.sdo_class = sdo->sdo_class;
+	update.sdo_ref = sdo->sdo_ref;
+
+	if (sdo_class == IASECC_SDO_CLASS_RSA_PRIVATE)   {
+		update.fields[0] = sdo->data.prv_key.compulsory;
+		update.fields[0].parent_tag = IASECC_SDO_PRVKEY_TAG;
+		field = &sdo->data.prv_key.compulsory;
+	}
+	else if (sdo_class == IASECC_SDO_CLASS_RSA_PUBLIC)   { 
+		update.fields[0] = sdo->data.pub_key.compulsory;
+		update.fields[0].parent_tag = IASECC_SDO_PUBKEY_TAG;
+		field = &sdo->data.pub_key.compulsory;
+	}
+	else if (sdo_class == IASECC_SDO_CLASS_KEYSET)   { 
+		update.fields[0] = sdo->data.keyset.compulsory;
+		update.fields[0].parent_tag = IASECC_SDO_KEYSET_TAG;
+		field = &sdo->data.keyset.compulsory;
+	}
+
+	if (update.fields[0].value && !update.fields[0].on_card)   {
+		rv = iasecc_sdo_put_data(card, &update);
+		LOG_TEST_RET(ctx, rv, "failed to update 'Compulsory usage' data");
+
+		field->on_card = 1;
+	}
 
 	free(data);
 	LOG_FUNC_RETURN(ctx, rv);
@@ -2741,12 +2773,16 @@ iasecc_get_qsign_data (struct sc_context *ctx, const unsigned char *in, size_t i
 		out->counter[hh_size+ii] = (sha.Nl >> 8*(hh_size-1-ii)) &0xFF;
 	}
 
+	for (ii=0, out->counter_long=0; ii<sizeof(out->counter); ii++)
+		out->counter_long = out->counter_long*0x100 + out->counter[ii];
+
 	sc_log(ctx, "Pre SHA1:%s", sc_dump_hex(out->pre_hash, out->pre_hash_size));
-	sc_log(ctx, "Pre counter:%s", sc_dump_hex(out->counter, sizeof(out->counter)));
+	sc_log(ctx, "Pre counter(%li):%s", out->counter_long, sc_dump_hex(out->counter, sizeof(out->counter)));
 
 	for (ii=0;ii<sha.num; ii++)
 		out->last_block[ii] = (sha.data[ii/hh_size] >> 8*(hh_size-1-(ii%hh_size))) &0xFF;
 	out->last_block_size = sha.num;
+	sc_log(ctx, "Last block(%i):%s", out->last_block_size, sc_dump_hex(out->last_block, out->last_block_size));
 
 	SHA1_Final(out->hash, &sha);
 	out->hash_size = SHA_DIGEST_LENGTH;
@@ -2792,11 +2828,16 @@ iasecc_compute_signature_dst(struct sc_card *card,
 
 	memset(sbuf, 0, sizeof(sbuf));
 	sbuf[offs++] = 0x90;
-	sbuf[offs++] = qsign_data.hash_size + 8;
-	memcpy(sbuf + offs, qsign_data.pre_hash, qsign_data.pre_hash_size);
-	offs += qsign_data.pre_hash_size;
-	memcpy(sbuf + offs, qsign_data.counter, sizeof(qsign_data.counter));
-	offs += sizeof(qsign_data.counter);
+	if (qsign_data.counter_long)   {
+		sbuf[offs++] = qsign_data.hash_size + 8;
+		memcpy(sbuf + offs, qsign_data.pre_hash, qsign_data.pre_hash_size);
+		offs += qsign_data.pre_hash_size;
+		memcpy(sbuf + offs, qsign_data.counter, sizeof(qsign_data.counter));
+		offs += sizeof(qsign_data.counter);
+	}
+	else   {
+		sbuf[offs++] = 0;
+	}
 
 	sbuf[offs++] = 0x80;
 	sbuf[offs++] = qsign_data.last_block_size;

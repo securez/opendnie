@@ -234,9 +234,9 @@ static int ask_user_consent(sc_card_t * card)
 	if ( res == IDOK ) LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 	LOG_FUNC_RETURN(card->ctx, SC_ERROR_INTERNAL);
 #else
+	/* check that user_consent_app exists. TODO: check if executable */
 	res = stat(dnie_priv.user_consent_app, &st_file);
 	if (res != 0) {
-		/* TODO: check that pinentry file is executable */
 		sc_log(card->ctx, "Invalid pinentry application: %s\n",
 		       dnie_priv.user_consent_app);
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
@@ -268,6 +268,7 @@ static int ask_user_consent(sc_card_t * card)
 		close(srv_recv[1]);
 		/* call exec() with proper user_consent_app from configuration */
 		execlp(dnie_priv.user_consent_app, dnie_priv.user_consent_app, (char *)NULL);	/* if ok should never return */
+		res = SC_ERROR_INTERNAL;
 		msg = "execlp() error";	/* exec() failed */
 		goto do_error;
 	default:		/* parent */
@@ -298,22 +299,26 @@ static int ask_user_consent(sc_card_t * card)
 			memset(buf, 0, sizeof(buf));
 			pt=fgets(buf, sizeof(buf) - 1, fin);
 			if (pt==NULL) {
+				res = SC_ERROR_INTERNAL;
 				msg = "fgets() Unexpected IOError/EOF";
 				goto do_error;
 			}
 			if (strstr(buf, "OK") == NULL) {
+				res = SC_ERROR_NOT_ALLOWED;
 				msg = "fail/cancel";
 				goto do_error;
 			}
 		}
-		/* close out channel to force client receive EOF and also die */
-		fclose(fout);
-		fclose(fin);
 	}			/* switch */
 	/* arriving here means signature has been accepted by user */
 	res = SC_SUCCESS;
 	msg = NULL;
  do_error:
+#ifndef _WIN32
+	/* close out channel to force client receive EOF and also die */
+	if (fout != NULL) fclose(fout);
+	if (fin != NULL) fclose(fin);
+#endif
 	if (msg != NULL)
 		sc_log(card->ctx, "%s", msg);
 	LOG_FUNC_RETURN(card->ctx, res);

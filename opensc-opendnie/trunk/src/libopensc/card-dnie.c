@@ -232,7 +232,7 @@ static int ask_user_consent(sc_card_t * card)
 		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
 		);
 	if ( res == IDOK ) LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
-	LOG_FUNC_RETURN(card->ctx, SC_ERROR_INTERNAL);
+	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_ALLOWED);
 #else
 	/* check that user_consent_app exists. TODO: check if executable */
 	res = stat(dnie_priv.user_consent_app, &st_file);

@@ -1975,6 +1975,11 @@ static int dnie_process_fci(struct sc_card *card,
 		break;
 	case 0x15:		/* EF for keys: linear variable simple TLV */
 		file->type = SC_FILE_TYPE_WORKING_EF;
+		/* pin file 3F000000 has also this EF type */
+		if ( ( file->prop_attr[3] == 0x00 ) && (file->prop_attr[3] == 0x00 ) ) {
+			sc_log(ctx,"Processing pin EF");
+			break;
+		}
 		/* FCI response for Keys EF returns 3 additional bytes */
 		if (file->prop_attr_len < 13) {
 			sc_log(ctx,

@@ -1,4 +1,4 @@
-Source: opensc-dnie
+Source: opensc-opendnie
 Priority: extra
 Section: utils
 Maintainer: Enrique Hernández Bello <quique@osl.ull.es>
@@ -29,14 +29,14 @@ Description: Smart card utilities with support for PKCS#15 compatible cards
  operations may be supported for your card. Card initialization may
  require third party proprietary software.
 
-Package: libopensc2-dev
+Package: libopensc3-dev
 Section: libdevel
 Priority: optional
 Architecture: any
 Conflicts: libopensc0-dev, libopensc1-dev
 Replaces: libopensc0-dev, libopensc1-dev, libscam1 (<< 0.9.4-5)
 Provides: libopensc-dev
-Depends: libopensc2 (= ${binary:Version}), libssl-dev, ${misc:Depends}
+Depends: libopensc3 (= ${binary:Version}), libssl-dev, ${misc:Depends}
 Description: OpenSC development files
  OpenSC provides a set of libraries and utilities to access smart
  cards.  It mainly focuses on cards that support cryptographic
@@ -50,14 +50,14 @@ Description: OpenSC development files
  This package contains files necessary for developing applications
  with the libopensc libraries from OpenSC.org.
 
-Package: libopensc2
+Package: libopensc3
 Section: libs
 Priority: optional
 Architecture: any
-Conflicts: libopensc0, libopensc1
-Replaces: libopensc0, libopensc1
+Conflicts: libopensc0, libopensc1, libopensc2 (<< 0.12.0-0svnr4365)
+Replaces: libopensc0, libopensc1, libopensc2 (<< 0.12.0-0svnr4365)
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Smart card library with support for Spanish electronic ID card (DNIe)
+Description: SmartCard library with support for PKCS#15 compatible smart cards
  OpenSC provides a set of libraries and utilities to access smart
  cards.  It mainly focuses on cards that support cryptographic
  operations. It facilitates their use in security applications such as
@@ -73,16 +73,33 @@ Description: Smart card library with support for Spanish electronic ID card (DNI
  .
  Card initialization can be performed by utilities in the opensc package.
 
-Package: libopensc2-dbg
+Package: libopensc3-dbg
 Section: debug
 Priority: extra
 Architecture: any
-Depends: libopensc2 (= ${binary:Version}), ${misc:Depends}
-Description: Debugging symbols for libopensc2
+Provides: libopensc2-dbg
+Conflicts: libopensc2-dbg (<< 0.12.0-0svnr4365)
+Replaces: libopensc2-dbg (<< 0.12.0-0svnr4365)
+Depends: libopensc3 (= ${binary:Version}), ${misc:Depends}
+Description: Debugging symbols for libopensc3
  This package contains the debugging symbols for the libopensc library
  from OpenSC.org.
  .
  Card initialization can be performed by utilities in the opensc package.
+
+Package: libopensc2
+Architecture: any
+Depends: libopensc3
+Description: transitional dummy upgrade package for libopensc3
+ This is a dummy transitional package to ease the migration to the new
+ libopensc3 package. You can remove it safely.
+ 
+Package: libopensc2-dbg
+Architecture: any
+Depends: libopensc3-dbg
+Description: transitional dummy upgrade package for libopensc3-dbg
+ This is a dummy transitional package to ease the migration to the new
+ libopensc3-dbg package. You can remove it safely.
 
 Package: mozilla-opensc
 Section: web
@@ -99,7 +116,7 @@ Description: Mozilla plugin for authentication using OpenSC
 Package: dnie-support
 Section: misc
 Architecture: all
-Pre-Depends: libnss3-tools, libopensc2
+Pre-Depends: libnss3-tools, libopensc3
 Depends: libacr38u, libccid, firefox, mozilla-opensc, openct, opensc, ${misc:Depends}
 Description: Adds support for Spanish electronic ID card (DNIe)
  This package contains files and installs necessary software for using

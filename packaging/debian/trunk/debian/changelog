@@ -1,14 +1,15 @@
-opensc-dnie (0.12.1-svn-1) maverick; urgency=low
+opensc-opendnie (0.12.1-svn5320-1) UNRELEASED; urgency=low
 
-  * New upstream release
+  * New upstream release.
+  * Switching to opensc-opendnie.
 
- -- Enrique Hernández Bello <ehbello@gmail.com>  Sun, 06 Feb 2011 20:43:36 +0000
+ -- Enrique Hernández Bello <quique@osl.ull.es>  Sun, 06 Feb 2011 20:43:36 +0000
 
 opensc-dnie (0.11.13-3-1) UNRELEASED; urgency=low
 
   * New upstream release.
 
- -- Enrique Hernández Bello <ehbello@gmail.com>  Wed, 01 Dec 2010 01:59:39 +0000
+ -- Enrique Hernández Bello <quique@osl.ull.es>  Wed, 01 Dec 2010 01:59:39 +0000
 
 opensc-dnie (0.11.13-1ubuntu2dnie1) UNRELEASED; urgency=low
 

@@ -2100,67 +2100,45 @@ static int dnie_process_fci(struct sc_card *card,
 	LOG_FUNC_RETURN(card->ctx, res);
 }
 
-/* pin_cmd: verify/change/unblock command; optionally using the
- * card's pin pad if supported.
+/**
+ * PIN related functions 
+ * NOTE:
+ * DNIe manual says only about CHV1 PIN verify, but several sources talks
+ * about the ability to also handle CHV1 PIN change
+ * So prepare code to eventually support
+ *
+ * Anyway pin unlock is not available: no way to get PUK as these code is
+ * obtained by mean of user fingerprint, only available at police station
  */
-static int dnie_pin_cmd(struct sc_card *card,
-			struct sc_pin_cmd_data *data, int *tries_left)
+
+static int dnie_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data)
 {
-	int res = SC_SUCCESS;
-	int lc = SC_CARDCTRL_LIFECYCLE_USER;
+	int res=SC_SUCCESS;
+	LOG_FUNC_CALLED(card->ctx);
+
+        /* ensure that secure channel is established from reset */
+        res = cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_COLD);
+        LOG_TEST_RET(card->ctx, res, "Establish SM failed");
+
+	LOG_FUNC_RETURN(card->ctx,SC_ERROR_NOT_SUPPORTED);
+}
+
+static int dnie_pin_verify(struct sc_card *card,
+                        struct sc_pin_cmd_data *data, int *tries_left)
+{
+	int res=SC_SUCCESS;
 	sc_apdu_t apdu;
 
 	u8 pinbuffer[SC_MAX_APDU_BUFFER_SIZE];
 	int pinlen = 0;
 	int padding = 0;
 
-	if ((card == NULL) || (card->ctx == NULL) || (data == NULL))
-		return SC_ERROR_INVALID_ARGUMENTS;
 	LOG_FUNC_CALLED(card->ctx);
-
-	/* 
-	* some flags and settings from documentation 
-	* No (easy) way to handle pinpad throught SM, so disable it
-	*/
-	data->flags &= ~SC_PIN_CMD_NEED_PADDING; /* no pin padding */
-	data->flags &= ~SC_PIN_CMD_USE_PINPAD;	 /* cannot handle pinpad */
-	data->apdu = &apdu;	/* prepare apdu struct */
-
-	/* ensure that card is in USER Lifecycle */
-	res = dnie_card_ctl(card, SC_CARDCTL_LIFECYCLE_GET, &lc);
-	LOG_TEST_RET(card->ctx, res, "Cannot get card LC status");
-	if (lc != SC_CARDCTRL_LIFECYCLE_USER) {
-		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_CARD);
-	}
-
 	/* ensure that secure channel is established from reset */
 	res = cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_COLD);
 	LOG_TEST_RET(card->ctx, res, "Establish SM failed");
 
-	/* only allow changes on CHV pin ) */
-	switch (data->pin_type) {
-	case SC_AC_CHV:	/* Card Holder Verifier */
-		break;
-	case SC_AC_TERM:	/* Terminal auth */
-	case SC_AC_PRO:	/* SM auth */
-	case SC_AC_AUT:	/* Key auth */
-		LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_SUPPORTED);
-	default:
-		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
-	}
-	/* This DNIe driver only supports VERIFY operation */
-	switch (data->cmd) {
-	case SC_PIN_CMD_VERIFY:
-		break;
-	case SC_PIN_CMD_CHANGE:
-	case SC_PIN_CMD_UNBLOCK:
-	case SC_PIN_CMD_GET_INFO:
-		LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_SUPPORTED);
-	default:
-		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
-	}
-	/* Arriving here means that's all checks are OK. So do task */
-
+	data->apdu = &apdu;	/* prepare apdu struct */
 	/* compose pin data to be inserted in apdu */
 	if (data->flags & SC_PIN_CMD_NEED_PADDING)
 		padding = 1;
@@ -2199,6 +2177,64 @@ static int dnie_pin_cmd(struct sc_card *card,
 	/* the end: a bit of Mister Proper and return */
 	memset(&apdu, 0, sizeof(apdu));	/* clear buffer */
 	data->apdu = NULL;
+	LOG_FUNC_RETURN(card->ctx, res);
+}
+
+/* pin_cmd: verify/change/unblock command; optionally using the
+ * card's pin pad if supported.
+ */
+static int dnie_pin_cmd(struct sc_card *card,
+			struct sc_pin_cmd_data *data, int *tries_left)
+{
+	int res = SC_SUCCESS;
+	int lc = SC_CARDCTRL_LIFECYCLE_USER;
+
+	if ((card == NULL) || (card->ctx == NULL) || (data == NULL))
+		return SC_ERROR_INVALID_ARGUMENTS;
+	LOG_FUNC_CALLED(card->ctx);
+
+	/* 
+	* some flags and settings from documentation 
+	* No (easy) way to handle pinpad throught SM, so disable it
+	*/
+	data->flags &= ~SC_PIN_CMD_NEED_PADDING; /* no pin padding */
+	data->flags &= ~SC_PIN_CMD_USE_PINPAD;	 /* cannot handle pinpad */
+
+	/* ensure that card is in USER Lifecycle */
+	res = dnie_card_ctl(card, SC_CARDCTL_LIFECYCLE_GET, &lc);
+	LOG_TEST_RET(card->ctx, res, "Cannot get card LC status");
+	if (lc != SC_CARDCTRL_LIFECYCLE_USER) {
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_CARD);
+	}
+
+	/* only allow changes on CHV pin ) */
+	switch (data->pin_type) {
+	case SC_AC_CHV:	/* Card Holder Verifier */
+		break;
+	case SC_AC_TERM:	/* Terminal auth */
+	case SC_AC_PRO:	/* SM auth */
+	case SC_AC_AUT:	/* Key auth */
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_SUPPORTED);
+	default:
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
+	}
+	/* This DNIe driver only supports VERIFY operation */
+	switch (data->cmd) {
+	case SC_PIN_CMD_VERIFY:
+		res =  dnie_pin_verify(card,data,tries_left);
+		break;
+	case SC_PIN_CMD_CHANGE:
+		res =  dnie_pin_change(card,data);
+		break;
+	case SC_PIN_CMD_UNBLOCK:
+	case SC_PIN_CMD_GET_INFO:
+		res= SC_ERROR_NOT_SUPPORTED;
+		break;
+	default:
+		res= SC_ERROR_INVALID_ARGUMENTS;
+		break;
+	}
+	/* return result */
 	LOG_FUNC_RETURN(card->ctx, res);
 }
 

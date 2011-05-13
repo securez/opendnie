@@ -21,7 +21,7 @@ apt-get install ...
 uscan --download-current-version
 
 4. Untar it:
-tar xzvf ../opensc-dnie_*.orig.tar.gz --show-transformed-names --transform 's|^[^/]*||'
+tar xzvf ../opensc-*dnie_*.orig.tar.gz --show-transformed-names --transform 's|^[^/]*||'
 
 5. Build it:
 debuild -rfakeroot -us -uc -tc

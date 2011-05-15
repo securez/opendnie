@@ -70,7 +70,6 @@ const char *sc_strerror(int error)
 		"Not enough memory on card",
 		"Part of returned data may be corrupted",
 		"End of file/record reached before reading Le bytes"
-		"Secure Message handling failure",
 	};
 	const int card_base = -SC_ERROR_CARD_CMD_FAILED;
 
@@ -131,7 +130,9 @@ const char *sc_strerror(int error)
 		"Cannot authenticate card",
 		"Random generation error",
 		"Secure messaging keyset not found",
-		"IFD data missing"
+		"IFD data missing",
+		"Missing SM Data object",
+		"Invalid SM Data object"
 	};
 
 

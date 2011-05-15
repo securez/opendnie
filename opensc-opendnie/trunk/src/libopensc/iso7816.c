@@ -41,6 +41,8 @@ static const struct sc_card_error iso7816_errors[] = {
 
 	{ 0x6581, SC_ERROR_MEMORY_FAILURE,	"Memory failure" },
 
+	{ 0x6688, SC_ERROR_SM_ENCRYPT_FAILED,	"Verification of cryptographic checksum failed" },
+
 	{ 0x6700, SC_ERROR_WRONG_LENGTH,	"Wrong length" },
 
 	{ 0x6800, SC_ERROR_NO_CARD_SUPPORT,	"Functions in CLA not supported" },
@@ -54,8 +56,8 @@ static const struct sc_card_error iso7816_errors[] = {
 	{ 0x6984, SC_ERROR_CARD_CMD_FAILED,	"Referenced data invalidated" },
 	{ 0x6985, SC_ERROR_NOT_ALLOWED,		"Conditions of use not satisfied" },
 	{ 0x6986, SC_ERROR_NOT_ALLOWED,		"Command not allowed (no current EF)" },
-	{ 0x6987, SC_ERROR_INCORRECT_PARAMETERS,"Expected SM data objects missing" },
-	{ 0x6988, SC_ERROR_INCORRECT_PARAMETERS,"SM data objects incorrect" },
+	{ 0x6987, SC_ERROR_SM_DATA_OBJECT_MISSING, "Expected SM data objects missing" },
+	{ 0x6988, SC_ERROR_SM_DATA_OBJECT_INVALID, "SM data objects incorrect" },
 
 	{ 0x6A00, SC_ERROR_INCORRECT_PARAMETERS,"Wrong parameter(s) P1-P2" },
 	{ 0x6A80, SC_ERROR_INCORRECT_PARAMETERS,"Incorrect parameters in the data field" },

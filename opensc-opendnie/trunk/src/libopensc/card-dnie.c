@@ -72,9 +72,9 @@ extern int dnie_read_file(
 
 /* override APDU response error codes from iso7816.c to allow handling of SM specific error*/
 static struct sc_card_error dnie_errors[] = {
-	{0x6688, SC_ERROR_SECURE_MESSAGING_FAILURE, "Cryptographic checksum invalid"},
-	{0x6987, SC_ERROR_SECURE_MESSAGING_FAILURE, "Expected SM Data Object missing"},
-	{0x6988, SC_ERROR_SECURE_MESSAGING_FAILURE, "SM Data Object incorrect"},
+	{0x6688, SC_ERROR_SM, "Cryptographic checksum invalid"},
+	{0x6987, SC_ERROR_SM, "Expected SM Data Object missing"},
+	{0x6988, SC_ERROR_SM, "SM Data Object incorrect"},
 	{0, 0, NULL}
 };
 
@@ -809,7 +809,7 @@ static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 
 		/* parse response and handle SM related errors */
 		res=card->ops->check_sw(card,wrapped.sw1,wrapped.sw2);
-		if ( res == SC_ERROR_SECURE_MESSAGING_FAILURE ) {
+		if ( res == SC_ERROR_SM ) {
 			sc_log(ctx,"Detected SM error/collision. Try %d",retries);
 			switch(provider->status.state) {
 				/* No SM or creating: collision with other process

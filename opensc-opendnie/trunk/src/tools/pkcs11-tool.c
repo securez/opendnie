@@ -35,7 +35,6 @@
 
 #include "pkcs11/pkcs11.h"
 #include "pkcs11/pkcs11-opensc.h"
-#include "pkcs11/sc-pkcs11.h"
 #include "util.h"
 
 extern void *C_LoadModule(const char *name, CK_FUNCTION_LIST_PTR_PTR);
@@ -77,6 +76,7 @@ enum {
 };
 
 static const struct option options[] = {
+	{ "module",		1, NULL,		OPT_MODULE },
 	{ "show-info",		0, NULL,		'I' },
 	{ "list-slots",		0, NULL,		'L' },
 	{ "list-token-slots",	0, NULL,		'T' },
@@ -114,7 +114,6 @@ static const struct option options[] = {
 	{ "attr-from",		1, NULL, 		OPT_ATTR_FROM },
 	{ "input-file",		1, NULL,		'i' },
 	{ "output-file",	1, NULL,		'o' },
-	{ "module",		1, NULL,		OPT_MODULE },
 
 	{ "test",		0, NULL,		't' },
 	{ "test-hotplug",	0, NULL,		OPT_TEST_HOTPLUG },
@@ -126,6 +125,7 @@ static const struct option options[] = {
 };
 
 static const char *option_help[] = {
+	"Specify the module to load (mandatory)",
 	"Show global token information",
 	"List available slots",
 	"List slots with tokens",
@@ -145,16 +145,16 @@ static const char *option_help[] = {
 	"Initialize the token, its label and its SO PIN (use with --label and --so-pin)",
 	"Initialize the User PIN (use with --pin and --login)",
 	"Change User PIN",
-	"Unlock User PIN (without '--login' unlock in ulogged session; otherwise '--login_type' has to be 'context-specific')",
+	"Unlock User PIN (without '--login' unlock in logged in session; otherwise '--login-type' has to be 'context-specific')",
 	"Key pair generation",
 	"Specify the type and length of the key to create, for example rsa:1024 or EC:prime256v1",
 	"Write an object (key, cert, data) to the card",
 	"Get object's CKA_VALUE attribute (use with --type)",
 	"Delete an object",
 	"Specify the application label of the data object (use with --type data)",
-	"Specify the application id of the data object (use with --type data)",
+	"Specify the application ID of the data object (use with --type data)",
 	"Specify the type of object (e.g. cert, privkey, pubkey, data)",
-	"Specify the id of the object",
+	"Specify the ID of the object",
 	"Specify the label of the object",
 	"Specify the ID of the slot to use",
 	"Specify the token label of the slot to use",
@@ -163,7 +163,6 @@ static const char *option_help[] = {
 	"Use <arg> to create some attributes when writing an object",
 	"Specify the input file",
 	"Specify the output file",
-	"Specify the module to load",
 
 	"Test (best used with the --login or --pin option)",
 	"Test hotplug capabilities (C_GetSlotList + C_WaitForSlotEvent)",
@@ -178,8 +177,7 @@ static const char *	app_name = "pkcs11-tool"; /* for utils.c */
 static int		verbose = 0;
 static const char *	opt_input = NULL;
 static const char *	opt_output = NULL;
-/* static const char *	opt_module = NULL; */
-static const char *	opt_module = PKCS11_DEFAULT_MODULE_NAME;
+static const char *	opt_module = NULL;
 static int		opt_slot_set = 0;
 static CK_SLOT_ID	opt_slot = 0;
 static const char *	opt_slot_label = NULL;
@@ -546,6 +544,10 @@ int main(int argc, char * argv[])
 			util_print_usage_and_die(app_name, options, option_help);
 		}
 	}
+
+	if (opt_module == NULL)
+		util_print_usage_and_die(app_name, options, option_help);
+
 	if (action_count == 0)
 		util_print_usage_and_die(app_name, options, option_help);
 

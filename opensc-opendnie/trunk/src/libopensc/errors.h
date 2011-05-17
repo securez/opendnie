@@ -119,8 +119,6 @@ extern "C" {
 #define SC_ERROR_SM_RAND_FAILED                 -1607
 #define SC_ERROR_SM_KEYSET_NOT_FOUND            -1608
 #define SC_ERROR_SM_IFD_DATA_MISSING            -1609
-#define SC_ERROR_SM_DATA_OBJECT_MISSING         -1610
-#define SC_ERROR_SM_DATA_OBJECT_INVALID         -1611
 
 
 /* Errors that do not fit the categories above */

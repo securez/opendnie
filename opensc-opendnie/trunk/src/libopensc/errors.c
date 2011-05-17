@@ -130,9 +130,7 @@ const char *sc_strerror(int error)
 		"Cannot authenticate card",
 		"Random generation error",
 		"Secure messaging keyset not found",
-		"IFD data missing",
-		"Missing SM Data object",
-		"Invalid SM Data object"
+		"IFD data missing"
 	};
 
 

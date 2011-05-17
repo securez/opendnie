@@ -1653,12 +1653,12 @@ int cwa_decode_response(sc_card_t * card,
 	}
 	if (!m_tlv->buf) {
 		msg = "No MAC TAG found in apdu response";
-		res = SC_ERROR_SM_DATA_OBJECT_MISSING;
+		res = SC_ERROR_INVALID_DATA;
 		goto response_decode_end;
 	}
 	if (m_tlv->len != 4) {
 		msg = "Invalid MAC TAG Length";
-		res = SC_ERROR_SM_DATA_OBJECT_INVALID;
+		res = SC_ERROR_INVALID_DATA;
 		goto response_decode_end;
 	}
 
@@ -1686,7 +1686,7 @@ int cwa_decode_response(sc_card_t * card,
 	if (s_tlv->buf) {	/* response status */
 		if (s_tlv->len != 2) {
 			msg = "Invalid SW TAG length";
-			res = SC_ERROR_SM_DATA_OBJECT_INVALID;
+			res = SC_ERROR_INVALID_DATA;
 			goto response_decode_end;
 		}
 		memcpy(ccbuf + cclen, s_tlv->buf, s_tlv->buflen);
@@ -1767,13 +1767,13 @@ int cwa_decode_response(sc_card_t * card,
 		/* check data len */
 		if ((e_tlv->len < 9) || ((e_tlv->len - 1) % 8) != 0) {
 			msg = "Invalid length for Encoded data TLV";
-			res = SC_ERROR_SM_DATA_OBJECT_INVALID;
+			res = SC_ERROR_INVALID_DATA;
 			goto response_decode_end;
 		}
 		/* first byte is padding info; check value */
 		if (e_tlv->data[0] != 0x01) {
 			msg = "Encoded TLV: Invalid padding info value";
-			res = SC_ERROR_SM_DATA_OBJECT_INVALID;
+			res = SC_ERROR_INVALID_DATA;
 			goto response_decode_end;
 		}
 		/* prepare keys to decode */
@@ -1792,7 +1792,7 @@ int cwa_decode_response(sc_card_t * card,
 		if (*(to->resp + to->resplen - 1) != 0x80) {	/* check padding byte */
 			msg =
 			    "Decrypted TLV has no 0x80 iso padding indicator!";
-			res = SC_ERROR_SM_DATA_OBJECT_INVALID;
+			res = SC_ERROR_INVALID_DATA;
 			goto response_decode_end;
 		}
 		/* everything ok: remove ending 0x80 from response */

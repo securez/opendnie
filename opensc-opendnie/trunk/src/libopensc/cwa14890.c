@@ -112,9 +112,10 @@ static int cwa_increase_ssc(sc_card_t * card, cwa_sm_status_t * sm)
 {
 	int n;
 	/* preliminary checks */
-	if (!card || !card->ctx || !sm)
+	if (!card || !card->ctx )
 		return SC_ERROR_INVALID_ARGUMENTS;
-
+	if (!sm )
+		return SC_ERROR_SM_NOT_INITIALIZED;
 	LOG_FUNC_CALLED(card->ctx);
 	/* u8 arithmetic; exit loop if no carry */
 	sc_log(card->ctx, "Curr SSC: '%s'", sc_dump_hex(sm->ssc, 8));
@@ -346,7 +347,7 @@ static int cwa_verify_icc_certificates(sc_card_t * card,
 	res = X509_verify(sub_ca_cert, root_ca_key);
 	if (!res) {
 		msg = "Cannot verify icc Sub-CA certificate";
-		res = SC_ERROR_INTERNAL;
+		res = SC_ERROR_SM_AUTHENTICATION_FAILED;
 		goto verify_icc_certificates_end;
 	}
 
@@ -357,7 +358,7 @@ static int cwa_verify_icc_certificates(sc_card_t * card,
 	res = X509_verify(icc_cert, sub_ca_key);
 	if (!res) {
 		msg = "Cannot verify icc certificate";
-		res = SC_ERROR_INTERNAL;
+		res = SC_ERROR_SM_AUTHENTICATION_FAILED;
 		goto verify_icc_certificates_end;
 	}
 
@@ -587,7 +588,7 @@ static int cwa_prepare_external_auth(sc_card_t * card,
 	    RSA_private_decrypt(128, buf3, buf2, ifd_privkey, RSA_NO_PADDING);
 	if (len2 < 0) {
 		msg = "Prepare external auth: ifd_privk encrypt failed";
-		res = SC_ERROR_DECRYPT_FAILED;
+		res = SC_ERROR_SM_ENCRYPT_FAILED;
 		goto prepare_external_auth_end;
 	}
 
@@ -622,7 +623,7 @@ static int cwa_prepare_external_auth(sc_card_t * card,
 	len1 = RSA_public_encrypt(len3, buf3, buf1, icc_pubkey, RSA_NO_PADDING);
 	if (len1 <= 0) {
 		msg = "Prepare external auth: icc_pubk encrypt failed";
-		res = SC_ERROR_DECRYPT_FAILED;
+		res = SC_ERROR_SM_ENCRYPT_FAILED;
 		goto prepare_external_auth_end;
 	}
 
@@ -848,7 +849,7 @@ static int cwa_verify_internal_auth(sc_card_t * card,
 		goto verify_internal_done;
 	}
 	if (!icc_pubkey || !ifd_privkey) {
-		res = SC_ERROR_INVALID_ARGUMENTS;
+		res = SC_ERROR_SM_NO_SESSION_KEYS;
 		msg = "Either provided icc_pubk or ifd_privk are null";
 		goto verify_internal_done;
 	}
@@ -881,7 +882,7 @@ static int cwa_verify_internal_auth(sc_card_t * card,
 				RSA_NO_PADDING);
 	if (len1 <= 0) {
 		msg = "Verify Signature: decrypt with ifd privk failed";
-		res = SC_ERROR_DECRYPT_FAILED;
+		res = SC_ERROR_SM_ENCRYPT_FAILED;
 		goto verify_internal_done;
 	}
 
@@ -991,9 +992,10 @@ int cwa_create_secure_channel(sc_card_t * card,
 	u8 *rndbuf=NULL;
 
 	/* preliminary checks */
-	if (!card || !card->ctx || !provider)
+	if (!card || !card->ctx )
 		return SC_ERROR_INVALID_ARGUMENTS;
-
+	if (!provider)
+		return SC_ERROR_SM_NOT_INITIALIZED;
 	/* comodity vars */
 	ctx = card->ctx;
 	sm = &(provider->status);
@@ -1094,7 +1096,7 @@ int cwa_create_secure_channel(sc_card_t * card,
 		    cwa_verify_icc_certificates(card, provider, ca_cert,
 						icc_cert);
 		if (res != SC_SUCCESS) {
-			res = SC_ERROR_OBJECT_NOT_VALID;
+			res = SC_ERROR_SM_AUTHENTICATION_FAILED;
 			msg = "Icc Certificates verification failed";
 			goto csc_end;
 		}
@@ -1257,7 +1259,7 @@ int cwa_create_secure_channel(sc_card_t * card,
 	res = provider->cwa_get_ifd_privkey(card, &ifd_privkey);
 	if (res != SC_SUCCESS) {
 		msg = "Cannot retrieve IFD private key from provider";
-		res = SC_ERROR_INTERNAL;
+		res = SC_ERROR_SM_NO_SESSION_KEYS;
 		goto csc_end;
 	}
 
@@ -1381,9 +1383,9 @@ int cwa_encode_apdu(sc_card_t * card,
 	LOG_FUNC_CALLED(ctx);
 	/* check remaining arguments */
 	if (!from || !to || !sm)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_SM_NOT_INITIALIZED);
 	if (sm->state != CWA_SM_ACTIVE)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_SM_INVALID_LEVEL);
 	if (!msgbuf || !cryptbuf)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
@@ -1592,15 +1594,15 @@ int cwa_decode_response(sc_card_t * card,
 	LOG_FUNC_CALLED(ctx);
 	/* check remaining arguments */
 	if ((from == NULL) || (to == NULL) || (sm == NULL))
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_SM_NOT_INITIALIZED);
 	if (sm->state != CWA_SM_ACTIVE)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_SM_INVALID_LEVEL);
 
 	/* cwa14890 sect 9.3: check SW1 or SW2 for SM related errors */
 	if (from->sw1 == 0x69) {
 		if ((from->sw2 == 0x88) || (from->sw2 == 0x87)) {
 			msg = "SM related errors in APDU response";
-			res = SC_ERROR_INTERNAL;	/* tell driver to restart SM */
+			res = SC_ERROR_SM_ENCRYPT_FAILED;	/* tell driver to restart SM */
 			goto response_decode_end;
 		}
 	}
@@ -1651,12 +1653,12 @@ int cwa_decode_response(sc_card_t * card,
 	}
 	if (!m_tlv->buf) {
 		msg = "No MAC TAG found in apdu response";
-		res = SC_ERROR_INVALID_DATA;
+		res = SC_ERROR_SM_DATA_OBJECT_MISSING;
 		goto response_decode_end;
 	}
 	if (m_tlv->len != 4) {
 		msg = "Invalid MAC TAG Length";
-		res = SC_ERROR_INVALID_DATA;
+		res = SC_ERROR_SM_DATA_OBJECT_INVALID;
 		goto response_decode_end;
 	}
 
@@ -1684,7 +1686,7 @@ int cwa_decode_response(sc_card_t * card,
 	if (s_tlv->buf) {	/* response status */
 		if (s_tlv->len != 2) {
 			msg = "Invalid SW TAG length";
-			res = SC_ERROR_INVALID_DATA;
+			res = SC_ERROR_SM_DATA_OBJECT_INVALID;
 			goto response_decode_end;
 		}
 		memcpy(ccbuf + cclen, s_tlv->buf, s_tlv->buflen);
@@ -1728,7 +1730,7 @@ int cwa_decode_response(sc_card_t * card,
 	res = memcmp(m_tlv->data, macbuf, 4);	/* check first 4 bytes */
 	if (res != 0) {
 		msg = "Error in MAC CC checking: value doesn't match";
-		res = SC_ERROR_INVALID_DATA;
+		res = SC_ERROR_SM_ENCRYPT_FAILED;
 		goto response_decode_end;
 	}
 
@@ -1765,13 +1767,13 @@ int cwa_decode_response(sc_card_t * card,
 		/* check data len */
 		if ((e_tlv->len < 9) || ((e_tlv->len - 1) % 8) != 0) {
 			msg = "Invalid length for Encoded data TLV";
-			res = SC_ERROR_INVALID_DATA;
+			res = SC_ERROR_SM_DATA_OBJECT_INVALID;
 			goto response_decode_end;
 		}
 		/* first byte is padding info; check value */
 		if (e_tlv->data[0] != 0x01) {
 			msg = "Encoded TLV: Invalid padding info value";
-			res = SC_ERROR_INVALID_DATA;
+			res = SC_ERROR_SM_DATA_OBJECT_INVALID;
 			goto response_decode_end;
 		}
 		/* prepare keys to decode */
@@ -1790,7 +1792,7 @@ int cwa_decode_response(sc_card_t * card,
 		if (*(to->resp + to->resplen - 1) != 0x80) {	/* check padding byte */
 			msg =
 			    "Decrypted TLV has no 0x80 iso padding indicator!";
-			res = SC_ERROR_INVALID_DATA;
+			res = SC_ERROR_SM_DATA_OBJECT_INVALID;
 			goto response_decode_end;
 		}
 		/* everything ok: remove ending 0x80 from response */

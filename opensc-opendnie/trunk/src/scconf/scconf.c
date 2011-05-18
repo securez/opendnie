@@ -1,5 +1,5 @@
 /*
- * $Id: scconf.c 4636 2010-08-18 15:08:51Z ludovic.rousseau $
+ * $Id: scconf.c 5139 2011-02-05 20:25:08Z ludovic.rousseau $
  *
  * Copyright (C) 2002
  *  Antti Tapaninen <aet@cc.hut.fi>

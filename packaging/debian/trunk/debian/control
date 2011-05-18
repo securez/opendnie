@@ -11,6 +11,7 @@ Vcs-Browser: http://forja.cenatic.es/plugins/scmsvn/viewcvs.php/packaging/debian
 Package: opensc
 Section: utils
 Architecture: any
+Recommends: libacr38u, libccid, libnss3-tools
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Smart card utilities with support for PKCS#15 compatible cards
  OpenSC provides a set of libraries and utilities to access smart
@@ -29,26 +30,26 @@ Description: Smart card utilities with support for PKCS#15 compatible cards
  operations may be supported for your card. Card initialization may
  require third party proprietary software.
 
-Package: libopensc3-dev
-Section: libdevel
-Priority: optional
-Architecture: any
-Conflicts: libopensc0-dev, libopensc1-dev
-Replaces: libopensc0-dev, libopensc1-dev, libscam1 (<< 0.9.4-5)
-Provides: libopensc-dev
-Depends: libopensc3 (= ${binary:Version}), libssl-dev, ${misc:Depends}
-Description: OpenSC development files
- OpenSC provides a set of libraries and utilities to access smart
- cards.  It mainly focuses on cards that support cryptographic
- operations. It facilitates their use in security applications such as
- mail encryption, authentication, and digital signature. OpenSC
- implements the PKCS#11 API. Applications supporting this API, such as
- Iceweasel and Icedove, can use it. OpenSC implements the PKCS#15
- standard and aims to be compatible with all software that does so as
- well.
- .
- This package contains files necessary for developing applications
- with the libopensc libraries from OpenSC.org.
+# Package: libopensc3-dev
+# Section: libdevel
+# Priority: optional
+# Architecture: any
+# Conflicts: libopensc0-dev, libopensc1-dev
+# Replaces: libopensc0-dev, libopensc1-dev, libscam1 (<< 0.9.4-5)
+# Provides: libopensc-dev
+# Depends: libopensc3 (= ${binary:Version}), libssl-dev, ${misc:Depends}
+# Description: OpenSC development files
+#  OpenSC provides a set of libraries and utilities to access smart
+#  cards.  It mainly focuses on cards that support cryptographic
+#  operations. It facilitates their use in security applications such as
+#  mail encryption, authentication, and digital signature. OpenSC
+#  implements the PKCS#11 API. Applications supporting this API, such as
+#  Iceweasel and Icedove, can use it. OpenSC implements the PKCS#15
+#  standard and aims to be compatible with all software that does so as
+#  well.
+#  .
+#  This package contains files necessary for developing applications
+#  with the libopensc libraries from OpenSC.org.
 
 Package: libopensc3
 Section: libs
@@ -87,39 +88,14 @@ Description: Debugging symbols for libopensc3
  .
  Card initialization can be performed by utilities in the opensc package.
 
-Package: libopensc2
-Architecture: any
-Depends: libopensc3
-Description: transitional dummy upgrade package for libopensc3
- This is a dummy transitional package to ease the migration to the new
- libopensc3 package. You can remove it safely.
- 
-Package: libopensc2-dbg
-Architecture: any
-Depends: libopensc3-dbg
-Description: transitional dummy upgrade package for libopensc3-dbg
- This is a dummy transitional package to ease the migration to the new
- libopensc3-dbg package. You can remove it safely.
-
-Package: mozilla-opensc
-Section: web
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Recommends: pinentry-gtk2 | pinentry-x11
-Replaces: libopensc-openssl (<< 0.9.4-6)
-Description: Mozilla plugin for authentication using OpenSC
- A plugin for mozilla that allows S/MIME and SSL authentication using
- OpenSC.
- .
- Card initialization can be performed by utilities in the opensc package. 
-
-Package: dnie-support
-Section: misc
-Architecture: all
-Pre-Depends: libnss3-tools, libopensc3
-Depends: libacr38u, libccid, firefox, mozilla-opensc, opensc, ${misc:Depends}
-Description: Adds support for Spanish electronic ID card (DNIe)
- This package contains files and installs necessary software for using
- the Spanish electronic ID card with Mozilla Firefox in Linux.
- .
- With this package, DNIe should works out of the box.
+# Package: mozilla-opensc
+# Section: web
+# Architecture: any
+# Depends: ${shlibs:Depends}, ${misc:Depends}
+# Recommends: pinentry-gtk2 | pinentry-x11
+# Replaces: libopensc-openssl (<< 0.9.4-6)
+# Description: Mozilla plugin for authentication using OpenSC
+#  A plugin for mozilla that allows S/MIME and SSL authentication using
+#  OpenSC.
+#  .
+#  Card initialization can be performed by utilities in the opensc package. 

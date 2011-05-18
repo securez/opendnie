@@ -1,9 +1,23 @@
-opensc-opendnie (0.12.1-svn5320-1) UNRELEASED; urgency=low
+opensc-opendnie (0.12.1-1) UNRELEASED; urgency=low
 
-  * New upstream release.
+  * New upstream release
   * Switching to opensc-opendnie.
+  * debian/control:
+    - Don't build mozilla-opensc, libopensc3-dev and libopensc2* packages.
+    - Recommend libacr38u, libccid and libnss3-tools.
+  * debian/opensc.install:
+    - Don't install rutoken-tool.
+    - Install westcos-tool and dnie-tool.
+    - Install dnie-tool.1, eienv.1, piv-tool.1 and westcost-tool.1 manpages.
+  * debian/libopensc3.install:
+    - Changed path of OpenSC profiles to /usr/share/opensc again.
+  * debian/libopensc3.symbols:
+    - Update for new symbols.
+    - Changed libopensc2 by #PACKAGE#.
+  * debian/rules:
+    - Install upstream ChangeLog.
 
- -- Enrique Hernández Bello <quique@osl.ull.es>  Sun, 06 Feb 2011 20:43:36 +0000
+ -- Enrique Hernández Bello <quique@osl.ull.es>  Wed, 18 May 2011 23:30:04 +0100
 
 opensc-dnie (0.11.13-3-1) UNRELEASED; urgency=low
 

@@ -1,5 +1,5 @@
-/*
- * card-dnie.c: Support for Spanish DNI electronico (DNIe card)
+/**
+ * card-dnie.c: Support for Spanish DNI electronico (DNIe card).
  *
  * Copyright (C) 2010 Juan Antonio Martinez <jonsito@terra.es>
  *
@@ -116,7 +116,10 @@ H13-H15: 0x03 0x90 0x00 user phase: tarjeta operativa
 H13-H15: 0x0F 0x65 0x81 final phase: tarjeta no operativa
 */
 
-/* ATR Table list */
+/**
+ * ATR Table list.
+ * OpenDNIe defines two ATR's for user and finalized card state
+ */
 static struct sc_atr_table dnie_atrs[] = {
 	/* TODO: get ATR for uninitalized DNIe */
 	{			/* card activated; normal operation state */
@@ -152,11 +155,12 @@ static sc_card_driver_t dnie_driver = {
 /************************** card-dnie.c internal functions ****************/
 
 /**
- * Parse configuration file for dnie parameters
+ * Parse configuration file for dnie parameters.
+ *
  * See opensc.conf for details
- *@param ctx card context
- *@param priv pointer to dnie private data
- *@return SC_SUCCESS (should return no errors)
+ * @param ctx card context
+ * @param priv pointer to dnie private data
+ * @return SC_SUCCESS (should return no errors)
  */
 static int dnie_get_environment(sc_context_t * ctx, dnie_private_data_t * priv)
 {
@@ -186,6 +190,7 @@ static int dnie_get_environment(sc_context_t * ctx, dnie_private_data_t * priv)
 	return SC_SUCCESS;
 }
 
+/* messages used on pinentry protocol */
 char *user_consent_msgs[] = {
 	"SETTITLE Signature requested\n",
 	"SETDESC Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n",
@@ -195,9 +200,11 @@ char *user_consent_msgs[] = {
 };
 
 /**
- * Ask for user consent on signature operation
- *@param card pointer to sc_card structure
- *@return SC_SUCCESS if ok, else error code
+ * Ask for user consent on signature operation.
+ * Check for user consent configuration,
+ * invoke proper gui app and check result
+ * @param card pointer to sc_card structure
+ * @return SC_SUCCESS if ok, else error code
  */
 static int ask_user_consent(sc_card_t * card)
 {
@@ -327,16 +334,18 @@ static int ask_user_consent(sc_card_t * card)
 
 /************************** cardctl defined operations *******************/
 
-/* 
+/** 
+ * Generate a public/private key pair.
+ *
  * Manual says that generate_keys() is a reserved operation; that is: 
  * only can be done at DGP offices. But several authors talks about 
  * this operation is available also outside. So need to test :-)
  * Notice that write operations are not supported, so we can't use 
  * created keys to generate and store new certificates into the card.
  * TODO: copy code from card-jcop.c::jcop_generate_keys()
- *@param card pointer to card info data
- *@param data where to store function results
- *@return SC_SUCCESS if ok, else error code
+ * @param card pointer to card info data
+ * @param data where to store function results
+ * @return SC_SUCCESS if ok, else error code
  */
 static int dnie_generate_key(sc_card_t * card, void *data)
 {
@@ -348,15 +357,16 @@ static int dnie_generate_key(sc_card_t * card, void *data)
 	LOG_FUNC_RETURN(card->ctx, result);
 }
 
-/*
- * Analyze a buffer looking for provided data pattern
+/**
+ * Analyze a buffer looking for provided data pattern.
+ *
  * Assume that a TLV is found, evaluate length
  * and return found value
- *@param card pointer to card info data
- *@param pat data pattern to find in buffer
- *@param buf where to look for pattern
- *@param len buffer length
- *@return retrieved value or NULL if pattern not found
+ * @param card pointer to card info data
+ * @param pat data pattern to find in buffer
+ * @param buf where to look for pattern
+ * @param len buffer length
+ * @return retrieved value or NULL if pattern not found
  */
 static char *findPattern(sc_card_t *card, u8 *pat, u8 *buf, size_t len)
 {
@@ -380,8 +390,9 @@ data_found:
 	return res;
 }
 
-/*
- * Retrieve name, surname, and DNIe number
+/**
+ * Retrieve name, surname, and DNIe number.
+ *
  * This is done by mean of reading and parsing CDF file
  * at address 3F0050156004
  * No need to enter pin nor use Secure Channel
@@ -390,9 +401,9 @@ data_found:
  * of parsing ASN1 data on EF(CDF), 
  * we look for desired patterns in binary array
  *
- *@param card pointer to card info data 
- *@param data where to store function results (number,name,surname,idesp,version)
- *@return SC_SUCCESS if ok, else error code
+ * @param card pointer to card info data 
+ * @param data where to store function results (number,name,surname,idesp,version)
+ * @return SC_SUCCESS if ok, else error code
  */
 static int dnie_get_info(sc_card_t * card, char *data[])
 {
@@ -507,10 +518,13 @@ get_info_end:
 }
 
 /**
- * Retrieve serial number (7 bytes) from card
- *@param card pointer to card description
- *@param serial where to store data retrieved
- *@return SC_SUCCESS if ok; else error code
+ * Retrieve serial number (7 bytes) from card.
+ *
+ * This is done by mean of an special APDU command described
+ * in the DNIe Reference Manual
+ * @param card pointer to card description
+ * @param serial where to store data retrieved
+ * @return SC_SUCCESS if ok; else error code
  */
 static int dnie_get_serialnr(sc_card_t * card, sc_serial_number_t * serial)
 {
@@ -564,11 +578,16 @@ static int dnie_get_serialnr(sc_card_t * card, sc_serial_number_t * serial)
 
 /* Generic operations */
 
-/* Called in sc_connect_card().  Must return 1, if the current
+/**
+ * Check if provided card can be handled by OpenDNIe.
+ *
+ * Called in sc_connect_card().  Must return 1, if the current
  * card can be handled with this driver, or 0 otherwise.  ATR
  * field of the sc_card struct is filled in before calling
  * this function.
  * do not declare static, as used by pkcs15-dnie module
+ * @param card Pointer to card structure
+ * @return on card matching 0 if not match; negative return means error
  */
 int dnie_match_card(struct sc_card *card)
 {
@@ -580,9 +599,15 @@ int dnie_match_card(struct sc_card *card)
 	LOG_FUNC_RETURN(card->ctx, result);
 }
 
-/* Called when ATR of the inserted card matches an entry in ATR
+/**
+ * OpenDNIe card structures initialization.
+ *
+ * Called when ATR of the inserted card matches an entry in ATR
  * table.  May return SC_ERROR_INVALID_CARD to indicate that
- * the card cannot be handled with this driver. */
+ * the card cannot be handled with this driver.
+ * @param card Pointer to card structure
+ * @return SC_SUCCES if ok; else error code
+ */
 static int dnie_init(struct sc_card *card)
 {
 	int result = SC_SUCCESS;
@@ -641,8 +666,12 @@ static int dnie_init(struct sc_card *card)
 	LOG_FUNC_RETURN(card->ctx, result);
 }
 
-/* Called when the card object is being freed.  finish() has to
- * deallocate all possible private data. */
+/**
+ * De-initialization routine.
+ *
+ * Called when the card object is being freed.  finish() has to
+ * deallocate all possible private data. 
+ */
 static int dnie_finish(struct sc_card *card)
 {
 	int result = SC_SUCCESS;
@@ -654,16 +683,18 @@ static int dnie_finish(struct sc_card *card)
 	LOG_FUNC_RETURN(card->ctx, result);
 }
 
-/** DNIe's replacement for sc_transmit_apdu 
+/** 
+ * DNIe's replacement for sc_transmit_apdu.
+ *
  * DNIe doesn't handle apdu chaining, but envelope() cmd is
  * used when lc>max_send_size
  *
  * Notice that SM _requires_ an apdu response on every chunk of data
  * so provide a default buffer to send intermediate apdus,
  * and use real buffer in last one
- *@param card pointer to card driver structure;
- *@param apdu APDU to be sent
- *@return SC_SUCCESS if OK; else error code
+ * @param card pointer to card driver structure;
+ * @param apdu APDU to be sent
+ * @return SC_SUCCESS if OK; else error code
  */
 static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 {
@@ -765,18 +796,27 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 	LOG_FUNC_RETURN(card->ctx, res);
 }
 
-/* Called before sc_transmit_apdu() to allowing APDU wrapping
+/**
+ * APDU Wrapping routine.
+ *
+ * Called before sc_transmit_apdu() to allowing APDU wrapping
  * If set to NULL no wrapping process will be done
  * Usefull on Secure Messaging APDU encode/decode
  * If returned value is greater than zero, _sc_transmit_apdu() 
- * will be called, else means either SC_SUCCESS or error code */
-
-/* NOTE:
+ * will be called, else means either SC_SUCCESS or error code 
+ *
+ * NOTE:
  * DNIe doesn't handle apdu chaining; instead apdus with
  * lc>max_send_size are sent by mean of envelope() apdu command
  * So we use this method for
  * - encode and decode SM if SM is on
  * - use envelope instead of apdu chain if lc>max_send_size
+ * @param card Pointer to Card Structure
+ * @param apdu to be wrapped
+ * @return 
+ * - positive: use OpenSC's sc_transmit_apdu()
+ * - negative: error
+ * - zero: success: no need to further transmission
  */
 static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 {
@@ -843,10 +883,15 @@ static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 
 /* ISO 7816-4 functions */
 
-/* convert little-endian data into unsigned long */
+/**
+ * Convert little-endian data into unsigned long.
+ * @param pt pointer to little-endian data
+ * @return equivalent long
+ */
 static unsigned long le2ulong(u8 * pt)
 {
-	unsigned long res = 0;
+	unsigned long res = 0L;
+	if (pt==NULL) return res;
 	res = (0xff & *(pt + 0)) +
 	    ((0xff & *(pt + 1)) << 8) +
 	    ((0xff & *(pt + 2)) << 16) + ((0xff & *(pt + 3)) << 24);
@@ -854,11 +899,12 @@ static unsigned long le2ulong(u8 * pt)
 }
 
 /**
- * Uncompress data if in compressed format
- *@param card poiner to sc_card_t structure
- *@param from buffer to get data from
- *@param len pointer to buffer length
- *@return uncompresed or original buffer; len points to new buffer length
+ * Uncompress data if in compressed format.
+ *
+ * @param card poiner to sc_card_t structure
+ * @param from buffer to get data from
+ * @param len pointer to buffer length
+ * @return uncompresed or original buffer; len points to new buffer length
  *        on error return null
  */
 static u8 *dnie_uncompress(sc_card_t * card, u8 * from, int *len)
@@ -925,9 +971,13 @@ static inline void dnie_clear_cache()
 }
 
 /**
- * fill a temporary buffer by mean of consecutive calls to read_binary()
+ * Fill file cache for read_binary() operation.
+ *
+ * Fill a temporary buffer by mean of consecutive calls to read_binary()
  * until card sends eof
- * check for compressed data and 
+ * check for compressed data and handle properly
+ * @param card Pointer to card structure
+ * @return SC_SUCCESS if OK; else error code
  */
 static int dnie_fill_cache(sc_card_t * card)
 {
@@ -1015,15 +1065,17 @@ static int dnie_fill_cache(sc_card_t * card)
 }
 
 /**
- * Reads a binary stream from card by mean of READ BINARY iso command
- * creates and handle a cache to allow data uncompression
+ * OpenDNIe implementation of read_binary().
  *
- *@param card pointer to sc_card_t structure
- *@param idx offset from card file to ask data for
- *@param buf where to store readed data. must be non null
- *@param count number of bytes to read
- *@param flags. not used
- *@return number of bytes readed, 0 on EOF, error code on error
+ * Reads a binary stream from card by mean of READ BINARY iso command
+ * Creates and handle a cache to allow data uncompression
+ *
+ * @param card pointer to sc_card_t structure
+ * @param idx offset from card file to ask data for
+ * @param buf where to store readed data. must be non null
+ * @param count number of bytes to read
+ * @param flags. not used
+ * @return number of bytes readed, 0 on EOF, error code on error
  */
 static int dnie_read_binary(struct sc_card *card,
 			    unsigned int idx,
@@ -1056,8 +1108,9 @@ static int dnie_read_binary(struct sc_card *card,
 }
 
 /**
- * Invalidate pathfile cache
- *@param card pointer to card structure
+ * Invalidate pathfile cache.
+ *
+ * @param card pointer to card structure
  */
 static void dnie_invalidate_path(sc_card_t *card) {
 	memset(&card->cache, 0, sizeof(card->cache));
@@ -1065,11 +1118,11 @@ static void dnie_invalidate_path(sc_card_t *card) {
 }
 
 /**
- * tracks current path to avoid extra filesystem operation
+ * Tracks current path to avoid extra filesystem operation.
  *
- * Gets
- *@param card card pointer structure
- *@param file current DF to be cached
+ * Tracks selected DF's to let card know their current working directory
+ * @param card card pointer structure
+ * @param file current DF to be cached
  */
 static int dnie_cache_path(sc_card_t *card, struct sc_file *file)
 {
@@ -1096,16 +1149,16 @@ static int dnie_cache_path(sc_card_t *card, struct sc_file *file)
 }
 
 /**
- * Check proposed path against current (cached) one
+ * Check proposed path against current (cached) one.
  *
  * This code compares proposed path to stored one, evaluating required path
  * ID to be selected if finally select_file() is required,
  *
- *@param card card pointer structure
- *@param pathptr pointer to proposed path
- *@param pathlen len of proposed path
- *@param need_info set if process_fci is needed
- *@return 1 on match; 0 on fail
+ * @param card card pointer structure
+ * @param pathptr pointer to proposed path
+ * @param pathlen len of proposed path
+ * @param need_info set if process_fci is needed
+ * @return 1 on match; 0 on fail
  */
 static int dnie_check_path(sc_card_t *card, u8 **pathptr, size_t *pathlen,
                       int need_info)
@@ -1127,9 +1180,17 @@ static int dnie_check_path(sc_card_t *card, u8 **pathptr, size_t *pathlen,
 	return 1;
 }
 
-/* select_file: Does the equivalent of SELECT FILE command specified
+/**
+ * OpenDNIe implementation of Select_File().
+ *
+ * Select_file: Does the equivalent of SELECT FILE command specified
  *   in ISO7816-4. Stores information about the selected file to
- *   <file>, if not NULL. */
+ *   <file>, if not NULL.
+ * @param card Pointer to Card Structure
+ * @param in_path Path ID to be selected
+ * @param file_out where to store fci information
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_select_file(struct sc_card *card,
 			    const struct sc_path *in_path,
 			    struct sc_file **file_out)
@@ -1311,15 +1372,18 @@ static int dnie_select_file(struct sc_card *card,
 	LOG_FUNC_RETURN(ctx, res);
 }
 
-/* Get Response: Retrieve min(card_recv_size,count) bytes from 
+/**
+ * OpenDNIe implementation of Get_Response() command.
+ *
+ * Get Response: Retrieve min(card_recv_size,count) bytes from 
  * card, storing result and new length into provided pointers
  *
  * Just a copy of iso7816.c::get_response(), but calling 
  * _sc_transmit_apdu to avoid wrap/unwrap response
  *
- *@param card Pointer to card structure
- *@param count pointer to get expected data length / return received length
- *@return error code (negative) or number of bytes left
+ * @param card Pointer to card structure
+ * @param count pointer to get expected data length / return received length
+ * @return error code (negative) or number of bytes left
  */
 static int dnie_get_response(sc_card_t * card, size_t * count, u8 * buf)
 {
@@ -1359,7 +1423,10 @@ static int dnie_get_response(sc_card_t * card, size_t * count, u8 * buf)
 	return r;
 }
 
-/* Get challenge: retrieve 8 random bytes for any further use
+/**
+ * OpenDNIe implementation of Get_Challenge() command.
+ *
+ * Get challenge: retrieve 8 random bytes for any further use
  * (eg perform an external authenticate command)
  * NOTEs
  * Official driver redundantly sets SM before execute this command
@@ -1367,6 +1434,10 @@ static int dnie_get_response(sc_card_t * card, size_t * count, u8 * buf)
  * Also: official driver reads in blocks of 20 bytes. 
  * Why? Manual and iso-7816-4 states that only 8 bytes 
  * are required... so we will obbey Manual
+ * @param card Pointer to card Structure
+ * @param rnd Where to store challenge
+ * @param len requested challenge length
+ * @return SC_SUCCESS if OK; else error code
  */
 static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len)
 {
@@ -1410,7 +1481,13 @@ static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len)
  * ISO 7816-8 functions
  */
 
-/* logout: Resets all access rights that were gained. */
+/**
+ * OpenDNIe implementation of Logout() card_driver function.
+ *
+ *  Resets all access rights that were gained. Disable SM
+ * @param card Pointer to Card Structure
+ * @return SC_SUCCESS if OK; else error code
+ */
 static int dnie_logout(struct sc_card *card)
 {
 	int result = SC_SUCCESS;
@@ -1425,9 +1502,19 @@ static int dnie_logout(struct sc_card *card)
 	LOG_FUNC_RETURN(card->ctx, result);
 }
 
-/* set_security_env:  Initializes the security environment on card
+/**
+ * Implementation of Set_Security_Environment card driver command.
+ *
+ * Initializes the security environment on card
  *   according to <env>, and stores the environment as <se_num> on the
- *   card. If se_num <= 0, the environment will not be stored. */
+ *   card. If se_num <= 0, the environment will not be stored. 
+ *   Notice that OpenDNIe SM handling requires a buffer longer than 
+ *   provided for this command; so special apdu is used in cwa code
+ * @param card Pointer to card driver Structure
+ * @param env Pointer to security environment data
+ * @param num: which Card Security environment to use (ignored in OpenDNIe)
+ * @return SC_SUCCESS if OK; else error code
+ */
 static int dnie_set_security_env(struct sc_card *card,
 				 const struct sc_security_env *env, int se_num)
 {
@@ -1553,9 +1640,23 @@ static int dnie_set_security_env(struct sc_card *card,
 	LOG_FUNC_RETURN(card->ctx, result);
 }
 
-/* decipher:  Engages the deciphering operation.  Card will use the
- *   security environment set in a call to set_security_env or
- *   restore_security_env. */
+/**
+ * OpenDNIe implementation of Decipher() card driver operation.
+ *
+ * Engages the deciphering operation.  Card will use the
+ * security environment set in a call to set_security_env or
+ * restore_security_env.
+ *
+ * Notice that DNIe manual doesn't say anything about crypt/decrypt
+ * operations. So this code is based on ISO standards and still needs
+ * to be checked
+ * @param card Pointer to Card Driver Structure 
+ * @param crgram cryptogram to be (de)ciphered
+ * @param crgram_len cryptogram length
+ * @param out where to store result
+ * @param outlen length of result buffer
+ * @return SC_SUCCESS if OK; else error code
+ */
 static int dnie_decipher(struct sc_card *card,
 			 const u8 * crgram, size_t crgram_len,
 			 u8 * out, size_t outlen)
@@ -1606,7 +1707,7 @@ static int dnie_decipher(struct sc_card *card,
 }
 
 /**
- * Compute_signature:  
+ * OpenDNIe implementation of Compute_Signature() card driver operation.
  *
  * Generates a digital signature on the card.  
  * This function handles the process of hash + sign 
@@ -1622,13 +1723,14 @@ static int dnie_decipher(struct sc_card *card,
  * So the code analyze incoming data, decide which method to be used
  * and applies
  *
- *@param card pointer to sc_card_t structure
- *@param data data to be hased/signed
- *@param datalen length of provided data
- *@param out buffer to store results into
- *@param outlen available space in result buffer
- *@return if positive: Size of data stored in out buffer when no error
- *        if negative: error code
+ * @param card pointer to sc_card_t structure
+ * @param data data to be hased/signed
+ * @param datalen length of provided data
+ * @param out buffer to store results into
+ * @param outlen available space in result buffer
+ * @return
+ *  - Positive value: Size of data stored in out buffer when no error
+ *  - Negative value: error code
  */
 static int dnie_compute_signature(struct sc_card *card,
 				  const u8 * data, size_t datalen,
@@ -1716,10 +1818,15 @@ static int dnie_compute_signature(struct sc_card *card,
  */
 
 /**
+ * OpenDNIe implementation of List_Files() card driver operation.
+ *
  * List available files in current DF
  * This is a dirty and trick implementation:
  * Just try every ID in current dir
- *
+ * @param card Pointer to Card Driver structure
+ * @param buff buffer to store result into
+ * @param bufflen size of provided buffer
+ * @return SC_SUCCESS if OK; else error code
  */
 static int dnie_list_files(sc_card_t * card, u8 * buf, size_t buflen)
 {
@@ -1791,7 +1898,14 @@ static int dnie_list_files(sc_card_t * card, u8 * buf, size_t buflen)
 }
 
 /**
- * parse APDU results
+ * Parse APDU results to generate proper error code.
+ *
+ * Traps standard check_sw function to take care on special error codes
+ * for OpenDNIe (mostly related to SM status and operations)
+ * @param card Pointer to Card driver Structure
+ * @param sw1 SW1 APDU response byte
+ * @param sw2 SW2 APDU response byte
+ * @return SC_SUCCESS if no error; else proper error code
  */
 static int dnie_check_sw(struct sc_card *card,
 			 unsigned int sw1, unsigned int sw2)
@@ -1815,6 +1929,17 @@ static int dnie_check_sw(struct sc_card *card,
 	LOG_FUNC_RETURN(card->ctx, res);
 }
 
+/**
+ * OpenDNIe implementation for Card_Ctl() card driver operation.
+ *
+ * This command provides access to non standard functions provided by
+ * this card driver, as defined in cardctl.h
+ * @param card Pointer to card driver structure
+ * @param request Operation requested
+ * @param data where to get data/store response
+ * @return SC_SUCCESS if ok; else error code
+ * @see cardctl.h
+ */
 static int dnie_card_ctl(struct sc_card *card,
 			 unsigned long request, void *data)
 {
@@ -1861,11 +1986,13 @@ static int dnie_card_ctl(struct sc_card *card,
 }
 
 /**
- * Extract real file length from compressed file by reading 8 first bytes
+ * Read first bytes of an EF to check for compression data.
  *
- * Just a direct read binary apdu bypassing dnie file cache
- *@param card sc_card_t structure pointer
- *@return <0: error code - ==0 not compressed - >0 file size
+ * Extract real file length from compressed file by reading 8 first bytes
+ * Implemented just like a direct read binary apdu bypassing dnie file cache
+ *
+ * @param card sc_card_t structure pointer
+ * @return <0: error code - ==0 not compressed - >0 file size
  */
 static int dnie_read_header(struct sc_card *card)
 {
@@ -1930,16 +2057,17 @@ static int ef_acl[] = {		/* to handle EF's */
 };
 
 /**
- * Parse SelectFile's File Control information
+ * OpenDNIe implementation of Process_FCI() card driver command.
  *
- * First, std iso_parse_fci is called to parse std fci tags
- * then analyze propietary tag according DNIe Manual
+ * Parse SelectFile's File Control information.
+ * - First, std iso_parse_fci is called to parse std fci tags
+ * - Then analyze propietary tag according DNIe Manual
  *
- *@param card OpenSC card structure pointer
- *@param file currently selected EF or DF
- *@param buf received FCI data
- *@param buflen FCI length
- *@return SC_SUCCESS if OK; else error code 
+ * @param card OpenSC card structure pointer
+ * @param file currently selected EF or DF
+ * @param buf received FCI data
+ * @param buflen FCI length
+ * @return SC_SUCCESS if OK; else error code 
  */
 static int dnie_process_fci(struct sc_card *card,
 			    struct sc_file *file, const u8 * buf, size_t buflen)
@@ -2100,8 +2228,8 @@ static int dnie_process_fci(struct sc_card *card,
 	LOG_FUNC_RETURN(card->ctx, res);
 }
 
-/**
- * PIN related functions 
+/*
+ * PIN related functions
  * NOTE:
  * DNIe manual says only about CHV1 PIN verify, but several sources talks
  * about the ability to also handle CHV1 PIN change
@@ -2111,6 +2239,14 @@ static int dnie_process_fci(struct sc_card *card,
  * obtained by mean of user fingerprint, only available at police station
  */
 
+/**
+ * Change PIN.
+ *
+ * Not implemented yet, as current availability for DNIe user driver is unknown
+ * @param card Pointer to Card Driver data structrure
+ * @param data Pointer to Pin data structure
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data)
 {
 	int res=SC_SUCCESS;
@@ -2123,6 +2259,15 @@ static int dnie_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data)
 	LOG_FUNC_RETURN(card->ctx,SC_ERROR_NOT_SUPPORTED);
 }
 
+/** 
+ * Verify PIN.
+ *
+ * Initialize SM and send pin verify CHV1 command to DNIe
+ * @param card Pointer to Card Driver data structure
+ * @param data Pointer to Pin data structure
+ * @param tries_left; on fail stores the number of tries left before car lock
+ * @return SC_SUCCESS if ok, else error code; on pin incorrect also sets tries_left
+ */
 static int dnie_pin_verify(struct sc_card *card,
                         struct sc_pin_cmd_data *data, int *tries_left)
 {
@@ -2183,6 +2328,15 @@ static int dnie_pin_verify(struct sc_card *card,
 /* pin_cmd: verify/change/unblock command; optionally using the
  * card's pin pad if supported.
  */
+
+/**
+ * OpenDNIe implementation for Pin_Cmd() card driver command.
+ *
+ * @param card Pointer to Card Driver data structure
+ * @param data Pointer to Pin data structure
+ * @param tries_left; if pin_verify() operation, on incorrect pin stores the number of tries left before car lock
+ * @return SC_SUCCESS if ok, else error code; on pin incorrect also sets tries_left
+ */
 static int dnie_pin_cmd(struct sc_card *card,
 			struct sc_pin_cmd_data *data, int *tries_left)
 {
@@ -2240,6 +2394,9 @@ static int dnie_pin_cmd(struct sc_card *card,
 
 /**********************************************************************/
 
+/**
+ * Internal function to initialize card driver function pointers
+ */
 static sc_card_driver_t *get_dnie_driver(void)
 {
 	sc_card_driver_t *iso_drv = sc_get_iso7816_driver();
@@ -2298,6 +2455,12 @@ static sc_card_driver_t *get_dnie_driver(void)
 	return &dnie_driver;
 }
 
+/**
+ * Entry point for (static) OpenDNIe card driver.
+ *
+ * This is the only public function on this module
+ * @return properly initialized array pointer to card driver operations
+ */
 sc_card_driver_t *sc_get_dnie_driver(void)
 {
 	return get_dnie_driver();

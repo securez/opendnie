@@ -1,6 +1,5 @@
-/*
- * cwa14890.c: Implementation of Secure Messaging 
- * according CWA-14890-1 and CWA-14890-2 standards
+/**
+ * cwa14890.c: Implementation of Secure Messaging according CWA-14890-1 and CWA-14890-2 standards.
  * 
  * Copyright (C) 2010 Juan Antonio Martinez <jonsito@terra.es>
  *

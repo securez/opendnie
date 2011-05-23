@@ -1,4 +1,4 @@
-/*
+/**
  * PKCS15 emulation layer for DNIe card.
  *
  * Copyright (C) 2011, Andre Zepezauer <andre.zepezauer@student.uni-halle.de> 

@@ -1,5 +1,5 @@
-/*
- * cwa-dnie.c: DNIe data provider for CWA SM handling
+/**
+ * cwa-dnie.c: DNIe data provider for CWA SM handling.
  * 
  * Copyright (C) 2010 Juan Antonio Martinez <jonsito@terra.es>
  *

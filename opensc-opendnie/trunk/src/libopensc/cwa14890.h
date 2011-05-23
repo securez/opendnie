@@ -1,6 +1,5 @@
-/*
- * cwa14890.h: Defines, Typedefs and prototype functions 
- * for SM Messaging according CWA-14890 standard
+/**
+ * cwa14890.h: Defines, Typedefs and prototype functions for SM Messaging according CWA-14890 standard.
  *
  * Copyright (C) 2010 Juan Antonio Martinez <jonsito@terra.es>
  *

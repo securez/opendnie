@@ -45,7 +45,11 @@
 #include "compression.h"
 #include "cwa14890.h"
 
-
+/**
+ * OpenDNIe private data declaration
+ *
+ * Defines internal data used in OpenDNIe code
+ */
 typedef struct dnie_private_data_st {
 	char *user_consent_app;
 	int user_consent_enabled;
@@ -70,7 +74,12 @@ extern int dnie_read_file(
 /* default user consent program (if required) */
 #define USER_CONSENT_CMD "/usr/bin/pinentry"
 
-/* override APDU response error codes from iso7816.c to allow handling of SM specific error*/
+/**
+ * SW internal apdu response table.
+ *
+ * Override APDU response error codes from iso7816.c to allow 
+ * handling of SM specific error
+ */
 static struct sc_card_error dnie_errors[] = {
 	{0x6688, SC_ERROR_SM, "Cryptographic checksum invalid"},
 	{0x6987, SC_ERROR_SM, "Expected SM Data Object missing"},
@@ -143,6 +152,9 @@ static dnie_private_data_t dnie_priv;
 static struct sc_card_operations dnie_ops;
 static struct sc_card_operations *iso_ops = NULL;
 
+/**
+ * Module definition for OpenDNIe card driver
+ */
 static sc_card_driver_t dnie_driver = {
 	DNIE_CHIP_NAME,
 	DNIE_CHIP_SHORTNAME,
@@ -190,7 +202,9 @@ static int dnie_get_environment(sc_context_t * ctx, dnie_private_data_t * priv)
 	return SC_SUCCESS;
 }
 
-/* messages used on pinentry protocol */
+/**
+ * Messages used on pinentry protocol
+ */
 char *user_consent_msgs[] = {
 	"SETTITLE Signature requested\n",
 	"SETDESC Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n",
@@ -671,6 +685,8 @@ static int dnie_init(struct sc_card *card)
  *
  * Called when the card object is being freed.  finish() has to
  * deallocate all possible private data. 
+ * @param card Pointer to card driver data structure
+ * @return SC_SUCCESS if ok; else error code
  */
 static int dnie_finish(struct sc_card *card)
 {
@@ -2040,7 +2056,7 @@ static int dnie_read_header(struct sc_card *card)
 }
 
 /** 
- *  access control list bytes for propietary DNIe response parsing
+ *  Access control list bytes for propietary DNIe FCI response for DF's.
  *  based in information from official DNIe Driver
  *  Parsing code based on itacns card driver
  */
@@ -2050,6 +2066,11 @@ static int df_acl[] = {		/* to handle DF's */
 	-1			/* !hey!, what about 5th byte of FCI info? */
 };
 
+/** 
+ *  Access control list bytes for propietary DNIe FCI response for EF's.
+ *  based in information from official DNIe Driver
+ *  Parsing code based on itacns card driver
+ */
 static int ef_acl[] = {		/* to handle EF's */
 	SC_AC_OP_READ, SC_AC_OP_UPDATE,
 	SC_AC_OP_REHABILITATE, SC_AC_OP_INVALIDATE,

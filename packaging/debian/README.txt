@@ -4,11 +4,11 @@
 
 0. Prepare your system for build Debian packages:
 apt-get update
-apt-get install devscripts dpkg-dev fakeroot
+apt-get install devscripts dpkg-dev fakeroot svn-buildpackage
 apt-get build-dep opensc
 
 1. Get into your favorite release directory:
-cd tags/opensc-opendnie-xx.xx.xx/
+cd tags/xx.xx.xx/
 
 or, if you want the bleeding edge:
 cd trunk/
@@ -18,21 +18,15 @@ dpkg-checkbuilddeps
 apt-get install ...
 
 3. Get the current tarball for that release:
-uscan --download-current-version
+svn-buildpackage -rfakeroot -us -uc -tc --svn-download-orig
 
-4. Untar it:
-tar xzvf ../opensc-opendnie_*.orig.tar.gz --show-transformed-names --transform 's|^[^/]*||'
+4. Install it:
+dpkg -i ../build-area/libopensc_*.deb ../build-area/opensc_*.deb 
 
-5. Build it:
-debuild -rfakeroot -us -uc -tc
-
-6. Install it:
-dpkg -i ../libopensc_*.deb ../opensc_*.deb 
-
-7. Install all unmet dependences:
+5. Install all unmet dependences:
 apt-get -f install
 
-8. Consider to configure your application (internet browser, etc) to support OpenSC
+6. Consider to configure your application (internet browser, etc) to support OpenSC
 and install on it the needed certificates, if any.
 
-9. Enjoy! ;)
+7. Enjoy! ;)

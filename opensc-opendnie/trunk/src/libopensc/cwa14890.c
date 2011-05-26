@@ -44,6 +44,15 @@
 
 /*********************** utility functions ************************/
 
+/**
+ * Tool for create a string dump of a provided buffer.
+ *
+ * When buffer length is longer than 16384 bytes, output is cut
+ *
+ * @param buff Buffer to be printed
+ * @param len Buffer len
+ * @return a char buffer with data dump in hex+ascii format
+ */
 static char *cwa_hexdump(const u8 * buf, size_t len)
 {
 	int j;
@@ -68,6 +77,17 @@ static char *cwa_hexdump(const u8 * buf, size_t len)
 	return res;
 }
 
+/**
+ * Dump an APDU before SM translation.
+ *
+ * This is mainly for debugging purposes. programmer should disable
+ * this function in a production environment, as APDU will be shown
+ * in text-plain on debug traces
+ *
+ * @param card Pointer to card driver data structure
+ * @param apdu APDU to be encoded, or APDU response after decoded
+ * @param flag 0: APDU is to be encoded: 1; APDU decoded response
+ */
 static void cwa_trace_apdu(sc_card_t * card, sc_apdu_t * apdu, int flag)
 {
 	char *buf = NULL;
@@ -99,13 +119,13 @@ static void cwa_trace_apdu(sc_card_t * card, sc_apdu_t * apdu, int flag)
 }
 
 /**
- * Increase send sequence counter SSC
+ * Increase send sequence counter SSC.
  *
- *@param card smart card info structure
- *@param sm Secure Message handling data structure
- *@return SC_SUCCESS if ok; else error code
+ * @param card smart card info structure
+ * @param sm Secure Message handling data structure
+ * @return SC_SUCCESS if ok; else error code
  *
- * to further study: what about using bignum arithmetics?
+ * TODO: to further study: what about using bignum arithmetics?
  */
 static int cwa_increase_ssc(sc_card_t * card, cwa_sm_status_t * sm)
 {
@@ -128,13 +148,14 @@ static int cwa_increase_ssc(sc_card_t * card, cwa_sm_status_t * sm)
 }
 
 /**
- * ISO 7816 padding
+ * ISO 7816 padding.
+ *
  * Adds an 0x80 at the end of buffer and as many zeroes to get len 
  * multiple of 8
  * Buffer must be long enougth to store additional bytes
  *
- *@param buffer where to compose data
- *@param len pointer to buffer length
+ * @param buffer where to compose data
+ * @param len pointer to buffer length
  */
 static void cwa_iso7816_padding(u8 * buf, size_t * buflen)
 {
@@ -145,7 +166,8 @@ static void cwa_iso7816_padding(u8 * buf, size_t * buflen)
 }
 
 /**
- * compose a BER-TLV data in provided buffer 
+ * compose a BER-TLV data in provided buffer.
+ *
  * Multybyte tag id are not supported
  * Also multibyte id 0x84 is unhandled
  *
@@ -153,13 +175,13 @@ static void cwa_iso7816_padding(u8 * buf, size_t * buflen)
  * the buffer. Consecutive calls to cwa_add_tlv, appends a new
  * TLV at the end of the buffer
  *
- *@param card card info structure
- *@param tag tag id
- *@param len data length
- *@param value data buffer
- *@param out pointer to dest data
- *@param outlen length of composed tlv data
- *@return SC_SUCCESS if ok; else error
+ * @param card card info structure
+ * @param tag tag id
+ * @param len data length
+ * @param value data buffer
+ * @param out pointer to dest data
+ * @param outlen length of composed tlv data
+ * @return SC_SUCCESS if ok; else error
  */
 static int cwa_compose_tlv(sc_card_t * card,
 			   u8 tag,
@@ -207,15 +229,16 @@ static int cwa_compose_tlv(sc_card_t * card,
 }
 
 /**
- * Parse and APDU Response and extract specific BER-TLV data
+ * Parse and APDU Response and extract specific BER-TLV data.
  *
  * NOTICE that iso7816 sect 5.2.2 states that Tag length may be 1 to n bytes
  * length. In this code we'll assume allways tag lenght = 1 byte
- *@param card card info structure
- *@param data Buffer to look for tlv into
- *@param datalen Buffer len
- *@param tlv  array of TLV structure to store results into
- *@return SC_SUCCESS if OK; else error code
+ *
+ * @param card card info structure
+ * @param data Buffer to look for tlv into
+ * @param datalen Buffer len
+ * @param tlv  array of TLV structure to store results into
+ * @return SC_SUCCESS if OK; else error code
  */
 static int cwa_parse_tlv(sc_card_t * card,
 			 u8 * data, size_t datalen, cwa_tlv_t tlv_array[]
@@ -306,15 +329,17 @@ static int cwa_parse_tlv(sc_card_t * card,
 /*********************** authentication routines *******************/
 
 /**
- * Routine to verify certificates provided by card
+ * Verify certificates provided by card.
+ *
  * This routine uses Root CA public key data From Annex III of manual
  * to verify intermediate CA icc certificate provided by card
  * if verify sucess, then extract public keys from intermediate CA
  * and verify icc certificate
- *@param card pointer to sc_card_contex
- *@param sub_ca_cert icc intermediate CA certificate readed from card
- *@param icc_ca icc certificate from card
- *@return SC_SUCCESS if verification is ok; else error code
+ *
+ * @param card pointer to sc_card_contex
+ * @param sub_ca_cert icc intermediate CA certificate readed from card
+ * @param icc_ca icc certificate from card
+ * @return SC_SUCCESS if verification is ok; else error code
  */
 static int cwa_verify_icc_certificates(sc_card_t * card,
 				       cwa_provider_t * provider,
@@ -374,12 +399,15 @@ static int cwa_verify_icc_certificates(sc_card_t * card,
 }
 
 /**
- * Used to verify CVC certificates in SM establishment process
- * by mean of 00 2A 00 AE (Perform Security Operation: Verify Certificate)
- *@param card pointer to card data
- *@param cert Certificate in CVC format
- *@param len  length of CVC certificate
- *@return SC_SUCCESS if ok; else error code
+ * Verify CVC certificates in SM establishment process.
+ *
+ * This is done by mean of 00 2A 00 AE 
+ * (Perform Security Operation: Verify Certificate )
+ *
+ * @param card pointer to card data
+ * @param cert Certificate in CVC format
+ * @param len  length of CVC certificate
+ * @return SC_SUCCESS if ok; else error code
  */
 static int cwa_verify_cvc_certificate(sc_card_t * card,
 				      const u8 * cert, size_t len)
@@ -413,15 +441,18 @@ static int cwa_verify_cvc_certificate(sc_card_t * card,
 }
 
 /**
- *  Used to handle raw apdu data in set_security_env() on SM stblishment
- *  Standard set_securiy_env() method has sc_security_env->buffer limited
- *  to 8 bytes; so cannot send some of required SM commands.
- *@param card pointer to card data 
- *@param p1 apdu P1 parameter
- *@param p2 apdu P2 parameter
- *@param buffer raw data to be inserted in apdu
- *@param length size of buffer
- *@return SC_SUCCESS if ok; else error code
+ * Alternate implementation for set_security environment.
+ *
+ * Used to handle raw apdu data in set_security_env() on SM stblishment
+ * Standard set_securiy_env() method has sc_security_env->buffer limited
+ * to 8 bytes; so cannot send some of required SM commands.
+ *
+ * @param card pointer to card data 
+ * @param p1 apdu P1 parameter
+ * @param p2 apdu P2 parameter
+ * @param buffer raw data to be inserted in apdu
+ * @param length size of buffer
+ * @return SC_SUCCESS if ok; else error code
  */
 static int cwa_set_security_env(sc_card_t * card,
 				u8 p1, u8 p2, u8 * buffer, size_t length)
@@ -455,12 +486,15 @@ static int cwa_set_security_env(sc_card_t * card,
 }
 
 /**
- * SM internal authenticate
- *@param card pointer to card data 
- *@param sm   secure message data pointer
- *@param data data to be sent in apdu
- *@param datalen length of data to send
- *@return SC_SUCCESS if OK: else error code
+ * SM internal authenticate.
+ *
+ * Internal (Card) authentication (let the card verify sent ifd certs)
+ *
+ * @param card pointer to card data 
+ * @param sm   secure message data pointer
+ * @param data data to be sent in apdu
+ * @param datalen length of data to send
+ * @return SC_SUCCESS if OK: else error code
  */
 static int cwa_internal_auth(sc_card_t * card,
 			     cwa_sm_status_t * sm, u8 * data, size_t datalen)
@@ -501,14 +535,19 @@ static int cwa_internal_auth(sc_card_t * card,
 }
 
 /**
- * Compose signature data for external auth according CWA-14890
+ * Compose signature data for external auth according CWA-14890.
+ * 
+ * This code prepares data to be sent to ICC for external
+ * authentication procedure
+ *
  * Store resulting data  into sm->sig
- *@param card pointer to st_card_t card data information
- *@param icc_pubkey public key of card
- *@param ifd_privkey private RSA key of ifd
- *@param sn_icc card serial number
- *@param sm pointer to cwa_internal_t data
- *@return SC_SUCCESS if ok; else errorcode
+ *
+ * @param card pointer to st_card_t card data information
+ * @param icc_pubkey public key of card
+ * @param ifd_privkey private RSA key of ifd
+ * @param sn_icc card serial number
+ * @param sm pointer to cwa_internal_t data
+ * @return SC_SUCCESS if ok; else errorcode
  */
 static int cwa_prepare_external_auth(sc_card_t * card,
 				     RSA * icc_pubkey,
@@ -662,10 +701,13 @@ static int cwa_prepare_external_auth(sc_card_t * card,
 }
 
 /**
- * SM external authenticate
- *@param data apdu signature content
- *@param datalen signature length (128)
- *@return SC_SUCCESS if OK: else error code
+ * SM external authenticate.
+ *
+ * Perform external (IFD) authenticate procedure (8.4.1.2)
+ *
+ * @param data apdu signature content
+ * @param datalen signature length (128)
+ * @return SC_SUCCESS if OK: else error code
  */
 static int cwa_external_auth(sc_card_t * card, cwa_sm_status_t * sm)
 {
@@ -697,10 +739,13 @@ static int cwa_external_auth(sc_card_t * card, cwa_sm_status_t * sm)
 }
 
 /**
- * SM creation of session keys
- *@param card pointer to sc_card_t data
- *@param sm pointer to cwa_internal_t data
- *@return SC_SUCCESS if ok; else error code
+ * SM creation of session keys.
+ *
+ * Compute Kenc,Kmac, and SSC  and store it into sm data
+ *
+ * @param card pointer to sc_card_t data
+ * @param sm pointer to cwa_internal_t data
+ * @return SC_SUCCESS if ok; else error code
  */
 static int cwa_compute_session_keys(sc_card_t * card, cwa_sm_status_t * sm)
 {
@@ -779,8 +824,12 @@ static int cwa_compute_session_keys(sc_card_t * card, cwa_sm_status_t * sm)
 }
 
 /*
- * Compare signature for internal auth procedure
- * returns SC_SUCCESS or error code
+ * Compare signature for internal auth procedure.
+ *
+ * @param data Received data to be checked
+ * @param dlen data length
+ * @param expected results
+ * @return SC_SUCCESS or error code
  */
 static int cwa_compare_signature(u8 * data, size_t dlen, u8 * ifd_data)
 {
@@ -811,14 +860,19 @@ static int cwa_compare_signature(u8 * data, size_t dlen, u8 * ifd_data)
 	return res;
 }
 
-/** check the result of internal_authenticate operation
- *@param card Pointer to sc_card_t data
- *@param icc_pubkey icc public key
- *@param ifd_privkey ifd private key
- *@param ifdbuf buffer containing ( RND.IFD || SN.IFD )
- *@param ifdlen buffer length; should be 16
- *@param sm secure messaging internal data
- *@return SC_SUCCESS if ok; else error code
+/** 
+ * check the result of internal_authenticate operation.
+ *
+ * Checks icc received data from internal auth procedure against
+ * expected results
+ *
+ * @param card Pointer to sc_card_t data
+ * @param icc_pubkey icc public key
+ * @param ifd_privkey ifd private key
+ * @param ifdbuf buffer containing ( RND.IFD || SN.IFD )
+ * @param ifdlen buffer length; should be 16
+ * @param sm secure messaging internal data
+ * @return SC_SUCCESS if ok; else error code
  */
 static int cwa_verify_internal_auth(sc_card_t * card,
 				    RSA * icc_pubkey,
@@ -954,15 +1008,24 @@ static int cwa_verify_internal_auth(sc_card_t * card,
 }
 
 /**
- * Create Secure channel
+ * Create Secure Messaging channel.
+ *
+ * This is the main entry point for CWA14890 SM chanel creation.
+ * It closely follows cwa standard, with a minor modification:
+ * - ICC serial number is taken at the begining of SM creation
+ * - ICC and IFD certificate agreement process is reversed, to allow
+ * card to retain key references on further proccess (this behavior
+ * is also defined in standard)
+ *
  * Based on Several documents:
- * "Understanding the DNIe"
- * "Manual de comandos del DNIe"
- * ISO7816-4 and CWA14890-{1,2}
- *@param card card info structure
- *@param provider cwa14890 info provider
- *@param flag requested init method ( OFF, COLD, WARM )
- *@return SC_SUCCESS if OK; else error code
+ * - "Understanding the DNIe"
+ * - "Manual de comandos del DNIe"
+ * - ISO7816-4 and CWA14890-{1,2}
+ *
+ * @param card card info structure
+ * @param provider cwa14890 info provider
+ * @param flag requested init method ( OFF, COLD, WARM )
+ * @return SC_SUCCESS if OK; else error code
  */
 int cwa_create_secure_channel(sc_card_t * card,
 			      cwa_provider_t * provider, int flag)
@@ -1338,17 +1401,18 @@ int cwa_create_secure_channel(sc_card_t * card,
 /******************* SM internal APDU encoding / decoding functions ******/
 
 /**
- * Encode an APDU
+ * Encode an APDU.
+ *
  * Calling this functions means that It's has been verified
  * That source apdu needs encoding
  * Based on section 9 of CWA-14890 and Sect 6 of iso7816-4 standards
  * And DNIe's manual
  *
- *@param card card info structure
- *@param sm Secure Messaging state information
- *@param from APDU to be encoded
- *@param to where to store encoded apdu
- *@return SC_SUCCESS if ok; else error code
+ * @param card card info structure
+ * @param sm Secure Messaging state information
+ * @param from APDU to be encoded
+ * @param to where to store encoded apdu
+ * @return SC_SUCCESS if ok; else error code
  */
 int cwa_encode_apdu(sc_card_t * card,
 		    cwa_provider_t * provider, sc_apdu_t * from, sc_apdu_t * to)
@@ -1551,17 +1615,18 @@ int cwa_encode_apdu(sc_card_t * card,
 }
 
 /**
- * Decode an APDU response
+ * Decode an APDU response.
+ *
  * Calling this functions means that It's has been verified
  * That apdu response comes in TLV encoded format and needs decoding
  * Based on section 9 of CWA-14890 and Sect 6 of iso7816-4 standards
  * And DNIe's manual
  *
- *@param card card info structure
- *@param sm Secure Messaging state information
- *@param from APDU with response to be decoded
- *@param to where to store decoded apdu
- *@return SC_SUCCESS if ok; else error code
+ * @param card card info structure
+ * @param sm Secure Messaging state information
+ * @param from APDU with response to be decoded
+ * @param to where to store decoded apdu
+ * @return SC_SUCCESS if ok; else error code
  */
 int cwa_decode_response(sc_card_t * card,
 			cwa_provider_t * provider,
@@ -1827,6 +1892,7 @@ int cwa_decode_response(sc_card_t * card,
 /********************* default provider for cwa14890 ****************/
 
 /* pre and post operations */
+
 static int default_create_pre_ops(sc_card_t * card, cwa_provider_t * provider)
 {
 	return SC_SUCCESS;
@@ -2041,9 +2107,10 @@ static cwa_provider_t default_cwa_provider = {
 };
 
 /**
- *Get a copy of default cwa provider 
- *@param card pointer to card info structure
- *@return copy of default provider or null on error
+ * Get a copy of default cwa provider.
+ *
+ * @param card pointer to card info structure
+ * @return copy of default provider or null on error
  */
 cwa_provider_t *cwa_get_default_provider(sc_card_t * card)
 {

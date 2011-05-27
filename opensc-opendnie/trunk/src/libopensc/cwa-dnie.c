@@ -43,6 +43,9 @@
 
 /********************* Keys and certificates as published by DGP ********/
 
+/**
+ * Modulo de la clave pública de la Root CA del DNIe electronico
+ */
 static u8 icc_root_ca_modulus[] = {
 	0xEA, 0xDE, 0xDA, 0x45, 0x53, 0x32, 0x94, 0x50, 0x39, 0xDA, 0xA4, 0x04,
 	0xC8, 0xEB, 0xC4, 0xD3, 0xB7, 0xF5, 0xDC, 0x86, 0x92, 0x83, 0xCD, 0xEA,
@@ -57,10 +60,16 @@ static u8 icc_root_ca_modulus[] = {
 	0x91, 0xDB, 0x64, 0xF8, 0x0B, 0x5E, 0x92, 0xCD
 };
 
+/**
+ * Exponente de la clave publica de la Root CA del DNI electronico
+ */
 static u8 icc_root_ca_public_exponent[] = {
 	0x01, 0x00, 0x01
 };
 
+/**
+ * Terminal (IFD) key modulus for SM channel creation
+ */
 static u8 ifd_modulus[] = {
 	0xdb, 0x2c, 0xb4, 0x1e, 0x11, 0x2b, 0xac, 0xfa, 0x2b, 0xd7, 0xc3, 0xd3,
 	0xd7, 0x96, 0x7e, 0x84, 0xfb, 0x94, 0x34, 0xfc, 0x26, 0x1f, 0x9d, 0x09,
@@ -75,10 +84,16 @@ static u8 ifd_modulus[] = {
 	0x6a, 0xe2, 0x36, 0x59, 0x00, 0x16, 0xba, 0x69
 };
 
+/**
+ * Terminal (IFD) public exponent for SM channel creation
+ */
 static u8 ifd_public_exponent[] = {
 	0x01, 0x00, 0x01
 };
 
+/**
+ * Terminal (IFD) private exponent for SM channel establishment
+ */
 static u8 ifd_private_exponent[] = {
 	0x18, 0xb4, 0x4a, 0x3d, 0x15, 0x5c, 0x61, 0xeb, 0xf4, 0xe3, 0x26, 0x1c,
 	0x8b, 0xb1, 0x57, 0xe3, 0x6f, 0x63, 0xfe, 0x30, 0xe9, 0xaf, 0x28, 0x89,
@@ -93,7 +108,9 @@ static u8 ifd_private_exponent[] = {
 	0xbd, 0x9b, 0x00, 0x31, 0x3c, 0x0f, 0x46, 0xed
 };
 
-/* Intermediate CA certificate in CVC format (Card verifiable certificate) */
+/**
+ *  Intermediate CA certificate in CVC format (Card verifiable certificate)
+ */
 static u8 C_CV_CA_CS_AUT_cert[] = {
 	0x7f, 0x21, 0x81, 0xce, 0x5f, 0x37, 0x81, 0x80, 0x3c, 0xba, 0xdc, 0x36,
 	0x84, 0xbe, 0xf3, 0x20, 0x41, 0xad, 0x15, 0x50, 0x89, 0x25, 0x8d, 0xfd,
@@ -115,7 +132,9 @@ static u8 C_CV_CA_CS_AUT_cert[] = {
 	0x52, 0x44, 0x49, 0x60, 0x00, 0x06
 };
 
-/* Terminal (IFD) certificate in CVC format (PK.IFD.AUT) */
+/** 
+ * Terminal (IFD) certificate in CVC format (PK.IFD.AUT)
+ */
 static u8 C_CV_IFDUser_AUT_cert[] = {
 	0x7f, 0x21, 0x81, 0xcd, 0x5f, 0x37, 0x81, 0x80, 0x82, 0x5b, 0x69, 0xc6,
 	0x45, 0x1e, 0x5f, 0x51, 0x70, 0x74, 0x38, 0x5f, 0x2f, 0x17, 0xd6, 0x4d,
@@ -137,30 +156,53 @@ static u8 C_CV_IFDUser_AUT_cert[] = {
 	0x44, 0x49, 0x60, 0x00, 0x06
 };
 
+/**
+ * Root CA card key reference
+ */
 static u8 root_ca_keyref[] = { 0x02, 0x0f };
 
+
+/**
+ * ICC card private key reference 
+ */
+static u8 icc_priv_keyref[] = { 0x02, 0x1f };
+
+/**
+ * Intermediate CA card key reference
+ */ 
 static u8 cvc_intca_keyref[] =
     { 0x65, 0x73, 0x53, 0x44, 0x49, 0x60, 0x00, 0x06 };
 
+/**
+ * In memory key reference for selecting IFD sent certificate
+ */
 static u8 cvc_ifd_keyref[] =
     { 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
 
-static u8 icc_priv_keyref[] = { 0x02, 0x1f };
-
+/**
+ * Serial number for IFD Terminal application
+ */
 static u8 sn_ifd[] = { 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+
+/**
+ * Serial number for ICC card.
+ * This buffer is to be filled at runtime
+ */
 static u8 sn_icc[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 /************ internal functions **********************************/
 
 /**
- * Select a file from card, process fci and read data
+ * Select a file from card, process fci and read data.
+ *
  * This is done by mean of iso_select_file() and iso_read_binary()
- *@param card pointer to sc_card data
- *@param path pathfile
- *@param file pointer to resulting file descriptor
- *@param buffer pointer to buffer where to store file contents
- *@param length length of buffer data
- *@return SC_SUCCESS if ok; else error code
+ *
+ * @param card pointer to sc_card data
+ * @param path pathfile
+ * @param file pointer to resulting file descriptor
+ * @param buffer pointer to buffer where to store file contents
+ * @param length length of buffer data
+ * @return SC_SUCCESS if ok; else error code
  */
 int dnie_read_file(sc_card_t * card,
 		   const sc_path_t * path,
@@ -230,6 +272,17 @@ int dnie_read_file(sc_card_t * card,
 	LOG_FUNC_RETURN(ctx, res);
 }
 
+/**
+ * Read SM required certificates from card.
+ *
+ * This function uses received path to read a certificate file from
+ * card. 
+ * No validation is done except that received data is effectively a certificate
+ * @param card Pointer to card driver structure
+ * @param certpat path to requested certificate
+ * @param cert where to store resultig data
+ * @return SC_SUCCESS if ok, else error code 
+ */
 static int dnie_read_certificate(sc_card_t * card, char *certpath, X509 ** cert)
 {
 	sc_file_t *file = NULL;
@@ -274,6 +327,14 @@ static int dnie_read_certificate(sc_card_t * card, char *certpath, X509 ** cert)
 
 /************ implementation of cwa provider methods **************/
 
+/**
+ * Retrieve Root CA public key.
+ *
+ * Just returns (as local SM authentication) static data
+ * @param card Pointer to card driver structure
+ * @param root_ca_key pointer to resulting returned key
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_root_ca_pubkey(sc_card_t * card, EVP_PKEY ** root_ca_key)
 {
 	int res=SC_SUCCESS;
@@ -302,7 +363,20 @@ static int dnie_get_root_ca_pubkey(sc_card_t * card, EVP_PKEY ** root_ca_key)
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
-/* retrieve CVC intermediate CA certificate and length */
+/**
+ * Retrieve IFD (application) CVC intermediate CA certificate and length.
+ *
+ * Returns a byte array with the intermediate CA certificate
+ * (in CardVerifiable Certificate format) to be sent to the
+ * card in External Authentication process
+ * As this is local provider, just points to provided static data,
+ * and allways return success
+ *
+ * @param card Pointer to card driver Certificate
+ * @param cert Where to store resulting byte array
+ * @param length len of returned byte array
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_cvc_ca_cert(sc_card_t * card, u8 ** cert, size_t * length)
 {
 	LOG_FUNC_CALLED(card->ctx);
@@ -311,7 +385,20 @@ static int dnie_get_cvc_ca_cert(sc_card_t * card, u8 ** cert, size_t * length)
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
-/* retrieve CVC IFD certificate and length */
+/**
+ * Retrieve IFD (application) CVC certificate and length.
+ *
+ * Returns a byte array with the application's certificate
+ * (in CardVerifiable Certificate format) to be sent to the
+ * card in External Authentication process
+ * As this is local provider, just points to provided static data,
+ * and allways return success
+ *
+ * @param card Pointer to card driver Certificate
+ * @param cert Where to store resulting byte array
+ * @param length len of returned byte array
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_cvc_ifd_cert(sc_card_t * card, u8 ** cert, size_t * length)
 {
 	LOG_FUNC_CALLED(card->ctx);
@@ -320,6 +407,19 @@ static int dnie_get_cvc_ifd_cert(sc_card_t * card, u8 ** cert, size_t * length)
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
+/**
+ * Get IFD (Terminal) private key data.
+ * 
+ * As this is a local (in memory) provider, just get data specified in
+ * DNIe's manual and compose an OpenSSL private key structure
+ *
+ * Notice that resulting data should be keept in memory as little as possible
+ * Erasing them once used
+ *
+ * @param card pointer to card driver structure
+ * @param ifd_privkey where to store IFD private key
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_ifd_privkey(sc_card_t * card, EVP_PKEY ** ifd_privkey)
 {
 	RSA *ifd_rsa=NULL;
@@ -351,19 +451,38 @@ static int dnie_get_ifd_privkey(sc_card_t * card, EVP_PKEY ** ifd_privkey)
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
-/* get ICC intermediate CA  path */
+/**
+ * Get ICC intermediate CA Certificate from card.
+ *
+ * @param card Pointer to card driver structure
+ * @param cert where to store resulting certificate
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_icc_intermediate_ca_cert(sc_card_t * card, X509 ** cert)
 {
 	return dnie_read_certificate(card, "3F006020", cert);
 }
 
-/* get ICC certificate path */
+/**
+ * Get ICC certificate from card.
+ * @param card Pointer to card driver structure
+ * @param cert where to store resulting certificate
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_icc_cert(sc_card_t * card, X509 ** cert)
 {
 	return dnie_read_certificate(card, "3F00601F", cert);
 }
 
-/* Retrieve key reference for Root CA to validate CVC intermediate CA certs */
+/**
+ * Retrieve key reference for Root CA to validate CVC intermediate CA certs.
+ *
+ * This is required in the process of On card external authenticate
+ * @param card Pointer to card driver structure
+ * @param buf where to store resulting key reference
+ * @param len where to store buffer length
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_root_ca_pubkey_ref(sc_card_t * card, u8 ** buf,
 				       size_t * len)
 {
@@ -372,7 +491,17 @@ static int dnie_get_root_ca_pubkey_ref(sc_card_t * card, u8 ** buf,
 	return SC_SUCCESS;
 }
 
-/* Retrieve key reference for intermediate CA to validate IFD certs */
+/**
+ * Retrieve key reference for intermediate CA to validate IFD cert.
+ *
+ * This is required in the process of On card external authenticate
+ * As this driver is for local SM authentication SC_SUCCESS is allways returned
+ *
+ * @param card Pointer to card driver structure
+ * @param buf where to store resulting key reference
+ * @param len where to store buffer length
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_intermediate_ca_pubkey_ref(sc_card_t * card, u8 ** buf,
 					       size_t * len)
 {
@@ -381,7 +510,18 @@ static int dnie_get_intermediate_ca_pubkey_ref(sc_card_t * card, u8 ** buf,
 	return SC_SUCCESS;
 }
 
-/* Retrieve key reference for IFD certificate */
+/**
+ *  Retrieve key reference for IFD certificate.
+ *
+ * This tells the card with in memory key reference is to be used
+ * when CVC cert is sent for external auth procedure
+ * As this driver is for local SM authentication SC_SUCCESS is allways returned
+ *
+ * @param card pointer to card driver structure
+ * @param buf where to store data to be sent
+ * @param len where to store data length
+ * @return SC_SUCCESS if ok; else error code
+ */
 static int dnie_get_ifd_pubkey_ref(sc_card_t * card, u8 ** buf, size_t * len)
 {
 	*buf = cvc_ifd_keyref;
@@ -389,7 +529,17 @@ static int dnie_get_ifd_pubkey_ref(sc_card_t * card, u8 ** buf, size_t * len)
 	return SC_SUCCESS;
 }
 
-/* Retrieve key reference for ICC privkey */
+/**
+ * Retrieve key reference for ICC privkey.
+ * 
+ * In local SM stablishment, just retrieve key reference from static 
+ * data tables and just return success
+ * 
+ * @param card pointer to card driver structure
+ * @param buf where to store data
+ * @param len where to store data length
+ * @return SC_SUCCESS if ok; else error
+ */
 static int dnie_get_icc_privkey_ref(sc_card_t * card, u8 ** buf, size_t * len)
 {
 	*buf = icc_priv_keyref;
@@ -397,14 +547,31 @@ static int dnie_get_icc_privkey_ref(sc_card_t * card, u8 ** buf, size_t * len)
 	return SC_SUCCESS;
 }
 
-/* Retrieve SN.IFD (8 bytes left padded with zeroes if required)*/
+/**
+ * Retrieve SN.IFD (8 bytes left padded with zeroes if required).
+ *
+ * In DNIe local SM procedure, just read it from static data and
+ * return SC_SUCCESS
+ *
+ * @param card pointer to card structure
+ * @param buf where to store result (8 bytes)
+ * @return SC_SUCCESS if ok; else error
+ */
 static int dnie_get_sn_ifd(sc_card_t * card, u8 ** buf)
 {
 	*buf = sn_ifd;
 	return SC_SUCCESS;
 }
 
-/* Retrieve SN.ICC (8 bytes left padded with zeroes if needed) */
+/* Retrieve SN.ICC (8 bytes left padded with zeroes if needed).
+ *
+ * As DNIe reads serial number at startup, no need to read again
+ * Just retrieve it from cache and return success
+ *
+ * @param card pointer to card structure
+ * @param buf where to store result (8 bytes)
+ * @return SC_SUCCESS if ok; else error
+ */
 static int dnie_get_sn_icc(sc_card_t * card, u8 ** buf)
 {
 	int res=SC_SUCCESS;
@@ -421,14 +588,19 @@ static int dnie_get_sn_icc(sc_card_t * card, u8 ** buf)
 }
 
 /* 
+ * CWA-14890 SM stablisment pre-operations.
+ *
  * DNIe needs to get icc serial number at the begin of the sm creation
  * (to avoid breaking key references) so get it an store into serialnr 
  * cache here.
  *
  * In this way if get_sn_icc is called(), we make sure that no APDU
  * command is to be sent to card, just retrieve it from cache 
+ *
+ * @param card pointer to card driver structure
+ * @param provider pointer to SM data provider for DNIe
+ * @return SC_SUCCESS if OK. else error code
  */
-/* pre secure channel creator initialization routine */
 static int dnie_create_pre_ops(sc_card_t * card, cwa_provider_t * provider)
 {
 	sc_serial_number_t serial;
@@ -441,6 +613,14 @@ static int dnie_create_pre_ops(sc_card_t * card, cwa_provider_t * provider)
 	return sc_card_ctl(card, SC_CARDCTL_GET_SERIALNR, &serial);
 }
 
+/**
+ * Main entry point for DNIe CWA14890 SM data provider.
+ *
+ * Return a pointer to DNIe data provider with proper function pointers
+ * 
+ * @param card pointer to card driver data structure
+ * @return cwa14890 DNIe data provider if success, null on error
+ */
 cwa_provider_t *dnie_get_cwa_provider(sc_card_t * card)
 {
 
@@ -505,3 +685,4 @@ cwa_provider_t *dnie_get_cwa_provider(sc_card_t * card)
 }
 
 #endif				/* HAVE_OPENSSL */
+/* _ end of cwa-dnie.c - */

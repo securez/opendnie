@@ -464,7 +464,8 @@ static int dnie_get_icc_intermediate_ca_cert(sc_card_t * card, X509 ** cert)
 }
 
 /**
- * Get ICC certificate from card.
+ * Get ICC (card) certificate.
+ *
  * @param card Pointer to card driver structure
  * @param cert where to store resulting certificate
  * @return SC_SUCCESS if ok; else error code
@@ -492,7 +493,7 @@ static int dnie_get_root_ca_pubkey_ref(sc_card_t * card, u8 ** buf,
 }
 
 /**
- * Retrieve key reference for intermediate CA to validate IFD cert.
+ * Retrieve public key reference for intermediate CA to validate IFD cert.
  *
  * This is required in the process of On card external authenticate
  * As this driver is for local SM authentication SC_SUCCESS is allways returned
@@ -511,7 +512,7 @@ static int dnie_get_intermediate_ca_pubkey_ref(sc_card_t * card, u8 ** buf,
 }
 
 /**
- *  Retrieve key reference for IFD certificate.
+ *  Retrieve public key reference for IFD certificate.
  *
  * This tells the card with in memory key reference is to be used
  * when CVC cert is sent for external auth procedure
@@ -587,7 +588,7 @@ static int dnie_get_sn_icc(sc_card_t * card, u8 ** buf)
 	return SC_SUCCESS;
 }
 
-/* 
+/**
  * CWA-14890 SM stablisment pre-operations.
  *
  * DNIe needs to get icc serial number at the begin of the sm creation

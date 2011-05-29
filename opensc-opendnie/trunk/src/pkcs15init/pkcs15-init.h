@@ -212,17 +212,12 @@ struct sc_pkcs15init_prkeyargs {
 	} params;
 
 	struct sc_pkcs15_prkey	key;
-
-	/* support for non-native keys */
-	char *			passphrase;
 };
 
 struct sc_pkcs15init_keygen_args {
 	struct sc_pkcs15init_prkeyargs prkey_args;
 	const char *                   pubkey_label;
 };
-
-#define SC_PKCS15INIT_NO_PASSPHRASE	0x0002
 
 struct sc_pkcs15init_pubkeyargs {
 	struct sc_pkcs15_id	id;
@@ -351,7 +346,6 @@ extern int	sc_pkcs15init_get_manufacturer(struct sc_profile *,
 				const char **);
 extern int	sc_pkcs15init_get_serial(struct sc_profile *, const char **);
 extern int	sc_pkcs15init_set_serial(struct sc_profile *, const char *);
-extern int	sc_pkcs15init_get_label(struct sc_profile *, const char **);
 
 extern int	sc_pkcs15init_verify_secret(struct sc_profile *, struct sc_pkcs15_card *,
 				sc_file_t *,  unsigned int, int);

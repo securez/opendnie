@@ -1,0 +1,99 @@
+Source: opensc
+Priority: extra
+Section: utils
+Maintainer: Enrique Hernández Bello <quique@osl.ull.es>
+Build-Depends: debhelper (>= 7.0.50), libltdl3-dev, libssl-dev (>= 0.9.7d-3), libpcsclite-dev (>= 1.2.9-beta1), libassuan-dev (>= 0.6.4-2), libopenct1-dev, libxt-dev, flex, pkg-config, automake, autoconf2.64, libtool, xsltproc, docbook-xsl
+Standards-Version: 3.9.1
+Homepage: http://www.opensc-project.org/
+Vcs-Svn: https://svn.forge.morfeo-project.org/opendnie/packaging/debian/branches/opensc/
+Vcs-Browser: http://forja.cenatic.es/plugins/scmsvn/viewcvs.php/packaging/debian/branches/opensc/?root=opendnie
+
+Package: opensc
+Section: utils
+Architecture: any
+Recommends: libacr38u, libccid, libnss3-tools
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Smart card utilities with support for PKCS#15 compatible cards
+ OpenSC provides a set of libraries and utilities to access smart
+ cards.  It mainly focuses on cards that support cryptographic
+ operations. It facilitates their use in security applications such as
+ mail encryption, authentication, and digital signature. OpenSC
+ implements the PKCS#11 API. Applications supporting this API, such as
+ Iceweasel and Icedove, can use it. OpenSC implements the PKCS#15
+ standard and aims to be compatible with all software that does so as
+ well.
+ .
+ Before purchasing any cards, please read carefully documentation in
+ /usr/share/doc/opensc/html/wiki/index.html - only some cards are
+ supported. Not only does card type matters, but also card version,
+ card OS version and preloaded applet. Only a subset of possible
+ operations may be supported for your card. Card initialization may
+ require third party proprietary software.
+
+# Package: libopensc3-dev
+# Section: libdevel
+# Priority: optional
+# Architecture: any
+# Conflicts: libopensc0-dev, libopensc1-dev
+# Replaces: libopensc0-dev, libopensc1-dev, libscam1 (<< 0.9.4-5)
+# Provides: libopensc-dev
+# Depends: libopensc3 (= ${binary:Version}), libssl-dev, ${misc:Depends}
+# Description: OpenSC development files
+#  OpenSC provides a set of libraries and utilities to access smart
+#  cards.  It mainly focuses on cards that support cryptographic
+#  operations. It facilitates their use in security applications such as
+#  mail encryption, authentication, and digital signature. OpenSC
+#  implements the PKCS#11 API. Applications supporting this API, such as
+#  Iceweasel and Icedove, can use it. OpenSC implements the PKCS#15
+#  standard and aims to be compatible with all software that does so as
+#  well.
+#  .
+#  This package contains files necessary for developing applications
+#  with the libopensc libraries from OpenSC.org.
+
+Package: libopensc3
+Section: libs
+Priority: optional
+Architecture: any
+Conflicts: libopensc0, libopensc1, libopensc2 (<< 0.12.0-0svnr4365)
+Replaces: libopensc0, libopensc1, libopensc2 (<< 0.12.0-0svnr4365)
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: SmartCard library with support for PKCS#15 compatible smart cards
+ OpenSC provides a set of libraries and utilities to access smart
+ cards.  It mainly focuses on cards that support cryptographic
+ operations. It facilitates their use in security applications such as
+ mail encryption, authentication, and digital signature. OpenSC
+ implements the PKCS#11 API. Applications supporting this API, such as
+ Iceweasel and Icedove, can use it. OpenSC implements the PKCS#15
+ standard and aims to be compatible with all software that does so as
+ well.
+ .
+ This package contains the libopensc libraries from OpenSC.org.
+ .
+ Card initialization can be performed by utilities in the opensc package.
+
+Package: libopensc3-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Provides: libopensc2-dbg
+Conflicts: libopensc2-dbg (<< 0.12.0-0svnr4365)
+Replaces: libopensc2-dbg (<< 0.12.0-0svnr4365)
+Depends: libopensc3 (= ${binary:Version}), ${misc:Depends}
+Description: Debugging symbols for libopensc3
+ This package contains the debugging symbols for the libopensc library
+ from OpenSC.org.
+ .
+ Card initialization can be performed by utilities in the opensc package.
+
+# Package: mozilla-opensc
+# Section: web
+# Architecture: any
+# Depends: ${shlibs:Depends}, ${misc:Depends}
+# Recommends: pinentry-gtk2 | pinentry-x11
+# Replaces: libopensc-openssl (<< 0.9.4-6)
+# Description: Mozilla plugin for authentication using OpenSC
+#  A plugin for mozilla that allows S/MIME and SSL authentication using
+#  OpenSC.
+#  .
+#  Card initialization can be performed by utilities in the opensc package. 

@@ -1600,11 +1600,13 @@ static int dnie_set_security_env(struct sc_card *card,
 		return SC_ERROR_INVALID_ARGUMENTS;
 	LOG_FUNC_CALLED(card->ctx);
 
-	/* make sure that Secure Channel is on */
+	/* Secure Channel should be on here, if not means an error */
+	/*
 	result =
 	    cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_WARM);
 	LOG_TEST_RET(card->ctx, result,
 		     "set_security_env(); Cannot establish SM");
+	*/
 
 	/* check for algorithms */
 	if (env->flags & SC_SEC_ENV_ALG_REF_PRESENT) {
@@ -1750,10 +1752,12 @@ static int dnie_decipher(struct sc_card *card,
 	if ((crgram == NULL) || (out == NULL) || (crgram_len > 255)) {
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 	}
-	/* make sure that Secure Channel is on */
+	/* Secure Channel should be on. Elsewhere an error will be thrown */
+	/*
 	result =
 	    cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_WARM);
 	LOG_TEST_RET(card->ctx, result, "decipher(); Cannot establish SM");
+	*/
 
 	/* Official driver uses an undocumented proprietary APDU
 	 * (90 74 40 keyID). This code uses standard 00 2A 80 8x one)
@@ -1831,11 +1835,13 @@ static int dnie_compute_signature(struct sc_card *card,
 	if (datalen > SC_MAX_APDU_BUFFER_SIZE)	/* should be 256 */
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 
-	/* ensure that secure channel is stablished */
+	/* Secure channel should be stablished. if not error will be thrown */
+	/*
 	result =
 	    cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_WARM);
 	LOG_TEST_RET(card->ctx, result,
 		     "compute_signature(); Cannot establish SM");
+	*/
 
 	/* (Requested by DGP): on signature operation, ask user consent */
 	if (dnie_priv.rsa_key_ref == 0x02) {	/* TODO: revise key ID handling */
@@ -2357,7 +2363,7 @@ static int dnie_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data)
 	int res=SC_SUCCESS;
 	LOG_FUNC_CALLED(card->ctx);
 
-        /* ensure that secure channel is established from reset */
+        /* Ensure that secure channel is established from reset */
         res = cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_COLD);
         LOG_TEST_RET(card->ctx, res, "Establish SM failed");
 

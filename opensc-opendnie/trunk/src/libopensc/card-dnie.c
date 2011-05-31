@@ -762,7 +762,7 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 
 		tmp = apdu->cse;	/* save original apdu type */
 		/* if SM is on, assure rx buffer exists and force get_response */
-		if (provider->status.state == CWA_SM_ACTIVE) {
+		if (provider->status.session.state == CWA_SM_ACTIVE) {
 			if (tmp == SC_APDU_CASE_3_SHORT)
 				apdu->cse = SC_APDU_CASE_4_SHORT;
 			if (apdu->resplen == 0) {	/* no response buffer: create */
@@ -818,7 +818,7 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 			e_apdu->resp = apdu->resp;
 			e_apdu->resplen = apdu->resplen;
 			/* if SM is ON, ensure resp exists, and force getResponse() */
-			if (provider->status.state == CWA_SM_ACTIVE) {
+			if (provider->status.session.state == CWA_SM_ACTIVE) {
 				/* set up proper apdu type */
 				if (e_apdu->cse == SC_APDU_CASE_3_SHORT)
 					e_apdu->cse = SC_APDU_CASE_4_SHORT;
@@ -882,7 +882,7 @@ static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 		/* preserve original apdu to take care of retransmission */
 		memcpy(&wrapped, apdu, sizeof(sc_apdu_t));
 		/* SM is active, encode apdu */
-		if (provider->status.state == CWA_SM_ACTIVE) {
+		if (provider->status.session.state == CWA_SM_ACTIVE) {
 			wrapped.resp = NULL;
 			wrapped.resplen = 0;	/* let get_response() assign space */
 			res = cwa_encode_apdu(card, provider, apdu, &wrapped);
@@ -898,7 +898,7 @@ static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 		res=card->ops->check_sw(card,wrapped.sw1,wrapped.sw2);
 		if ( res == SC_ERROR_SM ) {
 			sc_log(ctx,"Detected SM error/collision. Try %d",retries);
-			switch(provider->status.state) {
+			switch(provider->status.session.state) {
 				/* No SM or creating: collision with other process
 				   just retry as SM error reset ICC SM state */
 				case CWA_SM_NONE: 
@@ -913,7 +913,7 @@ static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 		}
 
 		/* if SM is active; decode apdu */
-		if (provider->status.state == CWA_SM_ACTIVE) {
+		if (provider->status.session.state == CWA_SM_ACTIVE) {
 			apdu->resp = NULL;
 			apdu->resplen = 0;	/* let cwa_decode_response() eval & create size */
 			res = cwa_decode_response(card, provider, &wrapped, apdu);

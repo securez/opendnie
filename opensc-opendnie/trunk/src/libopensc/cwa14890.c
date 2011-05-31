@@ -122,12 +122,12 @@ static void cwa_trace_apdu(sc_card_t * card, sc_apdu_t * apdu, int flag)
  * Increase send sequence counter SSC.
  *
  * @param card smart card info structure
- * @param sm Secure Message handling data structure
+ * @param sm Secure Message session handling data structure
  * @return SC_SUCCESS if ok; else error code
  *
  * TODO: to further study: what about using bignum arithmetics?
  */
-static int cwa_increase_ssc(sc_card_t * card, cwa_sm_status_t * sm)
+static int cwa_increase_ssc(sc_card_t * card, cwa_sm_session_t * sm)
 {
 	int n;
 	/* preliminary checks */
@@ -782,7 +782,7 @@ static int cwa_compute_session_keys(sc_card_t * card, cwa_sm_status_t * sm)
 	memcpy(data, kseed, 32);
 	memcpy(data + 32, kenc, 4);
 	SHA1(data, 32 + 4, sha_data);
-	memcpy(sm->kenc, sha_data, 16);	/* kenc=16 fsb sha((kifd^kicc)||00000001) */
+	memcpy(sm->session.kenc, sha_data, 16);	/* kenc=16 fsb sha((kifd^kicc)||00000001) */
 
 	/* evaluate kmac */
 	memset(data, 0, 32 + 4);
@@ -791,11 +791,11 @@ static int cwa_compute_session_keys(sc_card_t * card, cwa_sm_status_t * sm)
 	memcpy(data, kseed, 32);
 	memcpy(data + 32, kmac, 4);
 	SHA1(data, 32 + 4, sha_data);
-	memcpy(sm->kmac, sha_data, 16);	/* kmac=16 fsb sha((kifd^kicc)||00000002) */
+	memcpy(sm->session.kmac, sha_data, 16);	/* kmac=16 fsb sha((kifd^kicc)||00000002) */
 
 	/* evaluate send sequence counter  (cwa-14890-1 sect 8.9 & 9.6 */
-	memcpy(sm->ssc, sm->rndicc + 4, 4);	/* 4 least significant bytes of rndicc */
-	memcpy(sm->ssc + 4, sm->rndifd + 4, 4);	/* 4 least significant bytes of rndifd */
+	memcpy(sm->session.ssc, sm->rndicc + 4, 4);	/* 4 least significant bytes of rndicc */
+	memcpy(sm->session.ssc + 4, sm->rndifd + 4, 4);	/* 4 least significant bytes of rndifd */
 
 	/* arriving here means process ok */
 	res = SC_SUCCESS;
@@ -816,9 +816,9 @@ static int cwa_compute_session_keys(sc_card_t * card, cwa_sm_status_t * sm)
 	if (res != SC_SUCCESS)
 		sc_log(ctx, msg);
 	else {
-		sc_log(ctx, "Kenc: %s", sc_dump_hex(sm->kenc, 16));
-		sc_log(ctx, "Kmac: %s", sc_dump_hex(sm->kmac, 16));
-		sc_log(ctx, "SSC:  %s", sc_dump_hex(sm->ssc, 8));
+		sc_log(ctx, "Kenc: %s", sc_dump_hex(sm->session.kenc, 16));
+		sc_log(ctx, "Kmac: %s", sc_dump_hex(sm->session.kmac, 16));
+		sc_log(ctx, "SSC:  %s", sc_dump_hex(sm->session.ssc, 8));
 	}
 	LOG_FUNC_RETURN(ctx, res);
 }
@@ -1067,11 +1067,11 @@ int cwa_create_secure_channel(sc_card_t * card,
 	/* check requested initialization method */
 	switch (flag) {
 	case CWA_SM_OFF:	/* disable SM */
-		provider->status.state = CWA_SM_NONE;	/* just mark channel inactive */
+		provider->status.session.state = CWA_SM_NONE;	/* just mark channel inactive */
 		sc_log(ctx, "Setting CWA SM status to none");
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	case CWA_SM_WARM:	/* only initialize if not already done */
-		if (provider->status.state != CWA_SM_NONE) {
+		if (provider->status.session.state != CWA_SM_NONE) {
 			sc_log(ctx,
 			       "Warm CWA SM requested: already in SM state");
 			LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -1091,7 +1091,7 @@ int cwa_create_secure_channel(sc_card_t * card,
 	sc_reset(card, 0);
 
 	/* mark SM status as in progress */
-	provider->status.state = CWA_SM_INPROGRESS;
+	provider->status.session.state = CWA_SM_INPROGRESS;
 
 	/* call provider pre-operation method */
 	sc_log(ctx, "CreateSecureChannel pre-operations");
@@ -1391,9 +1391,9 @@ int cwa_create_secure_channel(sc_card_t * card,
 	/* setup SM state according result */
 	if (res != SC_SUCCESS) {
 		sc_log(ctx, msg);
-		provider->status.state = CWA_SM_NONE;
+		provider->status.session.state = CWA_SM_NONE;
 	} else {
-		provider->status.state = CWA_SM_ACTIVE;
+		provider->status.session.state = CWA_SM_ACTIVE;
 	}
 	LOG_FUNC_RETURN(ctx, res);
 }
@@ -1429,7 +1429,7 @@ int cwa_encode_apdu(sc_card_t * card,
 	size_t i, j;		/* for xor loops */
 	int res = SC_SUCCESS;
 	sc_context_t *ctx = NULL;
-	cwa_sm_status_t *sm = NULL;
+	cwa_sm_session_t *sm_session = NULL;
 	u8 *msgbuf = NULL;	/* to encrypt apdu data */
 	u8 *cryptbuf = NULL;
 
@@ -1441,13 +1441,13 @@ int cwa_encode_apdu(sc_card_t * card,
 	if (!card || !card->ctx || !provider)
 		return SC_ERROR_INVALID_ARGUMENTS;
 	ctx = card->ctx;
-	sm = &(provider->status);
+	sm_session = &(provider->status.session);
 
 	LOG_FUNC_CALLED(ctx);
 	/* check remaining arguments */
-	if (!from || !to || !sm)
+	if (!from || !to || !sm_session)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_SM_NOT_INITIALIZED);
-	if (sm->state != CWA_SM_ACTIVE)
+	if (sm_session->state != CWA_SM_ACTIVE)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_SM_INVALID_LEVEL);
 	if (!msgbuf || !cryptbuf)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
@@ -1521,9 +1521,9 @@ int cwa_encode_apdu(sc_card_t * card,
 
 		/* prepare keys */
 		DES_cblock iv = { 0, 0, 0, 0, 0, 0, 0, 0 };
-		DES_set_key_unchecked((const_DES_cblock *) & (sm->kenc[0]),
+		DES_set_key_unchecked((const_DES_cblock *) & (sm_session->kenc[0]),
 				      &k1);
-		DES_set_key_unchecked((const_DES_cblock *) & (sm->kenc[8]),
+		DES_set_key_unchecked((const_DES_cblock *) & (sm_session->kenc[8]),
 				      &k2);
 
 		/* pad message */
@@ -1563,16 +1563,16 @@ int cwa_encode_apdu(sc_card_t * card,
 
 	/* sc_log(ctx,"data to compose mac: %s",sc_dump_hex(ccbuf,cclen)); */
 	/* compute MAC Cryptographic Checksum using kmac and increased SSC */
-	res = cwa_increase_ssc(card, sm);	/* increase send sequence counter */
+	res = cwa_increase_ssc(card, sm_session); /* increase send sequence counter */
 	if (res != SC_SUCCESS) {
 		msg = "Error in computing SSC";
 		goto encode_end;
 	}
 	/* set up keys for mac computing */
-	DES_set_key_unchecked((const_DES_cblock *) & (sm->kmac[0]), &k1);
-	DES_set_key_unchecked((const_DES_cblock *) & (sm->kmac[8]), &k2);
+	DES_set_key_unchecked((const_DES_cblock *) & (sm_session->kmac[0]),&k1);
+	DES_set_key_unchecked((const_DES_cblock *) & (sm_session->kmac[8]),&k2);
 
-	memcpy(macbuf, sm->ssc, 8);	/* start with computed SSC */
+	memcpy(macbuf, sm_session->ssc, 8);	/* start with computed SSC */
 	for (i = 0; i < cclen; i += 8) {	/* divide data in 8 byte blocks */
 		/* compute DES */
 		DES_ecb_encrypt((const_DES_cblock *) macbuf,
@@ -1647,19 +1647,19 @@ int cwa_decode_response(sc_card_t * card,
 	int res = SC_SUCCESS;
 	char *msg = NULL;	/* to store error messages */
 	sc_context_t *ctx = NULL;
-	cwa_sm_status_t *sm = NULL;
+	cwa_sm_session_t *sm_session = NULL;
 
 	/* mandatory check */
 	if (!card || !card->ctx || !provider)
 		return SC_ERROR_INVALID_ARGUMENTS;
 	ctx = card->ctx;
-	sm = &(provider->status);
+	sm_session = &(provider->status.session);
 
 	LOG_FUNC_CALLED(ctx);
 	/* check remaining arguments */
-	if ((from == NULL) || (to == NULL) || (sm == NULL))
+	if ((from == NULL) || (to == NULL) || (sm_session == NULL))
 		LOG_FUNC_RETURN(ctx, SC_ERROR_SM_NOT_INITIALIZED);
-	if (sm->state != CWA_SM_ACTIVE)
+	if (sm_session->state != CWA_SM_ACTIVE)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_SM_INVALID_LEVEL);
 
 	/* cwa14890 sect 9.3: check SW1 or SW2 for SM related errors */
@@ -1767,16 +1767,16 @@ int cwa_decode_response(sc_card_t * card,
 	/* evaluate mac by mean of kmac and increased SendSequence Counter SSC */
 
 	/* increase SSC */
-	res = cwa_increase_ssc(card, sm);	/* increase send sequence counter */
+	res = cwa_increase_ssc(card, sm_session);	/* increase send sequence counter */
 	if (res != SC_SUCCESS) {
 		msg = "Error in computing SSC";
 		goto response_decode_end;
 	}
 	/* set up keys for mac computing */
-	DES_set_key_unchecked((const_DES_cblock *) & (sm->kmac[0]), &k1);
-	DES_set_key_unchecked((const_DES_cblock *) & (sm->kmac[8]), &k2);
+	DES_set_key_unchecked((const_DES_cblock *) & (sm_session->kmac[0]), &k1);
+	DES_set_key_unchecked((const_DES_cblock *) & (sm_session->kmac[8]), &k2);
 
-	memcpy(macbuf, sm->ssc, 8);	/* start with computed SSC */
+	memcpy(macbuf, sm_session->ssc, 8);	/* start with computed SSC */
 	for (i = 0; i < cclen; i += 8) {	/* divide data in 8 byte blocks */
 		/* compute DES */
 		DES_ecb_encrypt((const_DES_cblock *) macbuf,
@@ -1841,9 +1841,9 @@ int cwa_decode_response(sc_card_t * card,
 			goto response_decode_end;
 		}
 		/* prepare keys to decode */
-		DES_set_key_unchecked((const_DES_cblock *) & (sm->kenc[0]),
+		DES_set_key_unchecked((const_DES_cblock *) & (sm_session->kenc[0]),
 				      &k1);
-		DES_set_key_unchecked((const_DES_cblock *) & (sm->kenc[8]),
+		DES_set_key_unchecked((const_DES_cblock *) & (sm_session->kenc[8]),
 				      &k2);
 		/* decrypt into response buffer
 		 * by using 3DES CBC by mean of kenc and iv={0,...0} */
@@ -2012,7 +2012,6 @@ static cwa_provider_t default_cwa_provider = {
 
     /************ data related with SM operations *************************/
 	{
-	 CWA_SM_NONE,		/* state */
 	 {			/* KICC */
 	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -2044,14 +2043,17 @@ static cwa_provider_t default_cwa_provider = {
 	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	 {			/* Kenc */
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	 {			/* Kmac */
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	 {			/* SSC Send Sequence counter */
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	 { /* sm session */
+	  CWA_SM_NONE,		/* state */
+	  {			/* Kenc */
+	   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	  {			/* Kmac */
+	   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	  {			/* SSC Send Sequence counter */
+	   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	  }
 	 },
 
     /************ operations related with secure channel creation *********/

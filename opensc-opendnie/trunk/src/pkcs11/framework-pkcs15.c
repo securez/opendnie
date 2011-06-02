@@ -1268,6 +1268,8 @@ static CK_RV pkcs15_change_pin(struct sc_pkcs11_card *p11card,
 	if (!(pin_info = slot_data_pin_info(fw_token)))
 		return CKR_USER_PIN_NOT_INITIALIZED;
 
+	sc_debug(context, SC_LOG_DEBUG_NORMAL, "Change '%s', reference %i; login type %i", 
+			pin_obj->label, pin_info->reference, login_user);
 	if (p11card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) {
 		/* pPin should be NULL in case of a pin pad reader, but
 		 * some apps (e.g. older Netscapes) don't know about it.
@@ -1299,6 +1301,26 @@ static CK_RV pkcs15_change_pin(struct sc_pkcs11_card *p11card,
 	else if (login_user == CKU_USER)   {
 		rc = sc_pkcs15_change_pin(fw_data->p15_card, pin_obj, pOldPin, ulOldLen, pNewPin, ulNewLen);
 	}
+	else if (login_user == CKU_SO)   {
+		struct sc_pkcs15_object *auths[SC_PKCS15_MAX_PINS];
+		int i, auth_count;
+
+		rc = sc_pkcs15_get_objects(fw_data->p15_card, SC_PKCS15_TYPE_AUTH_PIN, auths, SC_PKCS15_MAX_PINS);
+		if (rc < 0)
+			return sc_to_cryptoki_error(rc, "C_SetPIN");
+		auth_count = rc;
+		for (i = 0; i < auth_count; i++)   {
+                	pin_info = (struct sc_pkcs15_pin_info*) auths[i]->data;
+                	if ((pin_info->flags & SC_PKCS15_PIN_FLAG_SO_PIN))
+	                        break;
+		}
+		if (i == auth_count)   {
+			sc_debug(context, SC_LOG_DEBUG_NORMAL, "Change SoPIN non supported");
+			return CKR_FUNCTION_NOT_SUPPORTED;
+		}
+
+		rc = sc_pkcs15_change_pin(fw_data->p15_card, auths[i], pOldPin, ulOldLen, pNewPin, ulNewLen);
+	}
 	else   {
 		sc_debug(context, SC_LOG_DEBUG_NORMAL, "cannot change PIN: non supported login type: %i", login_user);
 		return CKR_FUNCTION_NOT_SUPPORTED;
@@ -1320,24 +1342,23 @@ static CK_RV pkcs15_init_pin(struct sc_pkcs11_card *p11card,
 	struct sc_pkcs15_pin_info *pin_info;
 	int			rc;
 
-	sc_debug(context, SC_LOG_DEBUG_NORMAL, "pkcs15 init PIN: pin %p:%d\n", pPin, ulPinLen);
+	sc_debug(context, SC_LOG_DEBUG_NORMAL, "pkcs15 init PIN: pin %p:%d; unblock style %i",
+			pPin, ulPinLen, sc_pkcs11_conf.pin_unblock_style);
 
 	pin_info = slot_data_pin_info(slot->fw_data);
 	if (pin_info && sc_pkcs11_conf.pin_unblock_style == SC_PKCS11_PIN_UNBLOCK_SO_LOGGED_INITPIN)   {
+		/* C_InitPIN is used to unblock User PIN or set it in the SO session .*/
 		auth_obj = slot_data_auth(slot->fw_data);
 		if (fw_data->user_puk_len)   {
 			rc = sc_pkcs15_unblock_pin(fw_data->p15_card, auth_obj, 
 					fw_data->user_puk, fw_data->user_puk_len, pPin, ulPinLen);
 		}
 		else   {
-#if 0
-			/* TODO: Actually sc_pkcs15_unblock_pin() do not accepts zero length value as a PUK argument.
-			 * It's usefull for the cards that do not supports modes 00 and 01 
-			 * of ISO 'RESET RETRY COUNTER' command. */
-			rc = sc_pkcs15_unblock_pin(fw_data->p15_card, auth_obj, NULL, 0, pPin, ulPinLen);
-#else
-			return sc_to_cryptoki_error(SC_ERROR_NOT_SUPPORTED, "C_InitPIN");
-#endif
+			/* FIXME (VT): Actually sc_pkcs15_unblock_pin() do not accepts zero length PUK.
+			 * Something like sc_pkcs15_set_pin() should be introduced.
+			 * For a while, use the 'libopensc' API to set PIN. */
+			rc = sc_reset_retry_counter(fw_data->p15_card->card, SC_AC_CHV, pin_info->reference, 
+					NULL, 0, pPin, ulPinLen);
 		}
 
 		return sc_to_cryptoki_error(rc, "C_InitPIN");

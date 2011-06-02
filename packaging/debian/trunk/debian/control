@@ -3,7 +3,7 @@ Priority: extra
 Section: utils
 Maintainer: Enrique Hernández Bello <quique@osl.ull.es>
 Build-Depends: debhelper (>= 7.0.50), libltdl3-dev, libssl-dev (>= 0.9.7d-3), libpcsclite-dev (>= 1.2.9-beta1), libxt-dev, flex, pkg-config, xsltproc, docbook-xsl
-Standards-Version: 3.8.3
+Standards-Version: 3.9.2
 Homepage: http://forja.cenatic.es/projects/opendnie/
 Vcs-Svn: https://svn.forge.morfeo-project.org/opendnie/packaging/debian/
 Vcs-Browser: http://forja.cenatic.es/plugins/scmsvn/viewcvs.php/packaging/debian/?root=opendnie

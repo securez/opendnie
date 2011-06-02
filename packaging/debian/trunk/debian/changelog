@@ -1,19 +1,25 @@
-opensc-opendnie (0.12.1-1) UNRELEASED; urgency=low
+opensc-opendnie (0.12.1-1+opendnie1) UNRELEASED; urgency=low
 
-  * New upstream release
-  * Renamed as opensc-opendnie.
+  * Added OpenDNIe driver to support the Spanish ID electronic card.
   * debian/control:
     - Recommend libacr38u, libccid and libnss3-tools.
   * debian/opensc.install:
-    - Don't install rutoken-tool.
-    - Install westcos-tool.
-    - Install eienv.1, piv-tool.1 and westcost-tool.1 manpages.
-    - Install dnie-tool binary and dnie-tool.1 manpage.
+    - Install westcos-tool and dnie-tool.
+    - Install westcost-tool.1 and dnie-tool.1 manpages.
   * debian/rules:
     - Install upstream ChangeLog.
     - Define pcsc provider path according to Debian or Ubuntu distribution.
 
  -- Enrique Hernández Bello <quique@osl.ull.es>  Wed, 01 Jun 2011 12:14:56 +0100
+
+opensc (0.12.1-1) unstable; urgency=low
+
+  * New upstream release. (Closes: #627241)
+  * debian/control: Upgrade Standards-Version to 3.9.2.
+  * debian/opensc.install: rutoken-tool has been removed.
+  * debian/opensc.install: Add eidenv and piv-tool manpages.
+
+ -- Eric Dorland <eric@debian.org>  Thu, 02 Jun 2011 01:31:38 -0400
 
 opensc (0.12.0-1) unstable; urgency=low
 

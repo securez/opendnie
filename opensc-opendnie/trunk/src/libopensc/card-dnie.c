@@ -1382,6 +1382,7 @@ static int dnie_select_file(struct sc_card *card,
 		/* according iso7816-4 sect 7.1.1 shouldn't have any parameters */
 		if (pathlen != 0)
 			LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+		apdu.cse= SC_APDU_CASE_1;
 		apdu.p1 = 3;
 		break;
 	default:
@@ -1924,6 +1925,7 @@ static int dnie_list_files(sc_card_t * card, u8 * buf, size_t buflen)
 	size_t count = 0;
 	u8 data[2];
 	sc_apdu_t apdu;
+	sc_apdu_t back;
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
 
@@ -1934,11 +1936,19 @@ static int dnie_list_files(sc_card_t * card, u8 * buf, size_t buflen)
 	/* compose select_file(ID) command */
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0xA4, 0x00, 0x00);
 	apdu.le = 0;
-	apdu.lc = 0;
+	apdu.lc = 2;
 	apdu.data = data;
 	apdu.resp = NULL;
 	apdu.datalen = 2;
 	apdu.resplen = 0;
+	/* compose select_file(PARENT) command */
+	sc_format_apdu(card, &back, SC_APDU_CASE_1, 0xA4, 0x03, 0x00);
+	back.le = 0;
+	back.lc = 0;
+	back.data = NULL;
+	back.resp = NULL;
+	back.datalen = 0;
+	back.resplen = 0;
 	/* iterate on every possible ids */
 	for (id1 = 0; id1 < 256; id1++) {
 		for (id2 = 0; id2 < 256; id2++) {
@@ -1955,30 +1965,25 @@ static int dnie_list_files(sc_card_t * card, u8 * buf, size_t buflen)
 			if ((id1 == 0x2F) && (id2 == 0x01))
 				continue;	/* RFU */
 			/* compose and transmit select_file() cmd */
-			apdu.p1 = 0;
-			apdu.lc = 2;
 			data[0] = (u8) (0xff & id1);
 			data[1] = (u8) (0xff & id2);
 			res = sc_transmit_apdu(card, &apdu);
 			if (res != SC_SUCCESS) {
 				sc_log(card->ctx, "List file '%02X%02X' failed",
 				       id1, id2);
-				LOG_FUNC_RETURN(card->ctx, res);
+				/* if file not found, continue; else abort */
+				if (res != SC_ERROR_FILE_NOT_FOUND) 
+					LOG_FUNC_RETURN(card->ctx, res);
+				continue;
 			}
-			/* if file not found, continue */
-			if (apdu.sw1 != 0x61)
-				continue;	/* go to next id */
 			/* if file found, process fci to get file type */
 			sc_log(card->ctx, "Found File ID '%02X%02X'", id1, id2);
 			/* store id into buffer */
 			*(buf + count++) = data[0];
 			*(buf + count++) = data[1];
-			/* and go back to parent DF to continue search */
-			apdu.p1 = 3;	/* select parent DF command */
-			apdu.lc = 0;
-			res = sc_transmit_apdu(card, &apdu);
-			LOG_TEST_RET(card->ctx, res,
-				     "List file '(back)' failed");
+			/* TODO: 
+			* if found file is a DF go back to parent DF 
+			* to continue search */
 		}
 	}
 	/* arriving here means all done */

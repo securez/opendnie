@@ -64,7 +64,7 @@ En sistemas Fedora, RedHat, Mandriva o CentOS
 * pcsc-tools
 * readline
 * readline-devel
-* openct-devel (recomendable)
+* openct-devel (opcional)
 * openssl
 * openssl-devel 
 * libtool
@@ -80,15 +80,36 @@ En sistemas Debian o derivados como Ubuntu
 * pcsc-tools
 * libreadline6
 * libreadline-dev
-* libopenct-dev (recomendable)
+* libopenct-dev (opcional)
 * openssl
 * libssl-dev
 * libtool
 * libltdl-dev
 * libccid
 
-los paquetes -dev / -devel son necesarios para compilar e instalar
-la aplicación. Los otros son necesarios para la ejecución
+Sistemas OpenSUSE
+
+    * gcc gcc-c++ kernel-devel (kernel-pae-devel en nuestro caso)
+    * pkg-config
+    * autoconf
+    * automake
+    * docbook-xsl-stylesheets
+    * pcsc-lite, pcsc-lite-devel
+    * pcsc-ccid
+    * libreadline6, readline-devel
+    * openssl, libopenssl0_9_8, libopenssl-devel
+    * pinentry, pinentry-gtk2, pinentry-qt4 ( Solo necesarios en run-time )
+    * libtool, libltdl7
+    * openct, openct-devel, pcsc-openct, libopenct1 (Opcionales)
+    * libpth20, libpth-devel 
+
+Todos los paquetes corresponden al repositorio openSUSE 11.2 standard
+
+Antes de empezar hay que asegurarse de que no hay ninguna instalación previa de opensc o de paquetes del dnie de versiones anteriores. Específicamente, no deben existir los ficheros /usr/lib/libopensc*
+
+En general, el paquete OpenCT y sus asociados solo deberían instalarse cuando no es posible utilizar pcsc-lite. En la web de OpenSC se desaconseja su uso a menos que sea necesario 
+
+los paquetes -dev / -devel son necesarios para compilar e instalar la aplicación. Los otros son necesarios para la ejecución
 
 Además para su ejecución, deberá tener instalada la aplicación 
 "pinentry" o alguna de sus versiones "pinentry-gtk", "pinentry-qt"...
@@ -112,8 +133,7 @@ bash$ ./configure
 bash$ make
 bash$ sudo make install
 
-4a- En el caso de distribuciones linux Fedora (y posiblemente otras), 
-las opciones extras para que "configure" instale en los directorios 
+4a- En el caso de distribuciones linux Fedorai, Mandriva, OpenSuse -y posiblemente otras-, las opciones extras para que "configure" instale en los directorios 
 standard son:
 
 ./configure --prefix=/usr \
@@ -123,9 +143,10 @@ standard son:
         --mandir=/usr/share/man
 
 4b- En el caso de no utilizar estas opciones, los ejecutables se
-instalan por defecto en /usr/local/bin, y las bibliotecas en
-/usr/local/lib, por lo que será preciso garantizar que el cargador
-dinámico incluye /usr/local/lib en el path de busqueda de bibliotecas
+instalan por defecto en /usr/local/bin, las bibliotecas en
+/usr/local/lib, y la configuración en /usr/local/etc, 
+por lo que será preciso garantizar que el cargador dinámico incluye 
+/usr/local/lib en el path de busqueda de bibliotecas
 
 En caso necesario, editar /etc/ld.so.conf o /etc/ld.so.conf.d/opensc.conf
 (según la distribución) y añadir "/usr/local/lib"; ejecutando a 

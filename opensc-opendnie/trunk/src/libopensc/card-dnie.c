@@ -1519,7 +1519,7 @@ static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len)
 	LOG_FUNC_CALLED(card->ctx);
 	/* just a copy of iso7816::get_challenge() but call dnie_check_sw to
 	 * look for extra error codes */
-	if ((rnd == NULL) || (len <= 0)) {
+	if ( !rnd && len ) {
 		/* no valid buffer provided */
 		result = SC_ERROR_INVALID_ARGUMENTS;
 		goto dnie_get_challenge_error;

@@ -1519,7 +1519,7 @@ static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len)
 	LOG_FUNC_CALLED(card->ctx);
 	/* just a copy of iso7816::get_challenge() but call dnie_check_sw to
 	 * look for extra error codes */
-	if ( !rnd && len ) {
+	if ( (rnd==NULL) || (len==0) ) {
 		/* no valid buffer provided */
 		result = SC_ERROR_INVALID_ARGUMENTS;
 		goto dnie_get_challenge_error;
@@ -1529,7 +1529,10 @@ static int dnie_get_challenge(struct sc_card *card, u8 * rnd, size_t len)
 	apdu.resp = buf;
 	apdu.resplen = 8;	/* include SW's */
 
-	/* perform consecutive reads until retrieve "len" bytes */
+	/* 
+	* As DNIe cannot handle other data length than 0x08 and 0x14, 
+	* perform consecutive reads of 8 bytes until retrieve requested length
+	*/
 	while (len > 0) {
 		size_t n = len > 8 ? 8 : len;
 		result = sc_transmit_apdu(card, &apdu);

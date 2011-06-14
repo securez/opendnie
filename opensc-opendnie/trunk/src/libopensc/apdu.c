@@ -371,7 +371,7 @@ static void sc_detect_apdu_cse(const sc_card_t *card, sc_apdu_t *apdu)
  *  @param  apdu  APDU to be sent
  *  @return SC_SUCCESS on success and an error value otherwise
  */
-static int do_single_transmit(sc_card_t *card, sc_apdu_t *apdu)
+int do_single_transmit(sc_card_t *card, sc_apdu_t *apdu)
 {
 	int          r;
 	size_t       olen  = apdu->resplen;
@@ -515,7 +515,7 @@ static int do_single_transmit(sc_card_t *card, sc_apdu_t *apdu)
 	return SC_SUCCESS;
 }
 
-int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu) 
+int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 {
 	int r = SC_SUCCESS;
 
@@ -524,25 +524,16 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 
 	SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
 
-        /* check for need of apdu wrapping */
-        if (card->ops->wrap_apdu) {
-            r= card->ops->wrap_apdu(card,apdu);
-            /* if result== means process done, return
-             * on result<0 some error happened, abort and return
-             * on result>0 continue normal sc_transmit_apdu processing */ 
-            if (r<=0) LOG_FUNC_RETURN(card->ctx,r);
-        }
-        LOG_FUNC_RETURN(card->ctx,_sc_transmit_apdu(card,apdu));
-}
-
-int _sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
-{
-	int r = SC_SUCCESS;
-
-	if (card == NULL || apdu == NULL)
-		return SC_ERROR_INVALID_ARGUMENTS;
-
-	SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
+	/* check for need of apdu SM wrapping */
+	if (card->sm_context &&
+		card->sm_context->sm_driver && 
+		card->sm_context->sm_driver->wrap_apdu) {
+		r= card->sm_context->sm_driver->wrap_apdu(card,apdu);
+		/* if result== means process done, return
+		* on result<0 some error happened, abort and return
+		* on result>0 continue normal sc_transmit_apdu processing */
+		if (r<=0) LOG_FUNC_RETURN(card->ctx,r);
+	}
 
 	/* determine the APDU type if necessary, i.e. to use
 	 * short or extended APDUs  */

@@ -54,12 +54,12 @@ typedef struct dnie_private_data_st {
 	char *user_consent_app;		/**< User consent application, or null */
 	int user_consent_enabled;	/**< If zero skip user consent check */
 	sc_serial_number_t *serialnumber; /**< Cached copy of card serial number */
-	cwa_provider_t *provider; /**< cwa14890 Secure Messaging provider for DNIe */
 	int rsa_key_ref;	/**< Key id reference being used in sec operation */
 	u8 *cache;		/**< Cache buffer for read_binary() operation */
 	size_t cachelen;	/**< length of cache buffer */
 } dnie_private_data_t;
 
+static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu);
 extern cwa_provider_t *dnie_get_cwa_provider(sc_card_t * card);
 extern int dnie_read_file(
 	sc_card_t * card, 
@@ -650,7 +650,8 @@ static int dnie_init(struct sc_card *card)
 {
 	int result = SC_SUCCESS;
 	unsigned long algoflags;
-	cwa_provider_t *p=NULL;
+	sc_card_sm_context_t *dnie_sm_context=NULL;
+	cwa_provider_t *provider=NULL;
 
 	if ((card == NULL) || (card->ctx == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
@@ -671,14 +672,37 @@ static int dnie_init(struct sc_card *card)
 	if (result != SC_SUCCESS)
 		goto dnie_init_error;
 
-	/* initialize cwa-dnie provider */
-	p = dnie_get_cwa_provider(card);
-	if (!p) {
+	/** Secure messaging initialization section **/
+
+	/* initialize sm_context */
+	dnie_sm_context=calloc(1,sizeof(sc_card_sm_context_t));
+	if (!dnie_sm_context) {
+		sc_log(card->ctx, "Error in allocate dnie sm_context");
+		result = SC_ERROR_OUT_OF_MEMORY;
+		goto dnie_init_error;
+	}
+	/* allocate dnie sm_driver space */
+	dnie_sm_context->sm_driver=calloc(1,sizeof(sc_card_sm_driver_t));
+	if (!dnie_sm_context->sm_driver ) {
+		sc_log(card->ctx, "Error in allocate dnie sm_driver");
+		result = SC_ERROR_OUT_OF_MEMORY;
+		goto dnie_init_error;
+	}
+	/* create and initialize cwa-dnie provider*/
+	provider = dnie_get_cwa_provider(card);
+	if (!provider) {
 		sc_log(card->ctx, "Error in initialize cwa-dnie provider");
 		result = SC_ERROR_OUT_OF_MEMORY;
 		goto dnie_init_error;
 	}
-	dnie_priv.provider = p;
+	/* setup dnie sm driver properly */
+	dnie_sm_context->sm_driver->initialize=NULL;
+	dnie_sm_context->sm_driver->finalize=NULL;
+	dnie_sm_context->sm_driver->wrap_apdu=dnie_wrap_apdu;
+	dnie_sm_context->sm_driver->sm_data=provider;
+
+	/* all sm related init done: store pointer into card structure */
+	card->sm_context=dnie_sm_context;
 
 	/* store private data into card driver structure */
 	card->drv_data = &dnie_priv;
@@ -698,7 +722,7 @@ static int dnie_init(struct sc_card *card)
 	/* initialize SM state to NONE */
 	/* TODO: change to CWA_SM_OFF when SM testing get done */
 	// result = cwa_create_secure_channel(card, p, CWA_SM_COLD);
-	result=cwa_create_secure_channel(card,p,CWA_SM_OFF);
+	result=cwa_create_secure_channel(card,provider,CWA_SM_OFF);
 
  dnie_init_error:
 	LOG_FUNC_RETURN(card->ctx, result);
@@ -719,7 +743,7 @@ static int dnie_finish(struct sc_card *card)
 	LOG_FUNC_CALLED(card->ctx);
 
 	/* disable sm channel if stablished */
-	result = cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_OFF);
+	result = cwa_create_secure_channel(card, card->sm_context->sm_driver->sm_data, CWA_SM_OFF);
 
 	LOG_FUNC_RETURN(card->ctx, result);
 }
@@ -746,10 +770,11 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 {
 	u8 *buf = NULL;		/* use for store partial le responses */
 	int res = SC_SUCCESS;
-	cwa_provider_t *provider = dnie_priv.provider;
+	cwa_provider_t *provider = NULL;
 	if ((card == NULL) || (card->ctx == NULL) || (apdu == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
 	LOG_FUNC_CALLED(card->ctx);
+	provider = (cwa_provider_t *) card->sm_context->sm_driver->sm_data;
 	buf = calloc(2048, sizeof(u8));
 	if (!buf)
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
@@ -772,7 +797,7 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 			}
 		}
 		/* call std sc_transmit_apdu */
-		res = _sc_transmit_apdu(card, apdu);
+		res = do_single_transmit(card, apdu);
 		/* and restore original apdu type */
 		apdu->cse = tmp;
 	} else {
@@ -830,7 +855,7 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 				}
 			}
 			/* send data chunk bypassing apdu wrapping */
-			res = _sc_transmit_apdu(card, e_apdu);
+			res = do_single_transmit(card, e_apdu);
 			LOG_TEST_RET(card->ctx, res,
 				     "Error in envelope() send apdu");
 		}		/* for */
@@ -848,7 +873,7 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
  * Called before sc_transmit_apdu() to allowing APDU wrapping
  * If set to NULL no wrapping process will be done
  * Usefull on Secure Messaging APDU encode/decode
- * If returned value is greater than zero, _sc_transmit_apdu() 
+ * If returned value is greater than zero, do_single_transmit() 
  * will be called, else means either SC_SUCCESS or error code 
  *
  * NOTE:
@@ -870,14 +895,14 @@ static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 	int res = SC_SUCCESS;
 	sc_apdu_t wrapped;
 	sc_context_t *ctx;
-	cwa_provider_t *provider = dnie_priv.provider;
+	cwa_provider_t *provider = NULL;
 	int retries = 3;
 
 	if ((card == NULL) || (card->ctx == NULL) || (apdu == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
 	ctx=card->ctx;
 	LOG_FUNC_CALLED(ctx);
-
+	provider = (cwa_provider_t *) card->sm_context->sm_driver->sm_data;
 	for (retries=3; retries>0; retries--) {
 		/* preserve original apdu to take care of retransmission */
 		memcpy(&wrapped, apdu, sizeof(sc_apdu_t));
@@ -906,7 +931,7 @@ static int dnie_wrap_apdu(sc_card_t * card, sc_apdu_t * apdu)
 					continue;
 				/* SM was active: force restart SM and retry */
 				case CWA_SM_ACTIVE:
-					res=cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_COLD);
+					res=cwa_create_secure_channel(card, provider, CWA_SM_COLD);
 					LOG_TEST_RET(ctx,res,"Cannot re-enable SM");
 					continue;
 			}
@@ -1447,7 +1472,7 @@ static int dnie_select_file(struct sc_card *card,
  * card, storing result and new length into provided pointers
  *
  * Just a copy of iso7816.c::get_response(), but calling 
- * _sc_transmit_apdu to avoid wrap/unwrap response
+ * do_single_transmit to avoid wrap/unwrap response
  *
  * @param card Pointer to card structure
  * @param count pointer to get expected data length / return received length
@@ -1472,7 +1497,7 @@ static int dnie_get_response(sc_card_t * card, size_t * count, u8 * buf)
 	/* don't call GET RESPONSE recursively */
 	apdu.flags |= SC_APDU_FLAGS_NO_GET_RESP;
 
-	r = _sc_transmit_apdu(card, &apdu);	/* bypass wrapping */
+	r = do_single_transmit(card, &apdu);	/* bypass wrapping */
 	SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r, "APDU transmit failed");
 	if (apdu.resplen == 0)
 		LOG_FUNC_RETURN(card->ctx,
@@ -1571,7 +1596,7 @@ static int dnie_logout(struct sc_card *card)
 	LOG_FUNC_CALLED(card->ctx);
 	/* disable and free any sm channel related data */
 	result =
-	    cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_OFF);
+	    cwa_create_secure_channel(card, card->sm_context->sm_driver->sm_data, CWA_SM_OFF);
 	/* TODO: _logout() see comments.txt on what to do here */
 	LOG_FUNC_RETURN(card->ctx, result);
 }
@@ -2372,7 +2397,7 @@ static int dnie_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data)
 	LOG_FUNC_CALLED(card->ctx);
 
         /* Ensure that secure channel is established from reset */
-        res = cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_COLD);
+        res = cwa_create_secure_channel(card, card->sm_context->sm_driver->sm_data, CWA_SM_COLD);
         LOG_TEST_RET(card->ctx, res, "Establish SM failed");
 
 	LOG_FUNC_RETURN(card->ctx,SC_ERROR_NOT_SUPPORTED);
@@ -2400,7 +2425,7 @@ static int dnie_pin_verify(struct sc_card *card,
 
 	LOG_FUNC_CALLED(card->ctx);
 	/* ensure that secure channel is established from reset */
-	res = cwa_create_secure_channel(card, dnie_priv.provider, CWA_SM_COLD);
+	res = cwa_create_secure_channel(card, card->sm_context->sm_driver->sm_data, CWA_SM_COLD);
 	LOG_TEST_RET(card->ctx, res, "Establish SM failed");
 
 	data->apdu = &apdu;	/* prepare apdu struct */
@@ -2539,7 +2564,6 @@ static sc_card_driver_t *get_dnie_driver(void)
 	dnie_ops.match_card	= dnie_match_card;
 	dnie_ops.init		= dnie_init;
 	dnie_ops.finish		= dnie_finish;
-	dnie_ops.wrap_apdu	= dnie_wrap_apdu;
 
 	/* iso7816-4 functions */
 	dnie_ops.read_binary	= dnie_read_binary;

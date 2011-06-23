@@ -38,6 +38,9 @@
 #define UNICODE
 #include <windows.h>
 #endif
+#ifdef __APPLE__
+#include <Carbon/Carbon.h>
+#endif
 
 #include "opensc.h"
 #include "cardctl.h"
@@ -228,6 +231,9 @@ char *user_consent_msgs[] = {
 	NULL
 };
 
+const char *user_consent_title="Signature Requested";
+const char *user_consent_message="Esta a punto de realizar una firma digital\ncon su clave de FIRMA del DNI electronico.\nDesea permitir esta operacion?";
+
 /**
  * Ask for user consent on signature operation.
  * Check for user consent configuration,
@@ -237,7 +243,15 @@ char *user_consent_msgs[] = {
  */
 static int ask_user_consent(sc_card_t * card)
 {
-#ifndef _WIN32
+#ifdef __APPLE__
+	CFOptionFlags result;  //result code from the message box
+	//convert the strings from char* to CFStringRef
+	CFStringRef header_ref =
+		CFStringCreateWithCString( NULL, user_consent_title, strlen(user_consent_title) );
+	CFStringRef message_ref =
+		CFStringCreateWithCString( NULL, user_consent_message, strlen(user_consent_message) );
+#endif
+#ifdef linux
 	pid_t pid;
 	FILE *fin, *fout;	/* to handle pipes as streams */
 	struct stat st_file;	/* to verify that executable exists */
@@ -263,13 +277,38 @@ static int ask_user_consent(sc_card_t * card)
 	/* in Windows, do not use pinentry, but MessageBox system call */
 	res = MessageBox (
 		NULL,
-		TEXT("Est\u00E1 a punto de realizar una firma digital\n con su clave de FIRMA del DNI electr\u00F3nico.\n\u00BFDesea permitir esta operaci\u00F3n?\n"),
-		TEXT("Signature Requested"),
+		TEXT(user_consent_message),
+		TEXT(user_consent_title),
 		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
 		);
-	if ( res == IDOK ) LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+	if ( res == IDOK ) 
+		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_ALLOWED);
-#else
+#elif __APPLE__
+	/* Also in Mac OSX use native functions */
+	CFUserNotificationDisplayAlert(
+		0, // no timeout
+		kCFUserNotificationNoteAlertLevel,  // Alert level
+		NULL,	// IconURL, use default, you can change
+			// it depending message_type flags
+		NULL,	// SoundURL (not used)
+		NULL,	//localization of strings
+		header_ref,	// header. Cannot be null
+		message_ref,	//message text
+		CFSTR("Cancel"), // default ( "OK" if null) button text
+		CFSTR("OK"), // second button title
+                NULL, // third button title, null--> no other button
+		&result //response flags
+	);
+
+	//Clean up the strings
+	CFRelease( header_ref );
+        CFRelease( message_ref );
+	// Return 0 only if "OK" is selected
+	if( result == kCFUserNotificationAlternateResponse )
+		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_ALLOWED);
+#elif linux
 	/* check that user_consent_app exists. TODO: check if executable */
 	res = stat(dnie_priv.user_consent_app, &st_file);
 	if (res != 0) {
@@ -349,16 +388,16 @@ static int ask_user_consent(sc_card_t * card)
 	/* arriving here means signature has been accepted by user */
 	res = SC_SUCCESS;
 	msg = NULL;
- do_error:
-#ifndef _WIN32
+do_error:
 	/* close out channel to force client receive EOF and also die */
 	if (fout != NULL) fclose(fout);
 	if (fin != NULL) fclose(fin);
+#else
+#error "Don't know how to handle user consent in this (rare) Operating System"
 #endif
 	if (msg != NULL)
 		sc_log(card->ctx, "%s", msg);
 	LOG_FUNC_RETURN(card->ctx, res);
-#endif
 }
 
 /************************** cardctl defined operations *******************/

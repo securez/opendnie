@@ -7,13 +7,13 @@ BUILDPATH=${PWD}
 case ${OSX_RELEASE} in
 	"10.5")
 		if test ${INTEL_ONLY} = "yes"; then
-			export CFLAGS="-isysroot /Developer/SDKs/MacOSX10.5.sdk -arch i386 -mmacosx-version-min=10.5 -g"
+			export CFLAGS="-isysroot /Developer/SDKs/MacOSX10.5.sdk -arch i386 -mmacosx-version-min=10.5 -g -framework Carbon"
 		else
-			export CFLAGS="-isysroot /Developer/SDKs/MacOSX10.5.sdk -arch i386 -arch ppc7400 -mmacosx-version-min=10.5 -g"
+			export CFLAGS="-isysroot /Developer/SDKs/MacOSX10.5.sdk -arch i386 -arch ppc7400 -mmacosx-version-min=10.5 -g -framework Carbon"
 		fi
 	;;
 	"10.6")
-		export CFLAGS="-isysroot /Developer/SDKs/MacOSX10.6.sdk -arch i386 -arch x86_64 -mmacosx-version-min=10.6 -g"
+		export CFLAGS="-isysroot /Developer/SDKs/MacOSX10.6.sdk -arch i386 -arch x86_64 -mmacosx-version-min=10.6 -g -framework Carbon"
 	;;
 	*)
 		echo "OSX ${OSX_RELEASE} is not supported!"

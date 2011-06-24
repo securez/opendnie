@@ -258,10 +258,10 @@ static int ask_user_consent(sc_card_t * card)
 	int srv_send[2];	/* to send data from server to client */
 	int srv_recv[2];	/* to receive data from client to server */
 	char buf[1024];		/* to store client responses */
+	int n = 0;		/* to iterate on to-be-sent messages */
 #endif
 	int res = SC_ERROR_INTERNAL;	/* by default error :-( */
 	char *msg = NULL;	/* to makr errors */
-	int n = 0;		/* to iterate on to-be-sent messages */
 
 	if ((card == NULL) || (card->ctx == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
@@ -438,7 +438,7 @@ static int dnie_generate_key(sc_card_t * card, void *data)
  * @return retrieved value or NULL if pattern not found
  * @see dnie_get_info()
  */
-static char *findPattern(sc_card_t *card, u8 *pat, u8 *buf, size_t len)
+static char *findPattern(u8 *pat, u8 *buf, size_t len)
 {
 	char *res = NULL;
 	u8 *from = buf;
@@ -507,11 +507,11 @@ static int dnie_get_info(sc_card_t * card, char *data[])
 		goto get_info_end;
 	}
 	/* locate OID 2.5.4.5 (SerialNumber) - DNIe number*/
-	data[0]= findPattern(card,SerialNumber,buffer,bufferlen);
+	data[0]= findPattern(SerialNumber,buffer,bufferlen);
 	/* locate OID 2.5.4.4 (Name)         - Apellidos */
-	data[1]= findPattern(card,Name,buffer,bufferlen);
+	data[1]= findPattern(Name,buffer,bufferlen);
 	/* locate OID 2.5.4.42 (GivenName)   - Nombre */
-	data[2]= findPattern(card,GivenName,buffer,bufferlen);
+	data[2]= findPattern(GivenName,buffer,bufferlen);
 	if ( ! data[0] || !data[1] || !data[2] ) {
 		res = SC_ERROR_INVALID_DATA;
 		msg = "Cannot retrieve info from EF(CDF)";
@@ -1019,12 +1019,12 @@ static unsigned long le2ulong(u8 * pt)
  * @return uncompresed or original buffer; len points to new buffer length
  *        on error return null
  */
-static u8 *dnie_uncompress(sc_card_t * card, u8 * from, int *len)
+static u8 *dnie_uncompress(sc_card_t * card, u8 * from, size_t *len)
 {
 	int res = SC_SUCCESS;
 	u8 *upt = from;
-	unsigned long uncompressed = 0L;
-	unsigned long compressed = 0L;
+	size_t uncompressed = 0L;
+	size_t compressed = 0L;
 
 #ifdef ENABLE_ZLIB
 	if (!card || !card->ctx || !from || !len)
@@ -1105,7 +1105,7 @@ static int dnie_fill_cache(sc_card_t * card)
 	u8 tmp[SC_MAX_APDU_BUFFER_SIZE];
 	sc_apdu_t apdu;
 	int count = 0;
-	int len = 0;
+	size_t len = 0;
 	u8 *buffer = NULL;
 	u8 *pt = NULL;
 	sc_context_t *ctx = NULL;
@@ -1667,6 +1667,10 @@ static int dnie_set_security_env(struct sc_card *card,
 	if ((card == NULL) || (card->ctx == NULL) || (env == NULL))
 		return SC_ERROR_INVALID_ARGUMENTS;
 	LOG_FUNC_CALLED(card->ctx);
+	if (se_num!=0) {
+		sc_log(card->ctx,"DNIe cannot handle several security envs");
+		LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
+	}
 
 	/* Secure Channel should be on here, if not means an error */
 	/*
@@ -1901,6 +1905,8 @@ static int dnie_compute_signature(struct sc_card *card,
 	if ((data == NULL) || (out == NULL))
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 	if (datalen > SC_MAX_APDU_BUFFER_SIZE)	/* should be 256 */
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
+	if (outlen<256) // enought space to store 2048 bit response
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 
 	/* Secure channel should be stablished. if not error will be thrown */

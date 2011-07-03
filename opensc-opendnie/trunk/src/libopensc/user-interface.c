@@ -107,8 +107,8 @@ int ask_user_consent(sc_card_t * card, const char *title, const char *message)
 	/* in Windows, do not use pinentry, but MessageBox system call */
 	res = MessageBox (
 		NULL,
-		TEXT(user_consent_message),
-		TEXT(user_consent_title),
+		TEXT(message),
+		TEXT(title),
 		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
 		);
 	if ( res == IDOK ) 
@@ -118,8 +118,8 @@ int ask_user_consent(sc_card_t * card, const char *title, const char *message)
 	/* Also in Mac OSX use native functions */
 
 	// convert the strings from char* to CFStringRef
-	header_ref = CFStringCreateWithCString( NULL, user_consent_title, strlen(user_consent_title) );
-	message_ref = CFStringCreateWithCString( NULL, user_consent_message, strlen(user_consent_message) );
+	header_ref = CFStringCreateWithCString( NULL, title, strlen(title) );
+	message_ref = CFStringCreateWithCString( NULL,message, strlen(message) );
 
 	// Displlay user notification alert
 	CFUserNotificationDisplayAlert(

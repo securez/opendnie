@@ -204,11 +204,12 @@ static int dnie_get_environment(
 {
 	int i;
 	scconf_block **blocks, *blk;
+	sc_context_t *ctx;
 	/* set default values */
 	ui_context->user_consent_app = USER_CONSENT_CMD;
 	ui_context->user_consent_enabled = 1;
 	/* look for sc block in opensc.conf */
-	sc_context_t *ctx = card->ctx;
+	ctx = card->ctx;
 	for (i = 0; ctx->conf_blocks[i]; i++) {
 		blocks =
 		    scconf_find_blocks(ctx->conf, ctx->conf_blocks[i],

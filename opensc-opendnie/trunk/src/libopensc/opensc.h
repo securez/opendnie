@@ -440,6 +440,7 @@ typedef struct sc_card {
 	struct sc_card_driver *driver;
 	struct sc_card_operations *ops;
 	struct sc_card_sm_context *sm_context;
+	struct sc_card_ui_context *ui_context;
 
 	const char *name;
 	void *drv_data;
@@ -587,10 +588,21 @@ typedef struct sc_card_sm_driver {
 	void *sm_data;
 } sc_card_sm_driver_t;
 
+/**
+ * To handle secure channel
+ */
 typedef struct sc_card_sm_context {
 	unsigned int type;
 	sc_card_sm_driver_t *sm_driver;
 } sc_card_sm_context_t;
+
+/**
+ * To handle user interface routines
+ */
+typedef struct sc_card_ui_context {
+	int user_consent_enabled;
+	char *user_consent_app;
+} sc_card_ui_context_t;
 
 /**
  * @struct sc_thread_context_t

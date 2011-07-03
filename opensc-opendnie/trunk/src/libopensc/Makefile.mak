@@ -22,7 +22,7 @@ OBJECTS			= \
 	card-rtecp.obj card-westcos.obj card-myeid.obj card-ias.obj \
 	card-javacard.obj card-itacns.obj card-authentic.obj \
 	card-iasecc.obj iasecc-sdo.obj \
-	cwa14890.obj cwa-dnie.obj card-dnie.obj \
+	cwa14890.obj cwa-dnie.obj card-dnie.obj user-interface.obj \
 	\
 	pkcs15-openpgp.obj pkcs15-infocamere.obj pkcs15-starcert.obj \
 	pkcs15-tcos.obj pkcs15-esteid.obj pkcs15-postecert.obj pkcs15-gemsafeGPK.obj \

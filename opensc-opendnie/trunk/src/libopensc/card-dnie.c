@@ -34,19 +34,13 @@
 #include <string.h>
 #include <stdarg.h>
 #include <sys/stat.h>
-#ifdef _WIN32
-#define UNICODE
-#include <windows.h>
-#endif
-#ifdef __APPLE__
-#include <Carbon/Carbon.h>
-#endif
 
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
 #include "compression.h"
 #include "cwa14890.h"
+#include "user-interface.h"
 
 /**
  * OpenDNIe private data declaration
@@ -54,8 +48,6 @@
  * Defines internal data used in OpenDNIe code
  */
 typedef struct dnie_private_data_st {
-	char *user_consent_app;		/**< User consent application, or null */
-	int user_consent_enabled;	/**< If zero skip user consent check */
 	sc_serial_number_t *serialnumber; /**< Cached copy of card serial number */
 	int rsa_key_ref;	/**< Key id reference being used in sec operation */
 	u8 *cache;		/**< Cache buffer for read_binary() operation */
@@ -152,6 +144,17 @@ static struct sc_atr_table dnie_atrs[] = {
 };
 
 /**
+ * Messages used on user consent procedures
+ */
+const char *user_consent_title="Signature Requested";
+
+#ifdef linux
+const char *user_consent_message="Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?";
+#else
+const char *user_consent_message="Esta a punto de realizar una firma digital\ncon su clave de FIRMA del DNI electronico.\nDesea permitir esta operacion?";
+#endif
+
+/**
  * DNIe Card Driver private data
  */
 static dnie_private_data_t dnie_priv;
@@ -188,18 +191,24 @@ static sc_card_driver_t dnie_driver = {
  * - A flag to indicate if user consent is to be used in this driver. If false, the user won't be prompted for confirmation on signature operations
  *
  * @See ../../etc/opensc.conf for details
- * @param ctx card context
- * @param priv pointer to dnie private data
+ * @param card Pointer to card structure
+ * @param ui_context Pointer to ui_context structure to store data into
  * @return SC_SUCCESS (should return no errors)
+ *
+ * TODO: Code should be revised in order to store user consent info
+ * in a card-independent way at configuration file
  */
-static int dnie_get_environment(sc_context_t * ctx, dnie_private_data_t * priv)
+static int dnie_get_environment(
+	sc_card_t * card, 
+	sc_card_ui_context_t * ui_context)
 {
 	int i;
 	scconf_block **blocks, *blk;
 	/* set default values */
-	priv->user_consent_app = USER_CONSENT_CMD;
-	priv->user_consent_enabled = 1;
+	ui_context->user_consent_app = USER_CONSENT_CMD;
+	ui_context->user_consent_enabled = 1;
 	/* look for sc block in opensc.conf */
+	sc_context_t *ctx = card->ctx;
 	for (i = 0; ctx->conf_blocks[i]; i++) {
 		blocks =
 		    scconf_find_blocks(ctx->conf, ctx->conf_blocks[i],
@@ -211,194 +220,15 @@ static int dnie_get_environment(sc_context_t * ctx, dnie_private_data_t * priv)
 		if (blk == NULL)
 			continue;
 		/* fill private data with configuration parameters */
-		priv->user_consent_app =	/* def user consent app is "pinentry" */
+		ui_context->user_consent_app =	/* def user consent app is "pinentry" */
 		    (char *)scconf_get_str(blk, "user_consent_app",
 					   USER_CONSENT_CMD);
-		priv->user_consent_enabled =	/* user consent is enabled by default */
+		ui_context->user_consent_enabled =	/* user consent is enabled by default */
 		    scconf_get_bool(blk, "user_consent_enabled", 1);
 	}
 	return SC_SUCCESS;
 }
 
-/**
- * Messages used on pinentry protocol
- */
-char *user_consent_msgs[] = {
-	"SETTITLE Signature requested\n",
-	"SETDESC Está a punto de realizar una firma electrónica con su clave de FIRMA del DNI electrónico. ¿Desea permitir esta operación?\n",
-	"CONFIRM\n",
-	"BYE\n",
-	NULL
-};
-
-const char *user_consent_title="Signature Requested";
-const char *user_consent_message="Esta a punto de realizar una firma digital\ncon su clave de FIRMA del DNI electronico.\nDesea permitir esta operacion?";
-
-/**
- * Ask for user consent on signature operation.
- * Check for user consent configuration,
- * invoke proper gui app and check result
- * @param card pointer to sc_card structure
- * @return SC_SUCCESS if ok, else error code
- */
-static int ask_user_consent(sc_card_t * card)
-{
-#ifdef __APPLE__
-	CFOptionFlags result;  //result code from the message box
-	//convert the strings from char* to CFStringRef
-	CFStringRef header_ref =
-		CFStringCreateWithCString( NULL, user_consent_title, strlen(user_consent_title) );
-	CFStringRef message_ref =
-		CFStringCreateWithCString( NULL, user_consent_message, strlen(user_consent_message) );
-#endif
-#ifdef linux
-	pid_t pid;
-	FILE *fin, *fout;	/* to handle pipes as streams */
-	struct stat st_file;	/* to verify that executable exists */
-	int srv_send[2];	/* to send data from server to client */
-	int srv_recv[2];	/* to receive data from client to server */
-	char buf[1024];		/* to store client responses */
-	int n = 0;		/* to iterate on to-be-sent messages */
-#endif
-	int res = SC_ERROR_INTERNAL;	/* by default error :-( */
-	char *msg = NULL;	/* to makr errors */
-
-	if ((card == NULL) || (card->ctx == NULL))
-		return SC_ERROR_INVALID_ARGUMENTS;
-	LOG_FUNC_CALLED(card->ctx);
-
-	dnie_get_environment(card->ctx, &dnie_priv);
-	if (dnie_priv.user_consent_enabled == 0) {
-		sc_log(card->ctx,
-		       "User Consent is disabled in configuration file");
-		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
-	}
-#ifdef _WIN32
-	/* in Windows, do not use pinentry, but MessageBox system call */
-	res = MessageBox (
-		NULL,
-		TEXT(user_consent_message),
-		TEXT(user_consent_title),
-		MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2 | MB_APPLMODAL
-		);
-	if ( res == IDOK ) 
-		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
-	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_ALLOWED);
-#elif __APPLE__
-	/* Also in Mac OSX use native functions */
-	CFUserNotificationDisplayAlert(
-		0, // no timeout
-		kCFUserNotificationNoteAlertLevel,  // Alert level
-		NULL,	// IconURL, use default, you can change
-			// it depending message_type flags
-		NULL,	// SoundURL (not used)
-		NULL,	//localization of strings
-		header_ref,	// header. Cannot be null
-		message_ref,	//message text
-		CFSTR("Cancel"), // default ( "OK" if null) button text
-		CFSTR("OK"), // second button title
-                NULL, // third button title, null--> no other button
-		&result //response flags
-	);
-
-	//Clean up the strings
-	CFRelease( header_ref );
-        CFRelease( message_ref );
-	// Return 0 only if "OK" is selected
-	if( result == kCFUserNotificationAlternateResponse )
-		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
-	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_ALLOWED);
-#elif linux
-	/* check that user_consent_app exists. TODO: check if executable */
-	res = stat(dnie_priv.user_consent_app, &st_file);
-	if (res != 0) {
-		sc_log(card->ctx, "Invalid pinentry application: %s\n",
-		       dnie_priv.user_consent_app);
-		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
-	}
-
-	/* just a simple bidirectional pipe+fork+exec implementation */
-	/* In a pipe, xx[0] is for reading, xx[1] is for writing */
-	if (pipe(srv_send) < 0) {
-		msg = "pipe(srv_send)";
-		goto do_error;
-	}
-	if (pipe(srv_recv) < 0) {
-		msg = "pipe(srv_recv)";
-		goto do_error;
-	}
-	pid = fork();
-	switch (pid) {
-	case -1:		/* error  */
-		msg = "fork()";
-		goto do_error;
-	case 0:		/* child  */
-		/* make our pipes, our new stdin & stderr, closing older ones */
-		dup2(srv_send[0], STDIN_FILENO);	/* map srv send for input */
-		dup2(srv_recv[1], STDOUT_FILENO);	/* map srv_recv for output */
-		/* once dup2'd pipes are no longer needed on client; so close */
-		close(srv_send[0]);
-		close(srv_send[1]);
-		close(srv_recv[0]);
-		close(srv_recv[1]);
-		/* call exec() with proper user_consent_app from configuration */
-		execlp(dnie_priv.user_consent_app, dnie_priv.user_consent_app, (char *)NULL);	/* if ok should never return */
-		res = SC_ERROR_INTERNAL;
-		msg = "execlp() error";	/* exec() failed */
-		goto do_error;
-	default:		/* parent */
-		/* Close the pipe ends that the child uses to read from / write to 
-		 * so when we close the others, an EOF will be transmitted properly.
-		 */
-		close(srv_send[0]);
-		close(srv_recv[1]);
-		/* use iostreams to take care on newlines and text based data */
-		fin = fdopen(srv_recv[0], "r");
-		if (fin == NULL) {
-			msg = "fdopen(in)";
-			goto do_error;
-		}
-		fout = fdopen(srv_send[1], "w");
-		if (fout == NULL) {
-			msg = "fdopen(out)";
-			goto do_error;
-		}
-		/* read and ignore first line */
-		fflush(stdin);
-		for (n = 0; user_consent_msgs[n] != NULL; n++) {
-			char *pt;
-			/* send message */
-			fputs(user_consent_msgs[n], fout);
-			fflush(fout);
-			/* get response */
-			memset(buf, 0, sizeof(buf));
-			pt=fgets(buf, sizeof(buf) - 1, fin);
-			if (pt==NULL) {
-				res = SC_ERROR_INTERNAL;
-				msg = "fgets() Unexpected IOError/EOF";
-				goto do_error;
-			}
-			if (strstr(buf, "OK") == NULL) {
-				res = SC_ERROR_NOT_ALLOWED;
-				msg = "fail/cancel";
-				goto do_error;
-			}
-		}
-	}			/* switch */
-	/* arriving here means signature has been accepted by user */
-	res = SC_SUCCESS;
-	msg = NULL;
-do_error:
-	/* close out channel to force client receive EOF and also die */
-	if (fout != NULL) fclose(fout);
-	if (fin != NULL) fclose(fin);
-#else
-#error "Don't know how to handle user consent in this (rare) Operating System"
-#endif
-	if (msg != NULL)
-		sc_log(card->ctx, "%s", msg);
-	LOG_FUNC_RETURN(card->ctx, res);
-}
 
 /************************** cardctl defined operations *******************/
 
@@ -690,6 +520,7 @@ static int dnie_init(struct sc_card *card)
 	int result = SC_SUCCESS;
 	unsigned long algoflags;
 	sc_card_sm_context_t *dnie_sm_context=NULL;
+	sc_card_ui_context_t *dnie_ui_context=NULL;
 	cwa_provider_t *provider=NULL;
 
 	if ((card == NULL) || (card->ctx == NULL))
@@ -707,9 +538,16 @@ static int dnie_init(struct sc_card *card)
 	memset(&dnie_priv, 0, sizeof(dnie_private_data_t));
 
 	/* read environment from configuration file */
-	result = dnie_get_environment(card->ctx, &dnie_priv);
+	dnie_ui_context=calloc(1,sizeof(sc_card_ui_context_t));
+	if (!dnie_ui_context) {
+		sc_log(card->ctx, "Error in allocate dnie ui_context");
+		result = SC_ERROR_OUT_OF_MEMORY;
+		goto dnie_init_error;
+	}
+	result = dnie_get_environment(card,dnie_ui_context);
 	if (result != SC_SUCCESS)
 		goto dnie_init_error;
+	card->ui_context = dnie_ui_context;
 
 	/** Secure messaging initialization section **/
 
@@ -1919,7 +1757,7 @@ static int dnie_compute_signature(struct sc_card *card,
 
 	/* (Requested by DGP): on signature operation, ask user consent */
 	if (dnie_priv.rsa_key_ref == 0x02) {	/* TODO: revise key ID handling */
-		result = ask_user_consent(card);
+		result = ask_user_consent(card,user_consent_title,user_consent_message);
 		LOG_TEST_RET(card->ctx, result, "User consent denied");
 	}
 

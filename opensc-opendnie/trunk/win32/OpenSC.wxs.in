@@ -171,6 +171,7 @@
         <ComponentRef Id="pkcs15_init.exe"/>
         <ComponentRef Id="pkcs15_tool.exe"/>
         <ComponentRef Id="pkcs15_crypt.exe"/>
+        <ComponentRef Id="dnie_tool.exe"/>
         <!-- TODO: Not all profiles are listed! -->
         <ComponentRef Id="pkcs15.profile"/>
         <ComponentRef Id="asepcos.profile"/>

@@ -45,6 +45,10 @@
 /* default user consent program (if required) */
 #define USER_CONSENT_CMD "/usr/bin/pinentry"
 #endif 
+/* default titles */
+#define USER_CONSENT_TITLE "Confirm"
+#define USER_PIN_TITLE "PIN Request"
+#define USER_PIN_PROMPT "Enter PIN:"
 
 #include "libopensc/opensc.h"
 #include "libopensc/log.h"
@@ -54,15 +58,93 @@
  * Messages used on pinentry protocol
  */
 char *user_consent_msgs[] = { "SETTITLE", "SETDESC", "CONFIRM", "BYE" };
+char *user_pin_msgs[] = { "SETTITLE", "SETPROMPT", "GETPIN", "BYE" };
+
+static int ui_ask_user_pin(
+	sc_context_t *ctx,	/* Card context */
+	const char *title,	/* Title of the window */
+	const char *msg,	/* Text to be shown to the user */
+	char *pinbuf,		/* Where to store the user entered data */
+	int *pinlen) {		/* buffer length; on return user data length */
+
+	/* TODO: write :-) */
+	return SC_ERROR_NOT_SUPPORTED;
+}
 
 /**
- * Ask for user consent on signature operation.
- * Check for user consent configuration,
- * invoke proper gui app and check result
+ * Ask user for pin.
+ * 
+ * Check the user pin configuration,
+ * Invoke proper gui app and check result
+ * 
  * @param card pointer to sc_card structure
+ * @param title Text to appear in the window header
+ * @param pin Structure to handle/store pin related data
+ * @return SC_SUCCESS if user accepts , else error code
+ */
+int sc_ask_user_pin(sc_card_t * card, const char *title, struct sc_pin_cmd_pin *pin) {
+	char *pinbuf=NULL;
+	int pinlen=0;
+	int res=SC_ERROR_INTERNAL;
+	char *msg=NULL;
+	
+	if ( (card==NULL) || (card->ctx==NULL) ) 
+		return SC_ERROR_INVALID_ARGUMENTS;
+	LOG_FUNC_CALLED(card->ctx);
+	if (pin==NULL) LOG_FUNC_RETURN(card->ctx,SC_ERROR_INVALID_ARGUMENTS);
+
+	/* use a temporary buffer to ask for pin */
+	if (pin->max_length<=0) {
+		msg="Invalid pin max lenght";
+		res=SC_ERROR_INVALID_ARGUMENTS;
+		goto ask_user_pin_end;
+	}
+	pinlen=pin->max_length;
+
+	pinbuf= calloc(pin->max_length, sizeof(char));
+	if (!pinbuf) {
+		msg="Cannot create pin buffer";
+		res=SC_ERROR_OUT_OF_MEMORY;
+		goto ask_user_pin_end;
+	}
+
+	res= ui_ask_user_pin(
+		card->ctx,
+		(title==NULL)?USER_PIN_TITLE:title,
+		(pin->prompt==NULL)?USER_PIN_PROMPT:pin->prompt,
+		pinbuf,
+		&pinlen);
+	if (res!=SC_SUCCESS) {
+		msg="Error in ui_ask_user_pin";
+		goto ask_user_pin_end;
+	}
+
+	/* TODO: parse received data and fill result structure */
+
+	/* arriving here means success */
+	res=SC_SUCCESS;
+
+ask_user_pin_end:
+	if (msg!=NULL) sc_log(card->ctx,msg);
+	if (pinbuf!=NULL) {
+		memset(pinbuf,0,pinlen);
+		free(pinbuf);
+	}
+	LOG_FUNC_RETURN(card->ctx,res);
+}
+
+/**
+ * Ask for user consent.
+ *
+ * Check for user consent configuration,
+ * Invoke proper gui app and check result
+ *
+ * @param card pointer to sc_card structure
+ * @param title Text to appear in the window header
+ * @param text Message to show to the user
  * @return SC_SUCCESS on user consent OK , else error code
  */
-int ask_user_consent(sc_card_t * card, const char *title, const char *message)
+int sc_ask_user_consent(sc_card_t * card, const char *title, const char *message)
 {
 	sc_card_ui_context_t *ui_context;
 #ifdef __APPLE__
@@ -89,7 +171,7 @@ int ask_user_consent(sc_card_t * card, const char *title, const char *message)
 	LOG_FUNC_CALLED(card->ctx);
 
 	if ((title==NULL) || (message==NULL)) 
-		return SC_ERROR_INVALID_ARGUMENTS;
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 
 	ui_context=card->ui_context;
 	if (ui_context==NULL) {

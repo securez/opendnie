@@ -53,6 +53,8 @@ sc_base64_decode
 sc_base64_encode
 sc_bin_to_hex
 sc_build_pin
+sc_ask_user_consent
+sc_ask_user_pin
 sc_cancel
 sc_card_ctl
 sc_change_reference_data

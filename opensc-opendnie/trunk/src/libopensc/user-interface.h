@@ -29,14 +29,29 @@
 #include "libopensc/opensc.h"
 
 /**
- * Ask for user consent on signature operation.
+ * Ask for user consent.
+ *
  * Check for user consent configuration,
  * invoke proper gui app and check result
+ *
  * @param card pointer to sc_card structure
  * @param title Text to appear in the window header
  * @param text Message to show to the user
  * @return SC_SUCCESS if user accepts , else error code
  */
-int ask_user_consent(sc_card_t * card, const char *title, const char *message);
+int sc_ask_user_consent(sc_card_t * card, const char *title, const char *message);
+
+/**
+ * Ask user for pin.
+ *
+ * Check the user pin configuration,
+ * invoke proper gui app and check result
+ *
+ * @param card pointer to sc_card structure
+ * @param title Text to appear in the window header
+ * @param pin Structure to handle/store pin related data
+ * @return SC_SUCCESS if user accepts , else error code
+ */
+int sc_ask_user_pin(sc_card_t * card, const char *title, struct sc_pin_cmd_pin *pin);
 
 #endif

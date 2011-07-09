@@ -1758,7 +1758,7 @@ static int dnie_compute_signature(struct sc_card *card,
 
 	/* (Requested by DGP): on signature operation, ask user consent */
 	if (dnie_priv.rsa_key_ref == 0x02) {	/* TODO: revise key ID handling */
-		result = ask_user_consent(card,user_consent_title,user_consent_message);
+		result = sc_ask_user_consent(card,user_consent_title,user_consent_message);
 		LOG_TEST_RET(card->ctx, result, "User consent denied");
 	}
 

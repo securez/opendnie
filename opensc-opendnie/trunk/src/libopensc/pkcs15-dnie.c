@@ -180,7 +180,6 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t * p15card)
 				sc_log(ctx,
 				       "Decoding of EF.PrKDF (%s) failed: %d",
 				       sc_print_path(&df->path), rv);
-				// return rv;
 			}
 		}
 		if (df->type == SC_PKCS15_PUKDF) {
@@ -189,7 +188,6 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t * p15card)
 				sc_log(ctx,
 				       "Decoding of EF.PuKDF (%s) failed: %d",
 				       sc_print_path(&df->path), rv);
-				// return rv;
 			}
 		}
 		if (df->type == SC_PKCS15_CDF) {
@@ -198,7 +196,6 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t * p15card)
 				sc_log(ctx,
 				       "Decoding of EF.CDF (%s) failed: %d",
 				       sc_print_path(&df->path), rv);
-				// return rv;
 			}
 		}
 		if (df->type == SC_PKCS15_DODF) {
@@ -207,7 +204,6 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t * p15card)
 				sc_log(ctx,
 				       "Decoding of EF.DODF (%s) failed: %d",
 				       sc_print_path(&df->path), rv);
-				// return rv;
 			}
 		}
 	}
@@ -241,7 +237,7 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t * p15card)
 
 const char *sc_driver_version()
 {
-	return "0.12.1-svn";	/* defined in config.h of OpenSC */
+	return "0.12.3-svn";	/* defined in config.h of OpenSC */
 }
 
 int bind(sc_pkcs15_card_t * p15card, sc_pkcs15emu_opt_t * options)

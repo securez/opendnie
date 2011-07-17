@@ -148,14 +148,15 @@ int sc_ask_user_consent(sc_card_t * card, const char *title, const char *message
 {
 	sc_card_ui_context_t *ui_context;
 #ifdef __APPLE__
-	CFOptionFlags result;  // result code from the message box
-	//convert the strings from char* to CFStringRef
-	CFStringRef header_ref; // to store title
-	CFStringRef message_ref; // to store message
+	CFOptionFlags result;  /* result code from the message box */
+	/* convert the strings from char* to CFStringRef */
+	CFStringRef header_ref; /* to store title */
+	CFStringRef message_ref; /* to store message */
 #endif
 #ifdef linux
 	pid_t pid;
-	FILE *fin, *fout;	/* to handle pipes as streams */
+	FILE *fin=NULL;
+	FILE *fout=NULL;	/* to handle pipes as streams */
 	struct stat st_file;	/* to verify that executable exists */
 	int srv_send[2];	/* to send data from server to client */
 	int srv_recv[2];	/* to receive data from client to server */
@@ -199,30 +200,30 @@ int sc_ask_user_consent(sc_card_t * card, const char *title, const char *message
 #elif __APPLE__
 	/* Also in Mac OSX use native functions */
 
-	// convert the strings from char* to CFStringRef
+	/* convert the strings from char* to CFStringRef */
 	header_ref = CFStringCreateWithCString( NULL, title, strlen(title) );
 	message_ref = CFStringCreateWithCString( NULL,message, strlen(message) );
 
-	// Displlay user notification alert
+	/* Displlay user notification alert */
 	CFUserNotificationDisplayAlert(
-		0, // no timeout
-		kCFUserNotificationNoteAlertLevel,  // Alert level
-		NULL,	// IconURL, use default, you can change
-			// it depending message_type flags
-		NULL,	// SoundURL (not used)
-		NULL,	//localization of strings
-		header_ref,	// header. Cannot be null
-		message_ref,	//message text
-		CFSTR("Cancel"), // default ( "OK" if null) button text
-		CFSTR("OK"), // second button title
-                NULL, // third button title, null--> no other button
-		&result //response flags
+		0, /* no timeout */
+		kCFUserNotificationNoteAlertLevel,  /* Alert level */
+		NULL,	/* IconURL, use default, you can change */
+			/* it depending message_type flags */
+		NULL,	/* SoundURL (not used) */ 
+		NULL,	/* localization of strings */
+		header_ref,	/* header. Cannot be null */
+		message_ref,	/* message text */
+		CFSTR("Cancel"), /* default ( "OK" if null) button text */ 
+		CFSTR("OK"), /* second button title */
+                NULL, /* third button title, null--> no other button */
+		&result /* response flags */
 	);
 
-	//Clean up the strings
+	/* Clean up the strings */
 	CFRelease( header_ref );
         CFRelease( message_ref );
-	// Return 0 only if "OK" is selected
+	/* Return 0 only if "OK" is selected */
 	if( result == kCFUserNotificationAlternateResponse )
 		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_ALLOWED);

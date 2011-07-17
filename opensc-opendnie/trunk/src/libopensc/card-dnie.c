@@ -587,7 +587,7 @@ static int dnie_init(struct sc_card *card)
 
 	/* set up flags according documentation */
 	card->name = DNIE_CHIP_SHORTNAME;
-	card->cla = 0x00;	// card uses default APDU class (interindustry)
+	card->cla = 0x00;	/* default APDU class (interindustry) */
 	card->caps |= SC_CARD_CAP_RNG;	/* we have a random number generator */
 	card->max_send_size = 0xf0;	/* manual says 255, but to be safe... */
 	card->max_recv_size = 0xf0;
@@ -599,7 +599,7 @@ static int dnie_init(struct sc_card *card)
 
 	/* initialize SM state to NONE */
 	/* TODO: change to CWA_SM_OFF when SM testing get done */
-	// result = cwa_create_secure_channel(card, p, CWA_SM_COLD);
+	/* result = cwa_create_secure_channel(card, p, CWA_SM_COLD); */
 	result=cwa_create_secure_channel(card,provider,CWA_SM_OFF);
 
  dnie_init_error:
@@ -943,7 +943,7 @@ static int dnie_fill_cache(sc_card_t * card)
 {
 	u8 tmp[SC_MAX_APDU_BUFFER_SIZE];
 	sc_apdu_t apdu;
-	int count = 0;
+	size_t count = 0;
 	size_t len = 0;
 	u8 *buffer = NULL;
 	u8 *pt = NULL;
@@ -1745,7 +1745,7 @@ static int dnie_compute_signature(struct sc_card *card,
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 	if (datalen > SC_MAX_APDU_BUFFER_SIZE)	/* should be 256 */
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
-	if (outlen<256) // enought space to store 2048 bit response
+	if (outlen<256) /* enought space to store 2048 bit response */
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 
 	/* Secure channel should be stablished. if not error will be thrown */

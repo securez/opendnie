@@ -61,7 +61,7 @@ static char *cwa_hexdump(const u8 * buf, size_t len)
 	memset(res, 0, sizeof(res));
 	len = MIN(len, sizeof(res));
 	for (count = 0; count < len; count += 16) {
-		int nitems = MIN(16, len - count);
+		size_t nitems = MIN(16, len - count);
 		for (j = 0; j < nitems; j++)
 			sprintf(res, "%s%02X ", res, 0xff & *(buf + count + j));
 		for (; j < 16; j++)

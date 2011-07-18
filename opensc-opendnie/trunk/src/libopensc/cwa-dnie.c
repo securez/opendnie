@@ -211,7 +211,7 @@ int dnie_read_file(sc_card_t * card,
 	u8 *data;
 	char *msg = NULL;
 	int res = SC_SUCCESS;
-	unsigned int fsize = 0;	/* file size */
+	size_t fsize = 0;	/* file size */
 	sc_context_t *ctx = NULL;
 
 	if (!card || !card->ctx)

@@ -65,7 +65,7 @@ static int ui_ask_user_pin(
 	const char *title,	/* Title of the window */
 	const char *msg,	/* Text to be shown to the user */
 	char *pinbuf,		/* Where to store the user entered data */
-	int *pinlen) {		/* buffer length; on return user data length */
+	size_t *pinlen) {		/* buffer length; on return user data length */
 
 	/* TODO: write :-) */
 	return SC_ERROR_NOT_SUPPORTED;
@@ -84,7 +84,7 @@ static int ui_ask_user_pin(
  */
 int sc_ask_user_pin(sc_card_t * card, const char *title, struct sc_pin_cmd_pin *pin) {
 	char *pinbuf=NULL;
-	int pinlen=0;
+	size_t pinlen=0;
 	int res=SC_ERROR_INTERNAL;
 	char *msg=NULL;
 	

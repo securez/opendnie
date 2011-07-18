@@ -706,7 +706,7 @@ static int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
 		/* sc_log(card->ctx, "Data to be enveloped & sent: (%d bytes)\n%s\n===============================================================",e_txlen,sc_dump_hex(e_tx,e_txlen)); */
 		/* split apdu in n chunks of max_send_size len */
 		for (index = 0; index < e_txlen; index += card->max_send_size) {
-			int len = MIN(card->max_send_size, e_txlen - index);
+			size_t len = MIN(card->max_send_size, e_txlen - index);
 			sc_log(card->ctx, "envelope tx offset:%04X size:%02X",
 			       index, len);
 
@@ -1021,7 +1021,7 @@ static int dnie_fill_cache(sc_card_t * card)
 	dnie_priv.cache = pt;
 	dnie_priv.cachelen = len;
 	sc_log(ctx, "fill_cache() done. length '%d' bytes", len);
-	LOG_FUNC_RETURN(ctx, len);
+	LOG_FUNC_RETURN(ctx,len);
 }
 
 /**
@@ -1104,7 +1104,7 @@ static int dnie_cache_path(sc_card_t *card, struct sc_file *file)
 		card->cache.current_path.len=2;
 	} else {
 		/* if relative path add to current */
-		int curlen=card->cache.current_path.len;
+		size_t curlen=card->cache.current_path.len;
 		card->cache.current_path.value[curlen+0] =path[0];
 		card->cache.current_path.value[curlen+1] =path[1];
 		card->cache.current_path.len += 2;
@@ -1696,7 +1696,7 @@ static int dnie_decipher(struct sc_card *card,
 	/* responde ok: fill result data and return */
 	len = apdu.resplen > outlen ? outlen : apdu.resplen;
 	memcpy(out, apdu.resp, len);
-	LOG_FUNC_RETURN(card->ctx, len);
+	LOG_FUNC_RETURN(card->ctx, result);
 }
 
 /**

@@ -55,7 +55,7 @@
  */
 static char *cwa_hexdump(const u8 * buf, size_t len)
 {
-	int j;
+	size_t j;
 	size_t count = 0;
 	static char res[16384];
 	memset(res, 0, sizeof(res));

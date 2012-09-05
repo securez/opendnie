@@ -20,6 +20,9 @@ apt-get install ...
 3. Get the current tarball for that release:
 svn-buildpackage -rfakeroot -us -uc -tc --svn-download-orig
 
+* If you use pbuild, do:
+svn-buildpackage --svn-builder="pdebuild --use-pdebuild-internal --buildresult `pwd`/../build-area" --svn-download-orig
+
 4. Install it:
 dpkg -i ../build-area/libopensc_*.deb ../build-area/opensc_*.deb 
 

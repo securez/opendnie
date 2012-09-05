@@ -1,0 +1,33 @@
+## Description: Add missing libraries to Makefile.in due to compiler change
+## Origin/Author: Torsten Spindler (Canonical)
+## Bug: https://bugs.launchpad.net/ubuntu/+source/opensc/+bug/692571
+Index: opensc-0.12.1/src/tools/Makefile.am
+===================================================================
+--- opensc-0.12.1.orig/src/tools/Makefile.am	2011-05-17 17:07:00.000000000 +0000
++++ opensc-0.12.1/src/tools/Makefile.am	2012-03-31 05:29:46.645098130 +0000
+@@ -24,8 +24,8 @@
+ pkcs15_tool_SOURCES = pkcs15-tool.c util.c
+ pkcs15_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS)
+ pkcs11_tool_SOURCES = pkcs11-tool.c util.c
+-pkcs11_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS) $(LTLIB_LIBS) \
+-	$(top_builddir)/src/common/libpkcs11.la
++pkcs11_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS) \
++	$(top_builddir)/src/common/libpkcs11.la $(LTLIB_LIBS)
+ pkcs15_crypt_SOURCES = pkcs15-crypt.c util.c
+ pkcs15_crypt_LDADD = $(OPTIONAL_OPENSSL_LIBS)
+ cryptoflex_tool_SOURCES = cryptoflex-tool.c util.c
+Index: opensc-0.12.1/src/tools/Makefile.in
+===================================================================
+--- opensc-0.12.1.orig/src/tools/Makefile.in	2011-05-18 05:51:48.000000000 +0000
++++ opensc-0.12.1/src/tools/Makefile.in	2012-03-31 05:29:06.269096666 +0000
+@@ -358,8 +358,8 @@
+ pkcs15_tool_SOURCES = pkcs15-tool.c util.c $(am__append_5)
+ pkcs15_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS)
+ pkcs11_tool_SOURCES = pkcs11-tool.c util.c $(am__append_6)
+-pkcs11_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS) $(LTLIB_LIBS) \
+-	$(top_builddir)/src/common/libpkcs11.la
++pkcs11_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS) \
++	$(top_builddir)/src/common/libpkcs11.la $(LTLIB_LIBS)
+ 
+ pkcs15_crypt_SOURCES = pkcs15-crypt.c util.c $(am__append_7)
+ pkcs15_crypt_LDADD = $(OPTIONAL_OPENSSL_LIBS)

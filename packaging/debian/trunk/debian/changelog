@@ -1,16 +1,103 @@
-opensc-opendnie (0.12.1-1+opendnie1) UNRELEASED; urgency=low
+opensc-opendnie (0.12.2-2ubuntu1+opendnie1) UNRELEASED; urgency=low
 
+  * Merge from Ubuntu precise.
   * Added OpenDNIe driver to support the Spanish ID electronic card.
   * debian/control:
     - Recommend libacr38u, libccid and libnss3-tools.
+    - Removed dh-autoreconf as build-dependency.
   * debian/opensc.install:
-    - Install westcos-tool and dnie-tool.
-    - Install westcost-tool.1 and dnie-tool.1 manpages.
+    - Install dnie-tool and its man page.
+    - Removed duplicated installation of profiles.
+  * debian/watch:
+    - Mangle download url to use http instead of https.
   * debian/rules:
-    - Install upstream ChangeLog.
-    - Define pcsc provider path according to Debian or Ubuntu distribution.
+    - Removed call to autoreconf sequence because it does not build in debian.
 
- -- Enrique Hernández Bello <quique@osl.ull.es>  Wed, 01 Jun 2011 12:14:56 +0100
+ -- Enrique Hernández Bello <quique@osl.ull.es>  Thu, 28 Jun 2012 20:41:51 +0100
+
+opensc (0.12.2-2ubuntu1) precise; urgency=low
+
+  * Merge from Debian testing. (LP: #979986)  Remaining changes:
+    - debian/patches/missing-libs.patch: Add libraries to allow opensc to build
+    - debian/opensc.docs: include html documentation
+    - debian/control: Depend on pcscd
+    - debian/control: Add dh-autoreconf as build-dependency
+    - debian/rules: Call autoreconf sequence to rebuild autotools files
+    - debian/opensc.install: Added profiles
+
+ -- Jean-Louis Dupond <jean-louis@dupond.be>  Sat, 14 Apr 2012 13:27:17 +0200
+
+opensc (0.12.2-2) unstable; urgency=low
+
+  * debian/opensc.install: Add westcos-tool & its man page. Thanks Peter
+    Marschall <peter@adpm.de>. (Closes: #629229)
+  * debian/opensc.install: Install *.profile files again. Thanks Peter
+    Marschall <peter@adpm.de>. (Closes: #629231)
+
+ -- Eric Dorland <eric@debian.org>  Sun, 11 Sep 2011 19:53:24 -0400
+
+opensc (0.12.2-1) unstable; urgency=low
+
+  * New upstream release.
+  * Acknowledge NMU. (Closes: #622436, #629227, #631618)
+  * debian/rules, debian/opensc.install: Only install the .so.* lib files,
+    not the .la or .a files. (Closes: #633656)
+  * debian/rules, debian/control: Enable zlib support. Thanks Peter
+    Marschall <peter@adpm.de>. (Closes: #629230)
+  * debian/rules, debian/control: Enable readline support. Thanks Peter
+    Marschall <peter@adpm.de>. (Closes: #629228)
+
+ -- Eric Dorland <eric@debian.org>  Sun, 11 Sep 2011 19:04:02 -0400
+
+opensc (0.12.1-1.1) unstable; urgency=low
+
+  * Non-maintainer upload.
+  * Empty dependency_libs (Closes: #622436).
+  * Drop unnecessary build dependency on libxt-dev (Closes: #629227).
+
+ -- Luk Claes <luk@debian.org>  Sat, 25 Jun 2011 15:37:46 +0200
+
+opensc (0.12.1-1ubuntu5) precise; urgency=low
+
+  * Don't configure with --with-pcsc-provider. LP: #978974.
+
+ -- Matthias Klose <doko@ubuntu.com>  Wed, 11 Apr 2012 20:06:48 +0200
+
+opensc (0.12.1-1ubuntu4) precise; urgency=low
+
+  * debian/opensc.install: Added profiles (LP: #872019)
+
+ -- Christopher Glass <christopher.glass@ubuntu.com>  Sat, 31 Mar 2012 09:10:01 +0200
+
+opensc (0.12.1-1ubuntu3) precise; urgency=low
+
+  * missing-libs.patch: updated to fix also Makefile.in and move libs in
+    pkcs11_tool_LDADD. This fixes a FTBFS because of missing 'lt_dlsym' symbol
+    when linking pkcs11-tool.
+
+ -- Fabrice Coutadeur <fabricesp@ubuntu.com>  Sat, 31 Mar 2012 05:32:54 +0000
+
+opensc (0.12.1-1ubuntu2) precise; urgency=low
+
+  * Add the missing Depends:pcscd (LP: #917892).
+    FIXME: Debian needs it too. See BDO 618554.
+
+ -- Martin-Éric Racine <q-funk@ubuntu.com>  Tue, 17 Jan 2012 23:44:59 +0200
+
+opensc (0.12.1-1ubuntu1) oneiric; urgency=low
+
+  * Merge from debian unstable.  Remaining changes:
+    - debian/patches/missing-libs.patch: Add libraries to allow opensc to
+      build (refreshed)
+    - debian/opensc.docs: include htmld documentation (snapshot from wiki)
+    - debian/rules: build with "--with-pcsc-provider=/lib/libpcsclite.so.1"
+    - debian/opensc.install: added westcos-tool + manpage
+  * Drop debian/patches/min-max.patch, debian/patches/buffer-overflow.patch,
+    debian/patches/fix-storing-key-on-entersafe: Applied upstream
+  * debian/control: Add dh-autoreconf as build-dependency
+  * debian/rules: Call autoreconf sequence to rebuild autotools files
+
+ -- Laurent Bigonville <bigon@debian.org>  Fri, 10 Jun 2011 21:57:05 +0200
 
 opensc (0.12.1-1) unstable; urgency=low
 
@@ -54,12 +141,84 @@ opensc (0.11.13-1.1) unstable; urgency=high
 
  -- Jonathan Wiltshire <jmw@debian.org>  Wed, 22 Dec 2010 14:20:22 +0000
 
+opensc (0.11.13-1ubuntu5) natty; urgency=low
+
+  * Drop the symlinks in legacy plugin folders
+    - update debian/mozilla-opensc.links
+    - update debian/mozilla-opensc.install
+
+ -- Chris Coulson <chris.coulson@canonical.com>  Tue, 22 Feb 2011 14:21:12 +0000
+
+opensc (0.11.13-1ubuntu4) natty; urgency=low
+
+  * SECURITY UPDATE: specially crafted cards may be able to execute code.
+    - debian/patches/min-max.patch: Add MIN and MAX macros for last patch
+    - debian/patches/buffer-overflow.patch: Fix potential buffer overflow 
+      by rogue cards. (LP: #692483)
+
+ -- Torsten Spindler (Canonical) <torsten@canonical.com>  Tue, 21 Dec 2010 09:50:33 +0100
+
+opensc (0.11.13-1ubuntu3) natty; urgency=low
+
+  * debian/patches/missing-libs.patch: Add libraries to allow opensc to build
+    from source on natty (LP: #692571)
+
+ -- Torsten Spindler (Canonical) <torsten@canonical.com>  Mon, 20 Dec 2010 15:14:49 +0100
+
+opensc (0.11.13-1ubuntu2) maverick; urgency=low
+
+  * debian/patches/fix-storing-key-on-entersafe: Fix storing a RSA key on
+    EnterSafe cards. (LP: #622319)
+
+ -- Firas Kraiem <firas@fkraiem.org>  Mon, 23 Aug 2010 14:43:10 +0200
+
+opensc (0.11.13-1ubuntu1) maverick; urgency=low
+
+  * Merge from debian unstable (LP: #600152), remaining changes:
+    - debian/mozilla-opensc.links: Install links for firefox and
+      xulrunner-addons.
+    - debian/rules: build with "--with-pcsc-provider=/lib/libpcsclite.so.1",
+      as this is the path of libpcsclite in jaunty and above.
+    - debian/opensc.install: added westcos-tool + manpage
+    - include htmld documentation (snapshot from wiki) (Closes: #575113,
+      LP: #543334)
+
+ -- Lorenzo De Liso <blackz@ubuntu.com>  Wed, 30 Jun 2010 12:04:58 +0200
+
 opensc (0.11.13-1) unstable; urgency=low
 
   * New upstream release. (Closes: #570107, #505404)
   * libtool.m4: Delete spurious libtool.m4 that was picked up somewhere.
 
  -- Eric Dorland <eric@debian.org>  Mon, 01 Mar 2010 00:58:01 -0500
+
+opensc (0.11.12-1ubuntu3) lucid; urgency=low
+
+  * include htmld documentation (snapshot from wiki) (Closes: #575113, 
+    LP: #543334)
+
+ -- Andreas Jellinghaus <aj@dungeon.inka.de>  Sun, 21 Mar 2010 12:08:21 +0100
+
+opensc (0.11.12-1ubuntu2) lucid; urgency=low
+
+  [ Dominik Fischer ]
+  * debian/rules: build with "--with-pcsc-provider=/lib/libpcsclite.so.1",
+    as this is the path of libpcsclite in jaunty and above.
+  * opensc.install: added westcos-tool + manpage
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Thu, 18 Feb 2010 02:52:33 -0800
+
+opensc (0.11.12-1ubuntu1) lucid; urgency=low
+
+  [ Ubuntu Merge-o-Matic ]
+  * Merge from debian testing.  Remaining changes:
+    - debian/mozilla-opensc.links: Install links for firefox and
+      xulrunner-addons.
+    - Fix in -2ubuntu2 (right now in karmic-proposed) can be dropped as well,
+      already fixed upstream (LP: #519750)
+    Thx to Andreas Jellinghaus for the bugreport
+
+ -- Stephan Hermann <sh@sourcecode.de>  Wed, 10 Feb 2010 16:20:55 +0000
 
 opensc (0.11.12-1) unstable; urgency=low
 
@@ -74,6 +233,14 @@ opensc (0.11.12-1) unstable; urgency=low
   * debian/libopensc2.shlibs: Remove in favor of the symbols file.
 
  -- Eric Dorland <eric@debian.org>  Sun, 10 Jan 2010 19:23:09 -0500
+
+opensc (0.11.9-2ubuntu1) lucid; urgency=low
+
+  * Merge from debian testing (LP: #490849), remaining changes:
+    - debian/mozilla-opensc.links: Install links for firefox and
+      xulrunner-addons.
+
+ -- Bhavani Shankar <right2bhavi@gmail.com>  Tue, 01 Dec 2009 19:59:17 +0530
 
 opensc (0.11.9-2) unstable; urgency=low
 
@@ -92,6 +259,14 @@ opensc (0.11.9-1) unstable; urgency=low
 
  -- Eric Dorland <eric@debian.org>  Mon, 07 Sep 2009 17:38:19 -0400
 
+opensc (0.11.8-1ubuntu1) karmic; urgency=low
+
+  * Merge from debian unstable, remaining change (LP: #396385):
+    - debian/mozilla-opensc.links: Install links for firefox and
+      xulrunner-addons.
+
+ -- Bhavani Shankar <right2bhavi@gmail.com>  Tue, 07 Jul 2009 11:41:27 +0530
+
 opensc (0.11.8-1) unstable; urgency=low
 
   * New upstream release. Fixes a security problem with pkcs11-tool
@@ -99,6 +274,14 @@ opensc (0.11.8-1) unstable; urgency=low
     0.11.7 release, which was only part of unstable. (Closes: #527640)
 
  -- Eric Dorland <eric@debian.org>  Sun, 10 May 2009 22:03:06 -0400
+
+opensc (0.11.7-2ubuntu1) karmic; urgency=low
+
+  * Merge from debian unstable, remaining changes:
+    - debian/mozilla-opensc.links: Install links for firefox and
+      xulrunner-addons
+
+ -- Nathan Handler <nhandler@ubuntu.com>  Tue, 28 Apr 2009 21:57:52 +0000
 
 opensc (0.11.7-2) unstable; urgency=low
 
@@ -122,6 +305,14 @@ opensc (0.11.7-1) unstable; urgency=low
   * debian/opensc.docs, libopensc2-dev.docs: New html documentation location.
 
  -- Eric Dorland <eric@debian.org>  Sun, 29 Mar 2009 03:56:10 -0400
+
+opensc (0.11.4-5ubuntu1) intrepid; urgency=low
+
+  * Merge from debian unstable, remaining changes LP: #260257):
+    - debian/mozilla-opensc.links: Install links for firefox and
+      xulrunner-addons
+
+ -- Nathan Handler <nhandler@ubuntu.com>  Wed, 03 Sep 2008 20:06:26 -0500
 
 opensc (0.11.4-5) unstable; urgency=high
 
@@ -148,6 +339,24 @@ opensc (0.11.4-3) unstable; urgency=low
 
  -- Eric Dorland <eric@debian.org>  Mon, 07 Jan 2008 23:54:18 -0500
 
+opensc (0.11.4-2ubuntu2) hardy; urgency=low
+
+  * debian/mozilla-opensc.install: Don't install .a file (DBTS: #459542).
+  * debian/mozilla-opensc.links: Install link for xulrunner-addons
+    (LP: #202343).
+
+ -- Matti Lindell <mlind@cs.joensuu.fi>  Fri, 28 Mar 2008 07:28:00 +0200
+
+opensc (0.11.4-2ubuntu1) hardy; urgency=low
+
+  * Merge from debian unstable, remaining changes:
+    - Install onepin-opensc-pkcs11.so and onepin-opensc-pkcs11.la
+      Closes LP: #146350
+    - Install the links for firefox.
+    - Update maintainer field in debian/control.
+
+ -- Jonathan Riddell <jriddell@ubuntu.com>  Wed, 21 Nov 2007 19:05:01 +0000
+
 opensc (0.11.4-2) unstable; urgency=low
 
   * debian/libopensc2.install: Install onepin-opensc-pkcs11 signer. Thanks
@@ -165,6 +374,21 @@ opensc (0.11.4-1) unstable; urgency=low
 
  -- Eric Dorland <eric@debian.org>  Sat, 22 Sep 2007 04:13:54 -0400
 
+opensc (0.11.3-1ubuntu2) gutsy; urgency=low
+
+  * Install onepin-opensc-pkcs11.so and onepin-opensc-pkcs11.la
+    Closes LP: #146350
+
+ -- Jonathan Riddell <jriddell@ubuntu.com>  Thu, 04 Oct 2007 13:40:11 +0100
+
+opensc (0.11.3-1ubuntu1) gutsy; urgency=low
+
+  * Merge from Debian unstable, remaining changes:
+    - Install the links for firefox.
+    - Update maintainer field in debian/control.
+
+ -- Michele Angrisano <micheleangrisano@ubuntu.com>  Sat, 21 Jul 2007 23:03:51 +0200
+
 opensc (0.11.3-1) unstable; urgency=low
 
   * New upstream release. (Closes: #424013)
@@ -174,11 +398,30 @@ opensc (0.11.3-1) unstable; urgency=low
 
  -- Eric Dorland <eric@debian.org>  Sat, 21 Jul 2007 01:12:13 -0400
 
+opensc (0.11.2-1ubuntu1) gutsy; urgency=low
+
+  * Merge from Debian unstable, remaining changes:
+    - Install the links for firefox
+    - Maintainer field in debian/control
+
+ -- Luca Falavigna <dktrkranz@ubuntu.com>  Thu, 17 May 2007 10:39:14 +0100
+
 opensc (0.11.2-1) unstable; urgency=low
 
   * New upstream release. (Closes: #413470, #410195, #419680)
 
  -- Eric Dorland <eric@debian.org>  Thu, 17 May 2007 00:44:04 -0400
+
+opensc (0.11.1-3ubuntu1) feisty; urgency=low
+
+  * Merge from debian unstable, remaining changes:
+    - Apply patch from http://www.opensc-project.org/opensc/changeset/3010 to
+      fix regression with Estonian eID
+  * debian/mozilla-opensc.links: install the links for firefox and mozilla
+    (undo the Debian change)
+  * Modified Maintainer values to match Debian-Maintainer-Field spec.
+
+ -- Michael Bienia <geser@ubuntu.com>  Mon, 12 Feb 2007 19:44:12 +0100
 
 opensc (0.11.1-3) unstable; urgency=high
 
@@ -193,6 +436,13 @@ opensc (0.11.1-3) unstable; urgency=high
     default. Thanks Antti-Juhani Kaijanaho. (Closes: #410024)
 
  -- Eric Dorland <eric@debian.org>  Sat, 10 Feb 2007 23:27:03 -0500
+
+opensc (0.11.1-2ubuntu1) feisty; urgency=low
+
+  * Apply patch from http://www.opensc-project.org/opensc/changeset/3010 to
+    fix regression with Estonian eID (LP: #83767)
+
+ -- Michael Bienia <geser@ubuntu.com>  Wed,  7 Feb 2007 16:28:02 +0100
 
 opensc (0.11.1-2) unstable; urgency=low
 
@@ -485,3 +735,4 @@ opensc (0.8.1-1) unstable; urgency=low
   * Relibtoolize to fix build problem.
 
  -- Eric Dorland <eric@debian.org>  Mon, 29 Dec 2003 16:43:01 -0500
+

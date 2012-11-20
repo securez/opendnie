@@ -2,4 +2,4 @@ version=3
 
 opts=downloadurlmangle=s/https/http/ \
 	http://forja.cenatic.es/frs/?group_id=160 \
-	https://forja.cenatic.es/frs/download.php/.*/opensc-opendnie-(.*).tar.gz debian
+	/frs/download.php/.*/opensc-opendnie-(.*).tar.gz debian

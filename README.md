@@ -1,4 +1,4 @@
 opendnie
 ========
 
-OpenSC LGPL DNIe
+OpenSC DNIe Cenatic fork
